@@ -494,7 +494,7 @@ export default function CourseManagePage() {
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                   />
                   <p className="text-[11px] text-emerald-600 font-medium mt-1">
-                    ✓ Slide này sẽ hiển thị ở tab "Tài liệu Slide" và được nạp vào pgvector cho AI Tutor.
+                    ✓ Slide này sẽ hiển thị ở tab &ldquo;Tài liệu Slide&rdquo; và được nạp vào pgvector cho AI Tutor.
                   </p>
                 </div>
 

@@ -12,6 +12,8 @@ from app.core.security import get_current_active_user, require_instructor
 from app.models.course import Course, CourseStatus
 from app.models.user import User
 from app.api.v1.courses import _format_course_dict
+from app.schemas.course import CourseCreate, CourseUpdate
+from app.services.course_service import CourseService
 
 router = APIRouter(prefix="/instructor", tags=["Instructor"])
 
@@ -249,5 +251,70 @@ async def create_lesson(
             "resources_url": lesson.resources_url,
             "isFree": lesson.order_index == 1,
         },
+    }
+
+
+@router.post("/courses", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def create_course_instructor(
+    payload: CourseCreate,
+    current_user: User = Depends(require_instructor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new course (instructor/admin only)."""
+    course = await CourseService.create(db, payload, instructor_id=current_user.id)
+    await db.commit()
+    await invalidate_course_caches()
+    return {
+        "success": True,
+        "message": "Tạo khóa học thành công",
+        "data": {"id": str(course.id), "title": course.title, "status": course.status.value if hasattr(course.status, "value") else str(course.status)},
+    }
+
+
+@router.patch("/courses/{course_id}", response_model=dict)
+async def update_course_instructor(
+    course_id: int,
+    payload: CourseUpdate,
+    current_user: User = Depends(require_instructor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a course. Instructors can only update their own courses."""
+    course = await CourseService.update(db, course_id, payload, current_user)
+    await db.commit()
+    await invalidate_course_caches()
+    return {
+        "success": True,
+        "message": "Cập nhật khóa học thành công",
+        "data": {"id": str(course.id), "title": course.title, "status": course.status.value if hasattr(course.status, "value") else str(course.status)},
+    }
+
+
+@router.delete("/courses/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_course_instructor(
+    course_id: int,
+    current_user: User = Depends(require_instructor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Soft-delete (archive) a course."""
+    await CourseService.delete(db, course_id, current_user)
+    await db.commit()
+    await invalidate_course_caches()
+    return
+
+
+@router.post("/courses/{course_id}/publish", response_model=dict)
+async def publish_course_instructor(
+    course_id: int,
+    current_user: User = Depends(require_instructor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Publish a draft course."""
+    course = await CourseService.change_status(db, course_id, CourseStatus.published, current_user)
+    await db.commit()
+    await invalidate_course_caches()
+    return {
+        "success": True,
+        "message": "Xuất bản khóa học thành công",
+        "data": {"id": str(course.id), "status": course.status.value if hasattr(course.status, "value") else str(course.status)},
     }
 

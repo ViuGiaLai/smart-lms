@@ -45,6 +45,9 @@ class User(Base):
     quiz_submissions: Mapped[list["QuizSubmission"]] = relationship(  # noqa: F821
         "QuizSubmission", back_populates="user"
     )
+    enrollments: Mapped[list["Enrollment"]] = relationship(  # noqa: F821
+        "Enrollment", back_populates="user"
+    )
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email!r} role={self.role}>"

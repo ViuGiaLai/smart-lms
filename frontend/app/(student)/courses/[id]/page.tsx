@@ -22,6 +22,7 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import { coursesApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 interface LessonDetail {
   id: string | number;
@@ -56,19 +57,11 @@ export default function CourseDetailPage() {
   const router = useRouter();
   const params = useParams();
   const courseId = (params?.id as string) || '1';
+  const { user: currentUser, isLoading: authLoading } = useAuth();
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const stored = localStorage.getItem('currentUser');
-      if (stored) setCurrentUser(JSON.parse(stored));
-    } catch {}
-  }, []);
 
   const isOwner = Boolean(
     currentUser?.id &&

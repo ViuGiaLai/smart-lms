@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
+import { useAuth } from '@/lib/auth-context';
 
 type Section = 'overview' | 'users' | 'courses' | 'ai';
 type ServiceStatus = 'online' | 'offline';
@@ -27,6 +28,7 @@ function StatusPill({ status }: { status: ServiceStatus }) {
 
 export default function AdminDashboardPage() {
   const { isAuthorized } = useRoleGuard(['admin']);
+  const { isLoading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab');
@@ -78,7 +80,7 @@ export default function AdminDashboardPage() {
     ai: ['Giám sát AI & dữ liệu', 'Trạng thái được kiểm tra từ backend, PostgreSQL/pgvector và AI Service.'],
   };
 
-  if (!isAuthorized) return <div className="min-h-[60vh] grid place-items-center text-sm font-medium text-slate-500">Đang kiểm tra quyền truy cập…</div>;
+  if (!isAuthorized || authLoading) return <div className="min-h-[60vh] grid place-items-center text-sm font-medium text-slate-500">Đang kiểm tra quyền truy cập…</div>;
 
   return <main className="p-5 sm:p-7 lg:p-8 max-w-[1600px] mx-auto space-y-6">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

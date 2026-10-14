@@ -59,6 +59,9 @@ class Course(Base):
     quizzes: Mapped[list["Quiz"]] = relationship(  # noqa: F821
         "Quiz", back_populates="course", cascade="all, delete-orphan"
     )
+    enrollments: Mapped[list["Enrollment"]] = relationship(  # noqa: F821
+        "Enrollment", back_populates="course", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Course id={self.id} title={self.title!r} status={self.status}>"

@@ -49,6 +49,14 @@ class Settings(BaseSettings):
     # ---- Redis ----
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # ---- Bảo mật nội bộ ----
+    # Khóa dùng để Backend gọi AI Service (header X-Internal-Api-Key).
+    # Để rỗng = tắt kiểm tra (tiện cho dev/test cục bộ). Đặt giá trị thật khi triển khai.
+    INTERNAL_API_KEY: str = Field(
+        default="",
+        description="Khoa noi bo backend gui qua header X-Internal-Api-Key",
+    )
+
     # ---- CORS ----
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 

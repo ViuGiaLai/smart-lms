@@ -17,27 +17,20 @@ import {
   Layers,
 } from 'lucide-react';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
-import { coursesApi, instructorApi } from '@/lib/api';
+import { instructorApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 export default function InstructorDashboardPage() {
   const { isAuthorized } = useRoleGuard(['instructor', 'admin']);
+  const { user: instructorUser, isLoading: authLoading } = useAuth();
 
   const [courses, setCourses] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
-  const [instructorUser, setInstructorUser] = useState<any>(null);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('currentUser');
-        if (stored) setInstructorUser(JSON.parse(stored));
-      } catch {}
-    }
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchData = async () => {
+useEffect(() => {
+      if (!isAuthorized || authLoading) return;
+      let isMounted = true;
+      const fetchData = async () => {
       try {
         const [coursesRes, statsRes] = await Promise.allSettled([
           instructorApi.getCourses(),
@@ -74,9 +67,9 @@ export default function InstructorDashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isAuthorized, authLoading]);
 
-  if (!isAuthorized) {
+  if (!isAuthorized || authLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="animate-pulse text-xs font-semibold text-slate-500">

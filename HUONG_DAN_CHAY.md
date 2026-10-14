@@ -122,7 +122,7 @@ uvicorn main:app --reload --port 8001
 | **Tổng quan Học viên** | `http://localhost:3000/dashboard` | Lộ trình học, tiến độ và thông báo |
 | **Quản trị viên (Admin)** | `http://localhost:3000/admin-dashboard` | Giám sát tài nguyên, token AI tiêu thụ |
 | **API Backend Swagger** | `http://localhost:8000/api/v1/docs` | Đầy đủ API: Auth (JWT), Courses, Lessons, Quizzes, Progress |
-| **API AI Engine Swagger** | `http://localhost:8001/docs` | API RAG Streaming, Quiz Generator, Essay Grader, Document Ingestion |
+| **API AI Engine Swagger** | Chỉ **nội bộ** khi chạy Docker (không publish port 8001). Chạy AI Service trực tiếp (mục 4 bên dưới) nếu cần `http://localhost:8001/docs` | API RAG Streaming, Quiz Generator, Essay Grader, Document Ingestion |
 
 ---
 

@@ -7,14 +7,19 @@ import ProgressBar from '@/components/course/ProgressBar';
 import { ArrowLeft, Award, BookOpen, Clock, Target, TrendingUp, Sparkles, Play } from 'lucide-react';
 import { studentApi, coursesApi } from '@/lib/api';
 import { Enrollment, StudentDashboardStats } from '@/types';
+import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
+import { useAuth } from '@/lib/auth-context';
 
 export default function StudentProgressPage() {
+  const { isAuthorized } = useRoleGuard(['student']);
+  const { isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<StudentDashboardStats | null>(null);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
 
   useEffect(() => {
+      if (!isAuthorized || authLoading) return;
     let isMounted = true;
     const fetchData = async () => {
       try {
@@ -36,13 +41,8 @@ export default function StudentProgressPage() {
       } finally {
         if (isMounted) setLoading(false);
       }
-    };
-
-    fetchData();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+};
+  });
 
   const totalCourses = stats?.totalEnrolled ?? enrollments.length;
   const totalCompleted = stats?.totalCompleted ?? enrollments.filter((e) => e.progress >= 100).length;
@@ -77,6 +77,16 @@ export default function StudentProgressPage() {
       color: 'text-violet-600 bg-violet-50',
     },
   ];
+
+  if (!isAuthorized || authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-pulse text-xs font-semibold text-slate-500">
+          Đang kiểm tra quyền truy cập học viên...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 pb-28 md:pb-12">

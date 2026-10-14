@@ -42,7 +42,7 @@ async def preview_ai_quiz(
     }
     try:
         async with httpx.AsyncClient(timeout=settings.AI_SERVICE_TIMEOUT) as client:
-            resp = await client.post(ai_url, json=ai_payload)
+            resp = await client.post(ai_url, json=ai_payload, headers=settings.ai_service_headers)
             resp.raise_for_status()
             ai_data = resp.json()
     except httpx.HTTPStatusError:
@@ -129,7 +129,7 @@ async def generate_quiz(
     }
     try:
         async with httpx.AsyncClient(timeout=settings.AI_SERVICE_TIMEOUT) as client:
-            resp = await client.post(ai_url, json=ai_payload)
+            resp = await client.post(ai_url, json=ai_payload, headers=settings.ai_service_headers)
             resp.raise_for_status()
             ai_data = resp.json()
     except httpx.HTTPStatusError:

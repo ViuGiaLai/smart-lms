@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useQuery } from '@tanstack/react-query'
-import { studentApi, coursesApi, authApi } from '@/lib/api'
+import { studentApi, coursesApi } from '@/lib/api'
 import { StudentDashboardStats, Enrollment } from '@/types'
 import { ProgressBar } from '@/components/course/ProgressBar'
 import {
@@ -25,33 +25,20 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import { vi } from 'date-fns/locale'
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard'
+import { useAuth } from '@/lib/auth-context'
 
 export default function StudentDashboardPage() {
   const { isAuthorized } = useRoleGuard(['student'])
+  const { user: currentUser, isLoading: authLoading } = useAuth()
   const [userName, setUserName] = useState('Học viên')
   const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('currentUser')
-        if (stored) {
-          const u = JSON.parse(stored)
-          if (u.name) setUserName(u.name)
-          if (u.email) setUserEmail(u.email)
-        }
-      } catch {}
-
-      authApi.getProfile().then((res) => {
-        const user = res.data?.data || res.data
-        if (user) {
-          if (user.name) setUserName(user.name)
-          if (user.email) setUserEmail(user.email)
-          localStorage.setItem('currentUser', JSON.stringify(user))
-        }
-      }).catch(() => {})
+    if (currentUser) {
+      if (currentUser.name) setUserName(currentUser.name)
+      if (currentUser.email) setUserEmail(currentUser.email)
     }
-  }, [])
+  }, [currentUser])
 
   const { data: stats, isLoading: statsLoading } = useQuery<StudentDashboardStats>({
     queryKey: ['student', 'dashboard'],
@@ -118,7 +105,7 @@ export default function StudentDashboardPage() {
       ? Math.round(enrollments.reduce((acc, curr) => acc + (curr.progress || 0), 0) / enrollments.length)
       : (stats?.totalCompleted ? 100 : 0)
 
-  if (!isAuthorized) {
+  if (!isAuthorized || authLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 text-center max-w-sm">

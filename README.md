@@ -31,7 +31,7 @@ docker compose up -d
 - **Màn hình Học & Chat AI:** `http://localhost:3000/courses/1/learn`
 - **AI Sinh đề trắc nghiệm:** `http://localhost:3000/quiz/generate`
 - **Backend API Docs (Swagger):** `http://localhost:8000/api/v1/docs`
-- **AI Engine API Docs (Swagger):** `http://localhost:8001/docs`
+- **AI Engine API Docs (Swagger):** khi chạy Docker, AI Service chỉ truy cập **nội bộ** từ Backend (không publish port 8001 ra host). Chạy AI Service trực tiếp (Cách 2 trong HUONG_DAN_CHAY.md) nếu cần mở `http://localhost:8001/docs`.
 
 ---
 

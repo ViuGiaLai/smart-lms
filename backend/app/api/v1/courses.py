@@ -9,20 +9,47 @@ from sqlalchemy.orm import selectinload
 
 from app.core.cache import cache_get_json, cache_set_json, invalidate_course_caches
 from app.core.database import get_db
-from app.core.security import get_current_active_user, require_instructor
+from app.core.security import get_current_active_user, get_optional_user, require_instructor
 from app.models.course import Course, CourseStatus
 from app.models.quiz import Quiz
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse
 from app.services.course_service import CourseService
+from app.services.enrollment_service import (
+    ensure_enrollment,
+    enrolled_course_ids,
+    student_counts_by_course,
+)
+from app.services.quiz_service import serialize_question
 
 router = APIRouter(prefix="/courses")
 
 
-def _format_course_dict(course: Course, student_progress: float | None = None, total_students: int = 0) -> dict[str, Any]:
+def _role_value(user: User | None) -> str:
+    if user is None:
+        return ""
+    return user.role.value if hasattr(user.role, "value") else str(user.role)
+
+
+def _is_admin(user: User | None) -> bool:
+    return _role_value(user) == UserRole.admin.value
+
+
+def _can_manage_course(course: Course, user: User | None) -> bool:
+    if user is None:
+        return False
+    return _is_admin(user) or course.instructor_id == user.id
+
+
+def _status_value(course: Course) -> str:
+    return course.status.value if hasattr(course.status, "value") else str(course.status)
+
+
+def _format_course_dict(course: Course, student_progress: float | None = None, total_students: int = 0, is_enrolled: bool = False) -> dict[str, Any]:
     """Helper to convert Course model to frontend-friendly dict with live calculated fields."""
     actual_lessons_count = len(course.lessons) if course.lessons else 0
     actual_duration = sum((l.duration or 0) for l in course.lessons) if course.lessons else 0
+    status_value = _status_value(course)
     return {
         "id": str(course.id),
         "title": course.title,
@@ -33,9 +60,12 @@ def _format_course_dict(course: Course, student_progress: float | None = None, t
         "price": float(course.price) if course.price is not None else 0.0,
         "currency": "VND",
         "level": course.level or "intermediate",
+        "status": status_value,
+        "isPublished": status_value == CourseStatus.published.value,
         "duration": actual_duration,
         "totalLessons": actual_lessons_count,
         "totalStudents": total_students,
+        "studentsCount": total_students,
         # Hệ thống chưa có bảng đánh giá (reviews) nên không bịa điểm số sao.
         "rating": None,
         "totalReviews": 0,
@@ -49,7 +79,7 @@ def _format_course_dict(course: Course, student_progress: float | None = None, t
             "name": course.category or "Công nghệ Thông tin",
             "slug": "cong-nghe-thong-tin",
         },
-        "isEnrolled": student_progress is not None,
+        "isEnrolled": is_enrolled or student_progress is not None,
         "progress": student_progress if student_progress is not None else 0,
     }
 
@@ -128,7 +158,8 @@ async def list_courses(
     result = await db.execute(stmt)
     courses = result.scalars().all()
 
-    formatted = [_format_course_dict(c) for c in courses]
+    counts = await student_counts_by_course(db, [c.id for c in courses])
+    formatted = [_format_course_dict(c, total_students=counts.get(c.id, 0)) for c in courses]
 
     payload = {
         "success": True,
@@ -147,7 +178,8 @@ async def get_enrolled_courses(request: Request, db: AsyncSession = Depends(get_
     """Return enrolled courses with actual progress for the current authenticated user only."""
     from app.core.security import decode_token
     from app.models.progress import Progress
-    from app.models.user import UserRole
+    from app.models.enrollment import Enrollment
+    from app.models.lesson import Lesson
 
     auth_header = request.headers.get("authorization")
     user_id = None
@@ -168,45 +200,55 @@ async def get_enrolled_courses(request: Request, db: AsyncSession = Depends(get_
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Lấy enrolled course IDs từ bảng enrollments (chính xác)
+    enroll_res = await db.execute(
+        select(Enrollment.course_id).where(Enrollment.user_id == user_id)
+    )
+    enrolled_course_ids = set(enroll_res.scalars().all())
+
+    # Fallback: cũng lấy từ progress cũ nếu chưa có enrollment
+    if not enrolled_course_ids:
+        p_stmt = select(Progress).where(Progress.user_id == user_id)
+        p_res = await db.execute(p_stmt)
+        user_progress = p_res.scalars().all()
+        if user_progress:
+            les_stmt = select(Lesson.course_id).where(
+                Lesson.id.in_([p.lesson_id for p in user_progress])
+            ).distinct()
+            les_res = await db.execute(les_stmt)
+            enrolled_course_ids = set(les_res.scalars().all())
+
+    if not enrolled_course_ids:
+        return {"success": True, "data": []}
+
     stmt = (
         select(Course)
         .options(selectinload(Course.instructor), selectinload(Course.lessons))
-        .where(Course.status == CourseStatus.published)
+        .where(Course.id.in_(enrolled_course_ids))
         .order_by(Course.id.asc())
     )
     result = await db.execute(stmt)
     courses = result.scalars().all()
 
-    # Query ONLY this user's progress
+    # Query progress records for this user across all their lessons
     p_stmt = select(Progress).where(Progress.user_id == user_id)
     p_res = await db.execute(p_stmt)
     user_progress = p_res.scalars().all()
     progress_by_lesson = {p.lesson_id: p for p in user_progress}
 
-    # Lấy tất cả lesson_ids có progress của user → xác định courses đã enrolled
-    enrolled_course_ids: set[int] = set()
-    for les_id, p_obj in progress_by_lesson.items():
-        enrolled_course_ids.add(p_obj.lesson_id)
-
-    # Lấy lesson → course mapping
-    from app.models.lesson import Lesson as LessonModel
-    if progress_by_lesson:
-        les_stmt = select(LessonModel.id, LessonModel.course_id).where(
-            LessonModel.id.in_(list(progress_by_lesson.keys()))
+    # Lấy enrollment date cho mỗi course
+    enroll_date_res = await db.execute(
+        select(Enrollment.course_id, Enrollment.enrolled_at).where(
+            Enrollment.user_id == user_id,
+            Enrollment.course_id.in_(enrolled_course_ids)
         )
-        les_res = await db.execute(les_stmt)
-        enrolled_course_ids = {row[1] for row in les_res.all()}
-    else:
-        enrolled_course_ids = set()
+    )
+    enroll_dates = {row[0]: row[1] for row in enroll_date_res.all()}
 
     enrollments = []
     for c in courses:
         c_lessons = c.lessons or []
         total_l = len(c_lessons)
-
-        # Chỉ hiển thị courses user có progress thực sự
-        if c.id not in enrolled_course_ids:
-            continue
 
         completed_count = 0
         last_accessed = None
@@ -220,17 +262,18 @@ async def get_enrolled_courses(request: Request, db: AsyncSession = Depends(get_
                     last_accessed = p_obj.updated_at.isoformat()
 
         pct = round((completed_count / total_l * 100), 1) if total_l > 0 else 0
+        enrolled_at = enroll_dates.get(c.id)
 
         enrollments.append({
             "id": f"enroll-{c.id}-{user_id}",
             "userId": str(user_id),
             "courseId": str(c.id),
-            "course": _format_course_dict(c, student_progress=pct),
+            "course": _format_course_dict(c, student_progress=pct, is_enrolled=True),
             "progress": pct,
             "completedLessons": completed_count,
             "totalLessons": total_l,
             "lastAccessedAt": last_accessed or (c.created_at.isoformat() if c.created_at else None),
-            "enrolledAt": c.created_at.isoformat() if c.created_at else None,
+            "enrolledAt": enrolled_at.isoformat() if enrolled_at else (c.created_at.isoformat() if c.created_at else None),
         })
 
     return {
@@ -331,11 +374,7 @@ async def enroll_course(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Enroll into a course and initialize progress in PostgreSQL for the CURRENT user.
-
-    Yeu cau dang nhap: khong con fallback gan dai cho user dau tien/id=1 (truoc day gay ghi
-    nham tien do cua nguoi khac khi request khong kem token).
-    """
+    """Enroll into a course, create Enrollment record and initialize progress for first lesson."""
     c_res = await db.execute(select(Course).where(Course.id == course_id))
     course = c_res.scalar_one_or_none()
     if not course:
@@ -343,8 +382,13 @@ async def enroll_course(
 
     from app.models.lesson import Lesson
     from app.models.progress import Progress
+    from app.models.enrollment import Enrollment
+    from app.services.enrollment_service import ensure_enrollment
 
     user_id = current_user.id
+
+    # Tạo enrollment record (idempotent)
+    await ensure_enrollment(db, user_id, course_id)
 
     first_lesson_res = await db.execute(
         select(Lesson).where(Lesson.course_id == course_id).order_by(Lesson.order_index.asc()).limit(1)

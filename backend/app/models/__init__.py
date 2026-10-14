@@ -3,6 +3,7 @@ from app.models.course import Course, CourseStatus
 from app.models.lesson import Lesson
 from app.models.quiz import Quiz, QuizQuestion
 from app.models.progress import Progress
+from app.models.enrollment import Enrollment
 
 __all__ = [
     "User",
@@ -12,4 +13,5 @@ __all__ = [
     "Quiz",
     "QuizQuestion",
     "Progress",
+    "Enrollment",
 ]

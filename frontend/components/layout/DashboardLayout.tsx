@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -12,6 +12,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { DashboardSidebar } from './DashboardSidebar';
+import { useAuth } from '@/lib/auth-context';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -21,25 +22,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-
-  useEffect(() => {
-    const loadUser = () => {
-      try {
-        const stored = localStorage.getItem('currentUser');
-        setCurrentUser(stored ? JSON.parse(stored) : null);
-      } catch {
-        setCurrentUser(null);
-      }
-    };
-    loadUser();
-    window.addEventListener('auth-change', loadUser);
-    window.addEventListener('storage', loadUser);
-    return () => {
-      window.removeEventListener('auth-change', loadUser);
-      window.removeEventListener('storage', loadUser);
-    };
-  }, []);
+  const { user: currentUser, isLoading } = useAuth();
 
   const role = currentUser?.role || 'student';
   const isAdmin = role === 'admin';
@@ -57,6 +40,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     if (pathname.includes('/courses')) return 'Khóa học của tôi';
     return 'Bảng điều khiển';
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800">
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/90 px-4 sm:px-6 flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="animate-pulse">
+                <div className="w-8 h-8 bg-slate-200 rounded" />
+              </div>
+              <div className="w-32 h-4 bg-slate-200 rounded animate-pulse" />
+            </div>
+          </header>
+          <main className="flex-1 pb-16" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800">

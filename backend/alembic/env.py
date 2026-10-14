@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.core.database import Base  # noqa: F401 — registers Base.metadata
 
 # Import all models so Alembic can detect them
-from app.models import user, course, lesson, quiz, progress  # noqa: F401
+from app.models import user, course, lesson, quiz, progress, enrollment  # noqa: F401
 
 # ── Alembic Config ────────
 config = context.config

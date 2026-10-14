@@ -9,6 +9,7 @@ from app.models.course import Course, CourseStatus
 from app.models.lesson import Lesson
 from app.models.progress import Progress
 from app.models.user import User
+from app.models.enrollment import Enrollment
 from app.core.security import get_current_active_user
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
@@ -22,9 +23,11 @@ async def get_student_dashboard(
     db: AsyncSession = Depends(get_db),
 ):
     """Return live dashboard stats for the student from PostgreSQL."""
-    # Count total courses available
-    result = await db.execute(select(func.count(Course.id)).where(Course.status == CourseStatus.published))
-    total_courses = result.scalar() or 0
+    # Count total courses ENROLLED by this student
+    enrolled_result = await db.execute(
+        select(func.count(Enrollment.id)).where(Enrollment.user_id == current_user.id)
+    )
+    total_enrolled = enrolled_result.scalar() or 0
 
     # Query completed and in-progress lessons from Progress table FOR THIS STUDENT
     completed_res = await db.execute(
@@ -46,16 +49,22 @@ async def get_student_dashboard(
     )
     total_watch_time = watch_time_res.scalar() or 0
 
+    # Calculate streak
+    from app.services.enrollment_service import activity_dates_for_user, compute_streak
+    from datetime import date
+    activity_dates = await activity_dates_for_user(db, current_user.id)
+    current_streak = compute_streak(activity_dates, date.today())
+
     return {
         "success": True,
         "message": "Student stats retrieved successfully",
         "data": {
-            "totalEnrolled": total_courses,
+            "totalEnrolled": total_enrolled,
             "totalCompleted": total_completed,
             "totalInProgress": total_in_progress,
             "totalWatchTime": int(total_watch_time),
-            "currentStreak": 1 if (total_completed > 0 or total_in_progress > 0) else 0,
-            "longestStreak": max(1, total_completed),
+            "currentStreak": current_streak,
+            "longestStreak": max(current_streak, 1) if total_completed > 0 or total_in_progress > 0 else 0,
         },
     }
 

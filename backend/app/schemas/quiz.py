@@ -63,8 +63,17 @@ class QuizResponse(QuizBase):
 
 # ── Submission ──
 class SubmitQuizRequest(BaseModel):
-    answers: dict[int, str]  # {question_id: selected_key}
+    answers: dict[str, str] = Field(default_factory=dict)  # {question_id: selected_key}
     time_spent: int | None = None
+
+
+class QuizQuestionResult(BaseModel):
+    question_id: int
+    selected: str | None = None
+    correct_answer: str
+    is_correct: bool
+    explanation: str = ""
+    question_text: str = ""
 
 
 class QuizSubmissionResponse(BaseModel):
@@ -75,6 +84,9 @@ class QuizSubmissionResponse(BaseModel):
     passed: bool
     answers: dict[str, Any]
     submitted_at: datetime
+    correct_count: int | None = None
+    total_questions: int | None = None
+    results: list[QuizQuestionResult] = []
 
     model_config = {"from_attributes": True}
 

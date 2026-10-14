@@ -331,7 +331,7 @@ export default function AIQuizGeneratePage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Cấp độ nhận thức (Bloom's Taxonomy)
+                  Cấp độ nhận thức (Bloom&apos;s Taxonomy)
                 </label>
                 <select
                   value={difficulty}

@@ -30,7 +30,11 @@ async def _stream_from_ai_service(
     """Proxy an SSE stream from the ai-service to the client."""
     url = f"{settings.AI_SERVICE_URL}/api/v1/rag/ask/stream"
     role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    headers = {"X-User-Id": str(current_user.id), "X-User-Role": role_str}
+    headers = {
+        "X-User-Id": str(current_user.id),
+        "X-User-Role": role_str,
+        **settings.ai_service_headers,
+    }
 
     try:
         async with httpx.AsyncClient(timeout=settings.AI_SERVICE_TIMEOUT) as client:

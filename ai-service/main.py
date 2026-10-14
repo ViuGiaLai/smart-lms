@@ -4,9 +4,10 @@ FastAPI application chạy tại port 8001
 Cung cấp các API cho: RAG Chatbot, Quiz Generation, Essay Grading, Summarization
 """
 
+import secrets
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -42,7 +43,30 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS Middleware
+# ===== Bao mat noi bo =====
+# Cac duong dan luon cong khai (khong doi internal API key), vi du healthcheck.
+_PUBLIC_PATHS = {"/health"}
+
+
+@app.middleware("http")
+async def verify_internal_api_key(request: Request, call_next):
+    """Chan moi truy cap tu ben ngoai khi INTERNAL_API_KEY duoc cau hinh.
+
+    AI Service chi nen duoc goi boi Backend qua mang noi bo. Khi INTERNAL_API_KEY
+    de rong thi tat kiem tra (tien cho dev/test cuc bo). So sanh theo thoi gian hang so.
+    """
+    expected = settings.INTERNAL_API_KEY
+    if expected and request.url.path not in _PUBLIC_PATHS:
+        provided = request.headers.get("X-Internal-Api-Key", "")
+        if not secrets.compare_digest(provided, expected):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized: thieu hoac sai internal API key"},
+            )
+    return await call_next(request)
+
+
+# CORS Middleware (dat sau middleware API key de CORS bao ngoai cung, ap dung ca cho 401)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,

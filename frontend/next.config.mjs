@@ -29,13 +29,6 @@ const nextConfig = {
       },
     ]
   },
-  webpack: (config, { dev }) => {
-    // Tắt disk pack caching trên Windows để ngăn lỗi file lock ENOENT .pack.gz
-    if (dev) {
-      config.cache = false;
-    }
-    return config;
-  },
 }
 
 export default nextConfig

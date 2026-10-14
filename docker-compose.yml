@@ -38,9 +38,11 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-smart_lms}
       - REDIS_URL=redis://redis:6379/0
-      # Backend chạy trong container; mặc định kết nối tới AI service đang chạy trên host.
-      # Có thể ghi đè bằng AI_SERVICE_URL=http://ai-service:8001 khi AI chạy trong Compose.
-      - AI_SERVICE_URL=${AI_SERVICE_URL:-http://host.docker.internal:8001}
+      # AI Service chạy nội bộ trong mạng Compose (không publish ra host).
+      # Nếu muốn AI chạy riêng trên host, đặt AI_SERVICE_URL=http://host.docker.internal:8001 trong .env
+      - AI_SERVICE_URL=${AI_SERVICE_URL:-http://ai-service:8001}
+      # Khóa nội bộ: phải TRÙNG với INTERNAL_API_KEY của ai-service
+      - AI_SERVICE_INTERNAL_KEY=${INTERNAL_API_KEY:-smart_lms_internal_dev_key_change_me}
       # BẢO MẬT: đặt SECRET_KEY trong file .env (>= 32 ký tự ngẫu nhiên) trước khi triển khai thực tế.
       - SECRET_KEY=${SECRET_KEY:-dev_insecure_secret_change_in_production_0123456789}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
@@ -50,6 +52,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_started
+      ai-service:
         condition: service_started
     volumes:
       - ./backend:/app
@@ -65,9 +69,12 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-smart_lms}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-your_gemini_api_key_here}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Khóa nội bộ: chỉ Backend (cùng mạng) mới gọi được AI Service
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-smart_lms_internal_dev_key_change_me}
       - PORT=8001
-    ports:
-      - "8001:8001"
+    # KHÔNG publish ra host: AI Service chỉ truy cập nội bộ từ Backend qua mạng Compose.
+    expose:
+      - "8001"
     depends_on:
       postgres:
         condition: service_healthy

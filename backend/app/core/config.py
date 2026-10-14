@@ -61,6 +61,17 @@ class Settings(BaseSettings):
     # ── AI Service ─────
     AI_SERVICE_URL: str = "http://localhost:8001"
     AI_SERVICE_TIMEOUT: int = 120
+    # Khoa noi bo gui kem header X-Internal-Api-Key khi goi AI Service.
+    # De rong neu AI Service khong bat kiem tra (dev cuc bo).
+    AI_SERVICE_INTERNAL_KEY: str = ""
+
+    @property
+    def ai_service_headers(self) -> dict[str, str]:
+        """Header dung chung khi Backend goi AI Service."""
+        headers: dict[str, str] = {}
+        if self.AI_SERVICE_INTERNAL_KEY:
+            headers["X-Internal-Api-Key"] = self.AI_SERVICE_INTERNAL_KEY
+        return headers
 
     @model_validator(mode="after")
     def _validate_secret_key(self) -> "Settings":
