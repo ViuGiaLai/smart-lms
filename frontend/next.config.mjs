@@ -1,0 +1,41 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '8000',
+      },
+      {
+        protocol: 'https',
+        hostname: 'smart-lms.storage.googleapis.com',
+      },
+    ],
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/api/backend/:path*',
+        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/:path*`,
+      },
+    ]
+  },
+  webpack: (config, { dev }) => {
+    // Tắt disk pack caching trên Windows để ngăn lỗi file lock ENOENT .pack.gz
+    if (dev) {
+      config.cache = false;
+    }
+    return config;
+  },
+}
+
+export default nextConfig
