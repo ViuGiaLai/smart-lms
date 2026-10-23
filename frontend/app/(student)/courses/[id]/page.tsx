@@ -28,8 +28,18 @@ interface LessonDetail {
   id: string | number;
   title: string;
   duration?: string | number;
+  durationText?: string;
   order?: number;
   isFree?: boolean;
+}
+
+function formatLessonDuration(lesson: LessonDetail): string {
+  if (lesson.durationText) return lesson.durationText;
+  if (typeof lesson.duration === 'number') {
+    const minutes = Math.round(lesson.duration / 60);
+    return minutes > 0 ? `${minutes} phút` : '0 phút';
+  }
+  return lesson.duration || 'Chưa cập nhật';
 }
 
 interface CourseDetail {
@@ -41,6 +51,7 @@ interface CourseDetail {
     fullName?: string;
   };
   duration?: number | string;
+  durationText?: string;
   totalLessons?: number;
   totalStudents?: number;
   price?: number;
@@ -56,7 +67,7 @@ interface CourseDetail {
 export default function CourseDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const courseId = (params?.id as string) || '1';
+  const courseId = (params?.id as string) || '';
   const { user: currentUser, isLoading: authLoading } = useAuth();
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
@@ -76,21 +87,25 @@ export default function CourseDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await coursesApi.getById(courseId);
+        const res = /^\d+$/.test(courseId)
+          ? await coursesApi.getById(courseId)
+          : await coursesApi.getBySlug(courseId);
         if (res.data?.data && isMounted) {
           const apiCourse = res.data.data;
           setCourse({
             id: String(apiCourse.id),
             title: apiCourse.title,
             description: apiCourse.description || 'Khóa học đào tạo trực tuyến chuẩn chất lượng.',
-            instructor: apiCourse.instructor || { fullName: 'Giảng viên' },
-            duration: apiCourse.duration ? `${Math.round(apiCourse.duration / 3600)} giờ học` : 'Tự học theo tiến độ',
+            instructor: apiCourse.instructor || { fullName: 'Chưa cập nhật' },
+            duration:
+              apiCourse.durationText ||
+              (apiCourse.duration ? `${Math.round(apiCourse.duration / 3600)} giờ học` : 'Tự học theo tiến độ'),
             totalLessons: apiCourse.lessons?.length || apiCourse.totalLessons || 0,
             totalStudents: apiCourse.totalStudents || 0,
             price: typeof apiCourse.price === 'number' ? apiCourse.price : 0,
-            thumbnail: apiCourse.thumbnail || 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&fit=crop',
-            category: apiCourse.category || { name: 'Công nghệ Thông tin' },
-            level: apiCourse.level || 'Cơ bản',
+            thumbnail: apiCourse.thumbnail || '',
+            category: apiCourse.category || { name: 'Chưa phân loại' },
+            level: apiCourse.level || 'Chưa phân loại',
             rating: apiCourse.rating ?? undefined,
             lessons: apiCourse.lessons || [],
           });
@@ -221,7 +236,7 @@ export default function CourseDetailPage() {
                 <div>
                   <p className="text-[11px] text-slate-400">Giảng viên phụ trách</p>
                   <p className="text-xs sm:text-sm font-bold text-slate-800">
-                    {course.instructor?.fullName || 'Giảng viên chuyên môn'}
+                    {course.instructor?.fullName || 'Chưa cập nhật'}
                   </p>
                 </div>
               </div>
@@ -280,7 +295,7 @@ export default function CourseDetailPage() {
                         <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3 text-slate-400" />
-                            {lesson.duration || '45 phút'}
+                            {formatLessonDuration(lesson)}
                           </span>
                           <span>•</span>
                           <span className="text-indigo-600 font-medium">Hỗ trợ AI Tutor</span>
@@ -306,11 +321,17 @@ export default function CourseDetailPage() {
             <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-md space-y-5 overflow-hidden">
               {/* Thumbnail */}
               <div className="aspect-video w-full rounded-2xl overflow-hidden bg-slate-100 relative group">
-                <img
-                  src={course.thumbnail}
-                  alt={course.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
+                {course.thumbnail ? (
+                  <img
+                    src={course.thumbnail}
+                    alt={course.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600">
+                    <BookOpen className="w-16 h-16 text-white/90" />
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-slate-900/30 flex items-center justify-center">
                   <div className="w-12 h-12 rounded-full bg-white/90 text-indigo-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                     <PlayCircle className="w-6 h-6" />
@@ -324,11 +345,6 @@ export default function CourseDetailPage() {
                   <span className="text-2xl font-extrabold text-slate-900">
                     {course.price === 0 ? 'Miễn phí' : `${Number(course.price).toLocaleString('vi-VN')} đ`}
                   </span>
-                  {course.price === 0 && (
-                    <span className="ml-2 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                      Học bổng NCKH
-                    </span>
-                  )}
                 </div>
               </div>
 

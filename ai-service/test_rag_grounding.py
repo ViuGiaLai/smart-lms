@@ -22,6 +22,8 @@ import sys
 from typing import List
 
 import httpx
+import pytest
+import pytest_asyncio
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -42,6 +44,7 @@ RELEVANT_LESSON = 4
 # Bài học chưa được số hóa tài liệu → không có chunk nào trong pgvector
 NO_KNOWLEDGE_QUESTION = "Nội dung bài học này nói về vấn đề gì?"
 NO_KNOWLEDGE_LESSON = 999
+ONLINE_EMPTY_LESSON = 2147483000
 
 # Câu hỏi ngoài phạm vi bài giảng (bài học vẫn có học liệu)
 OFF_TOPIC_QUESTION = "Công thức nấu phở bò ngon nhất gồm những nguyên liệu gì?"
@@ -104,6 +107,15 @@ async def test_offline_success_path() -> None:
     pipeline = RAGPipeline()
     stub = _StubModel("Câu trả lời thử nghiệm từ LLM.")
     pipeline.model = stub
+    async def retrieve_fixture(*args, **kwargs):
+        return [{
+            "content": "HNSW là chỉ mục tìm kiếm vector trong PostgreSQL.",
+            "similarity": 0.81,
+            "chunk_index": 0,
+            "document_id": "rag-fixture.pdf",
+            "metadata": {"filename": "rag-fixture.pdf", "page": 2},
+        }]
+    pipeline._retrieve_chunks = retrieve_fixture
 
     result = await pipeline.ask(question=RELEVANT_QUESTION, lesson_id=RELEVANT_LESSON)
 
@@ -135,6 +147,15 @@ async def test_offline_gemini_failure() -> None:
 
     pipeline = RAGPipeline()
     pipeline.model = _StubModel(error=RuntimeError("429 You exceeded your current quota"))
+    async def retrieve_fixture(*args, **kwargs):
+        return [{
+            "content": "Bằng chứng fixture.",
+            "similarity": 0.8,
+            "chunk_index": 0,
+            "document_id": "rag-fixture.pdf",
+            "metadata": {"filename": "rag-fixture.pdf", "page": 1},
+        }]
+    pipeline._retrieve_chunks = retrieve_fixture
 
     try:
         await pipeline.ask(question=RELEVANT_QUESTION, lesson_id=RELEVANT_LESSON)
@@ -153,11 +174,16 @@ async def test_offline_gemini_failure() -> None:
 
     # LLM trả nội dung rỗng cũng phải coi là lỗi, không được trả câu trả lời rỗng/bịa
     pipeline.model = _StubModel(text="")
+    import pipelines.rag_pipeline as rag_module
+    original_groq_key_check = rag_module.has_valid_groq_key
+    rag_module.has_valid_groq_key = lambda: False
     try:
         await pipeline.ask(question=RELEVANT_QUESTION, lesson_id=RELEVANT_LESSON)
         check("ask() báo lỗi khi LLM trả nội dung rỗng", False, "không ném lỗi")
     except RuntimeError as e:
         check("ask() báo lỗi khi LLM trả nội dung rỗng", "rỗng" in str(e), str(e)[:80])
+    finally:
+        rag_module.has_valid_groq_key = original_groq_key_check
 
 
 async def test_offline_no_knowledge() -> None:
@@ -167,6 +193,9 @@ async def test_offline_no_knowledge() -> None:
     pipeline = RAGPipeline()
     stub = _StubModel()
     pipeline.model = stub
+    async def retrieve_empty_fixture(*args, **kwargs):
+        return []
+    pipeline._retrieve_chunks = retrieve_empty_fixture
 
     result = await pipeline.ask(question=NO_KNOWLEDGE_QUESTION, lesson_id=NO_KNOWLEDGE_LESSON)
     check("không dùng tri thức nào khi học liệu rỗng", result["chunks_used"] == 0)
@@ -186,6 +215,12 @@ async def test_offline_no_knowledge() -> None:
 
 # ===== Phần 2: Online (gọi AI Service thật) =====
 
+@pytest_asyncio.fixture
+async def client():
+    async with httpx.AsyncClient(base_url=AI_SERVICE_URL, timeout=180.0) as test_client:
+        yield test_client
+
+@pytest.mark.integration
 async def test_online_ask_relevant(client: httpx.AsyncClient) -> None:
     """Câu hỏi có tri thức: hoặc trả lời thật + nguồn thật, hoặc báo lỗi rõ ràng — không bao giờ bịa."""
     res = await client.post("/api/v1/rag/ask", json={"question": RELEVANT_QUESTION, "lesson_id": RELEVANT_LESSON})
@@ -208,8 +243,9 @@ async def test_online_ask_relevant(client: httpx.AsyncClient) -> None:
     check("độ tương đồng nguồn không phải số bịa (0.94/0.95)", no_fake_similarity(body.get("sources")), f"{real_similarities(body.get('sources'))}")
 
 
+@pytest.mark.integration
 async def test_online_ask_no_knowledge(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/v1/rag/ask", json={"question": NO_KNOWLEDGE_QUESTION, "lesson_id": NO_KNOWLEDGE_LESSON})
+    res = await client.post("/api/v1/rag/ask", json={"question": NO_KNOWLEDGE_QUESTION, "lesson_id": ONLINE_EMPTY_LESSON})
     check("/ask khi bài học chưa có học liệu trả về HTTP 200", res.status_code == 200, f"status={res.status_code}")
     body = res.json()
     check("không dùng tri thức nào khi học liệu rỗng", body.get("chunks_used") == 0, f"chunks_used={body.get('chunks_used')}")
@@ -222,6 +258,7 @@ async def test_online_ask_no_knowledge(client: httpx.AsyncClient) -> None:
     check("không còn nội dung ngụy tạo", not has_fake_marker(body.get("answer", "")))
 
 
+@pytest.mark.integration
 async def test_online_ask_off_topic(client: httpx.AsyncClient) -> None:
     res = await client.post("/api/v1/rag/ask", json={"question": OFF_TOPIC_QUESTION, "lesson_id": OFF_TOPIC_LESSON})
     check("/ask câu hỏi ngoài phạm vi không lỗi bất thường", res.status_code in (200, 500), f"status={res.status_code}")
@@ -251,6 +288,7 @@ def sse_text(events: List[dict]) -> str:
     return "".join(e.get("content", "") for e in events if e.get("type") == "chunk")
 
 
+@pytest.mark.integration
 async def test_online_stream_relevant(client: httpx.AsyncClient) -> None:
     events = await collect_sse(client, RELEVANT_QUESTION, RELEVANT_LESSON)
     text = sse_text(events)
@@ -269,8 +307,9 @@ async def test_online_stream_relevant(client: httpx.AsyncClient) -> None:
         check("stream similarity là số thật, không phải 0.94/0.95", all(s not in (0.94, 0.95) for s in sims), f"{sims}")
 
 
+@pytest.mark.integration
 async def test_online_stream_no_knowledge(client: httpx.AsyncClient) -> None:
-    events = await collect_sse(client, NO_KNOWLEDGE_QUESTION, NO_KNOWLEDGE_LESSON)
+    events = await collect_sse(client, NO_KNOWLEDGE_QUESTION, ONLINE_EMPTY_LESSON)
     sources_events = [e for e in events if e.get("type") == "sources"]
     check("stream không bịa nguồn trích dẫn", bool(sources_events) and sources_events[-1].get("data") == [])
     text = sse_text(events)
@@ -282,6 +321,7 @@ async def test_online_stream_no_knowledge(client: httpx.AsyncClient) -> None:
     check("stream không chứa trích dẫn giả", not has_fake_marker(text))
 
 
+@pytest.mark.integration
 async def test_online_stream_off_topic(client: httpx.AsyncClient) -> None:
     events = await collect_sse(client, OFF_TOPIC_QUESTION, OFF_TOPIC_LESSON)
     text = sse_text(events)

@@ -25,7 +25,7 @@ def api_get(url, token=None):
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
-def test_login(email, role_name):
+def run_login(email, role_name):
     try:
         data = api_post(f"{BASE}/auth/login", {"email": email, "password": "password123"})
     except urllib.error.HTTPError as e:
@@ -53,8 +53,8 @@ def test_login(email, role_name):
             print(f"  - [Khóa #{e['courseId']}] {e['course']['title']} | Tiến độ: {e['progress']}% | UserID: {e['userId']}")
 
 if __name__ == "__main__":
-    test_login("giangvien@donga.edu.vn", "Giảng viên 1 (TS. Nguyễn Văn Minh)")
-    test_login("giangvien2@donga.edu.vn", "Giảng viên 2 (TS. Lê Hoàng Long)")
-    test_login("giangvien3@donga.edu.vn", "Giảng viên 3 (ThS. Trần Thị Mai Lan)")
-    test_login("admin@donga.edu.vn", "Quản trị viên (Ban Quản trị)")
-    test_login("sinhvien@donga.edu.vn", "Sinh viên (Nguyễn Văn An)")
+    run_login("giangvien@donga.edu.vn", "Giảng viên 1 (TS. Nguyễn Văn Minh)")
+    run_login("giangvien2@donga.edu.vn", "Giảng viên 2 (TS. Lê Hoàng Long)")
+    run_login("giangvien3@donga.edu.vn", "Giảng viên 3 (ThS. Trần Thị Mai Lan)")
+    run_login("admin@donga.edu.vn", "Quản trị viên (Ban Quản trị)")
+    run_login("sinhvien@donga.edu.vn", "Sinh viên (Nguyễn Văn An)")

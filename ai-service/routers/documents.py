@@ -1,9 +1,10 @@
 import os
 from typing import List, Optional
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Header
 from pydantic import BaseModel
 
 from core.database import AsyncSessionLocal
+from core.config import settings
 from document_processor.pdf_parser import get_parser
 from document_processor.chunker import TextChunker
 from document_processor.embedder import get_embedder
@@ -18,21 +19,59 @@ class IngestResponse(BaseModel):
     total_pages: int
     total_chunks: int
 
-@router.post("/upload", response_model=IngestResponse, summary="Tải lên tài liệu bài giảng (PDF/DOCX) và nhúng vào pgvector")
+
+async def _require_lesson_owner(
+    lesson_id: int,
+    user_id: str | None,
+    user_role: str | None,
+) -> None:
+    if not user_id or user_role not in {"instructor", "admin"}:
+        raise HTTPException(status_code=401, detail="Thiếu thông tin người dùng nội bộ")
+    try:
+        parsed_user_id = int(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="X-User-Id không hợp lệ") from exc
+
+    from sqlalchemy import text
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text(
+                """
+                SELECT c.instructor_id
+                FROM lessons l
+                JOIN courses c ON c.id = l.course_id
+                WHERE l.id = :lesson_id
+                """
+            ),
+            {"lesson_id": lesson_id},
+        )
+        row = result.first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Bài học không tồn tại")
+    if user_role != "admin" and row[0] != parsed_user_id:
+        raise HTTPException(status_code=403, detail="Bạn không có quyền quản lý học liệu bài học này")
+
+@router.post("/upload", response_model=IngestResponse, summary="Tải lên tài liệu bài giảng (PDF/DOCX/PPTX) và nhúng vào pgvector")
 async def upload_and_ingest_document(
     lesson_id: int = Form(..., description="ID bài học sở hữu tài liệu"),
-    file: UploadFile = File(..., description="Tệp tài liệu PDF hoặc DOCX")
+    file: UploadFile = File(..., description="Tệp tài liệu PDF, DOCX hoặc PPTX"),
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
 ):
+    await _require_lesson_owner(lesson_id, x_user_id, x_user_role)
     # 1. Kiểm tra parser phù hợp
     parser = get_parser(file.filename)
     if not parser:
         raise HTTPException(
             status_code=400,
-            detail=f"Định dạng tệp không được hỗ trợ: {file.filename}. Chỉ chấp nhận .pdf, .docx, .doc"
+            detail=f"Định dạng tệp không được hỗ trợ: {file.filename}. Chỉ chấp nhận .pdf, .docx hoặc .pptx"
         )
 
     try:
         content_bytes = await file.read()
+        if len(content_bytes) > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Tài liệu vượt quá dung lượng cho phép")
 
         # 2. Bóc tách tài liệu
         parsed_doc = await parser.parse_bytes(content_bytes, filename=file.filename)
@@ -44,7 +83,24 @@ async def upload_and_ingest_document(
 
         # 3. Phân đoạn ngữ nghĩa (Chunking) với overlap tối ưu
         chunker = TextChunker()
-        chunks = chunker.split_text(text, metadata={"filename": file.filename, "lesson_id": lesson_id})
+        if parsed_doc.get("pages"):
+            chunks = []
+            for page in parsed_doc["pages"]:
+                chunks.extend(
+                    chunker.split_text(
+                        page.get("text", ""),
+                        metadata={
+                            "filename": file.filename,
+                            "lesson_id": lesson_id,
+                            "page": page.get("page"),
+                        },
+                    )
+                )
+        else:
+            chunks = chunker.split_text(
+                text,
+                metadata={"filename": file.filename, "lesson_id": lesson_id},
+            )
         if not chunks:
             raise HTTPException(status_code=400, detail="Không thể phân đoạn văn bản từ tài liệu.")
 
@@ -57,6 +113,7 @@ async def upload_and_ingest_document(
         # 5. Lưu trữ vào pgvector theo lesson_id
         async with AsyncSessionLocal() as db:
             store = PgVectorStore(db)
+            await store.delete_by_lesson(lesson_id)
             metadata_list = [c.metadata for c in chunks]
             await store.add_chunks(
                 lesson_id=lesson_id,
@@ -99,13 +156,18 @@ class IngestTextResponse(BaseModel):
     response_model=IngestTextResponse,
     summary="Nhúng tri thức dạng text (transcript) vào pgvector bằng embedding Gemini thật",
 )
-async def ingest_text_chunks(req: IngestTextRequest):
+async def ingest_text_chunks(
+    req: IngestTextRequest,
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
+):
     """Nhúng các đoạn text có sẵn (ví dụ transcript bài giảng) vào pgvector.
 
     Dùng chung embedder của AI Service để bảo đảm mọi vector trong cơ sở tri thức
     đều là embedding thật từ Gemini. Nếu thiếu API key hoặc Gemini lỗi, endpoint
     trả lỗi 502 thay vì nạp vector giả.
     """
+    await _require_lesson_owner(req.lesson_id, x_user_id, x_user_role)
     chunks = [c.strip() for c in req.chunks]
     if not chunks or any(not c for c in chunks):
         raise HTTPException(
@@ -147,7 +209,13 @@ async def ingest_text_chunks(req: IngestTextRequest):
 
 
 @router.delete("/lesson/{lesson_id}", summary="Xóa toàn bộ tri thức vector của bài học")
-async def delete_lesson_vectors(lesson_id: int):
+async def delete_lesson_vectors(
+    lesson_id: int,
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
+):
+    # This endpoint is destructive and must use the same ownership check as upload.
+    await _require_lesson_owner(lesson_id, x_user_id, x_user_role)
     try:
         async with AsyncSessionLocal() as db:
             store = PgVectorStore(db)

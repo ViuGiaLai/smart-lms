@@ -5,9 +5,13 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import HTTPException, status
+
+from app.models.course import Course, CourseStatus
 from app.models.enrollment import Enrollment
 from app.models.lesson import Lesson
 from app.models.progress import Progress
+from app.models.user import User, UserRole
 
 
 async def ensure_enrollment(db: AsyncSession, user_id: int, course_id: int) -> Enrollment:
@@ -25,6 +29,35 @@ async def ensure_enrollment(db: AsyncSession, user_id: int, course_id: int) -> E
     db.add(enrollment)
     await db.flush()
     return enrollment
+
+
+async def require_course_access(
+    db: AsyncSession,
+    user: User,
+    course_id: int,
+) -> Course:
+    """Require staff ownership or an active student's enrollment in a course."""
+    result = await db.execute(select(Course).where(Course.id == course_id))
+    course = result.scalar_one_or_none()
+    if course is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    if role == UserRole.admin.value or (
+        role == UserRole.instructor.value and course.instructor_id == user.id
+    ):
+        return course
+
+    if role != UserRole.student.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập khóa học này")
+
+    if course.status != CourseStatus.published:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Khóa học chưa được xuất bản")
+
+    if course_id not in await enrolled_course_ids(db, user.id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn chưa đăng ký khóa học này")
+
+    return course
 
 
 async def enrolled_course_ids(db: AsyncSession, user_id: int) -> set[int]:
@@ -104,6 +137,24 @@ def compute_streak(activity_dates: set[date], today: date | None = None) -> int:
         streak += 1
         cursor = cursor - timedelta(days=1)
     return streak
+
+
+def compute_longest_streak(activity_dates: set[date]) -> int:
+    """Chuỗi ngày học liên tiếp dài nhất trong toàn bộ lịch sử hoạt động."""
+    if not activity_dates:
+        return 0
+    longest = 0
+    for day in activity_dates:
+        # Chỉ bắt đầu đếm từ ngày "đầu chuỗi" (ngày liền trước không có hoạt động).
+        if (day - timedelta(days=1)) in activity_dates:
+            continue
+        length = 1
+        cursor = day + timedelta(days=1)
+        while cursor in activity_dates:
+            length += 1
+            cursor += timedelta(days=1)
+        longest = max(longest, length)
+    return longest
 
 
 async def activity_dates_for_user(db: AsyncSession, user_id: int) -> set[date]:

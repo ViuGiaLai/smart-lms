@@ -24,18 +24,35 @@ import {
   ChevronRight,
   Layers,
 } from 'lucide-react';
-import { coursesApi } from '@/lib/api';
+import { coursesApi, instructorApi } from '@/lib/api';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface LessonItem {
   id: string | number;
   title: string;
   order_index?: number;
   duration?: number;
+  durationText?: string;
   video_url?: string;
   transcript?: string;
   resources_url?: string;
 }
+
+type DocumentUploadState = 'idle' | 'uploading' | 'processing' | 'ready' | 'error';
 
 interface QuizOptionItem {
   key: string;
@@ -54,9 +71,10 @@ export default function CourseManagePage() {
   const { isAuthorized } = useRoleGuard(['instructor', 'admin']);
   const params = useParams();
   const router = useRouter();
-  const courseId = (params?.id as string) || '1';
+  const courseId = (params?.id as string) || '';
 
   const [courseTitle, setCourseTitle] = useState('Đang tải thông tin khóa học...');
+  const [courseSlug, setCourseSlug] = useState('');
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [courseQuizzes, setCourseQuizzes] = useState<any[]>([]);
   const [courseStatus, setCourseStatus] = useState<string>('draft');
@@ -70,6 +88,9 @@ export default function CourseManagePage() {
   const [newResourcesUrl, setNewResourcesUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [documentFiles, setDocumentFiles] = useState<Record<string, File | undefined>>({});
+  const [documentStates, setDocumentStates] = useState<Record<string, DocumentUploadState>>({});
+  const [documentMessages, setDocumentMessages] = useState<Record<string, string>>({});
 
   // AI Quiz Studio State
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
@@ -82,6 +103,21 @@ export default function CourseManagePage() {
     if (!url) return '';
     const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
     return match ? `https://www.youtube-nocookie.com/embed/${match[1]}` : '';
+  };
+
+  // API trả duration dạng "45m" hoặc số giây tuỳ endpoint; chuẩn hoá về giây
+  const parseDurationSeconds = (value: unknown): number => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const hours = value.match(/(\d+)\s*h/i);
+      const minutes = value.match(/(\d+)\s*m/i);
+      if (hours || minutes) {
+        return (hours ? parseInt(hours[1], 10) : 0) * 3600 + (minutes ? parseInt(minutes[1], 10) : 0) * 60;
+      }
+      const seconds = parseInt(value, 10);
+      return Number.isFinite(seconds) ? seconds : 0;
+    }
+    return 0;
   };
 
   // Fetch course details from backend if available and verify ownership
@@ -99,13 +135,23 @@ export default function CourseManagePage() {
             router.push('/instructor-dashboard');
             return;
           }
-          setCourseTitle(c.title || courseTitle);
-          setLessons(c.lessons || []);
+          setCourseTitle(c.title || 'Khóa học chưa có tiêu đề');
+          setCourseSlug(c.slug || '');
+          setLessons(
+            (c.lessons || []).map((lesson: any) => ({
+              ...lesson,
+              duration: parseDurationSeconds(lesson.duration),
+              video_url: lesson.video_url ?? lesson.videoUrl ?? '',
+              resources_url: lesson.resources_url ?? '',
+              transcript: lesson.transcript ?? '',
+            })),
+          );
           setCourseQuizzes(c.quizzes || []);
           setCourseStatus(c.status || 'draft');
         }
       } catch (err) {
         console.error('Lỗi khi nạp dữ liệu khóa học:', err);
+        if (isMounted) setCourseTitle('Không thể tải thông tin khóa học');
       }
     };
     fetchCourse();
@@ -113,6 +159,37 @@ export default function CourseManagePage() {
       isMounted = false;
     };
   }, [courseId, router]);
+
+  // Đồng bộ trạng thái học liệu RAG từ AI Service (qua instructor/materials)
+  // để sau khi tải lại trang vẫn biết bài học nào đã có embedding trong pgvector.
+  useEffect(() => {
+    let isMounted = true;
+    instructorApi
+      .getMaterials()
+      .then((res) => {
+        if (!isMounted) return;
+        const courses = res.data?.data?.courses || [];
+        const current = courses.find((item: any) => String(item.id) === String(courseId));
+        if (!current) return;
+        const readyStates: Record<string, DocumentUploadState> = {};
+        const readyMessages: Record<string, string> = {};
+        for (const lesson of current.lessons || []) {
+          const chunkCount = Number(lesson.chunkCount) || 0;
+          if (chunkCount > 0) {
+            readyStates[String(lesson.id)] = 'ready';
+            readyMessages[String(lesson.id)] = `Đã có ${chunkCount} đoạn tri thức trong pgvector.`;
+          }
+        }
+        setDocumentStates((prev) => ({ ...readyStates, ...prev }));
+        setDocumentMessages((prev) => ({ ...readyMessages, ...prev }));
+      })
+      .catch(() => {
+        // Không chặn trang quản lý nếu AI Service/pgvector tạm thời không phản hồi.
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [courseId]);
 
   // AI Sinh bộ trắc nghiệm từ nội dung bài giảng (Xem trước trực tiếp từ Gemini mà không lưu đè DB)
   const handleAiGenerateQuiz = async () => {
@@ -139,16 +216,29 @@ export default function CourseManagePage() {
 
       if (res.ok) {
         const data = await res.json();
-        const mapped: GeneratedQuizQuestion[] = (data.questions || []).map((q: any, idx: number) => ({
-          question_number: idx + 1,
-          question_text: q.question_text || `Câu hỏi ${idx + 1}`,
-          options: (q.options || []).map((opt: any, optIdx: number) => ({
-            key: opt.key || String.fromCharCode(65 + optIdx),
-            text: opt.text || String(opt),
-          })),
-          correct_option: q.correct_answer || q.correct_option || 'A',
-          explanation: q.explanation || 'Phân tích suy luận từ tài liệu bài giảng.',
-        }));
+        const mapped: GeneratedQuizQuestion[] = (data.questions || []).map((q: any, idx: number) => {
+          const rawOptions: any[] = Array.isArray(q.options) ? q.options.slice(0, 4) : [];
+          const originalKeys = rawOptions.map((opt, optIdx) =>
+            typeof opt === 'object' && opt?.key ? String(opt.key).toUpperCase() : String.fromCharCode(65 + optIdx),
+          );
+          const rawCorrect = String(q.correct_answer || q.correct_option || 'A').toUpperCase();
+          const correctIdx = originalKeys.indexOf(rawCorrect);
+          const mappedOptions = ['A', 'B', 'C', 'D'].map((key, optIdx) => {
+            const opt = rawOptions[optIdx];
+            return {
+              key,
+              text: opt === undefined ? '' : typeof opt === 'object' ? String(opt?.text ?? '') : String(opt),
+            };
+          });
+
+          return {
+            question_number: idx + 1,
+            question_text: q.question_text || q.question || `Câu hỏi ${idx + 1}`,
+            options: mappedOptions,
+            correct_option: String.fromCharCode(65 + (correctIdx >= 0 ? correctIdx : 0)),
+            explanation: String(q.explanation || '').trim(),
+          };
+        });
         setQuizQuestions(mapped);
       } else {
         const errJson = await res.json().catch(() => null);
@@ -186,6 +276,12 @@ export default function CourseManagePage() {
     );
   };
 
+  const handleUpdateExplanation = (qIndex: number, text: string) => {
+    setQuizQuestions((prev) =>
+      prev.map((q, i) => (i === qIndex ? { ...q, explanation: text } : q))
+    );
+  };
+
   const handleRemoveQuestion = (index: number) => {
     setQuizQuestions((prev) =>
       prev.filter((_, i) => i !== index).map((q, i) => ({ ...q, question_number: i + 1 }))
@@ -195,27 +291,34 @@ export default function CourseManagePage() {
   // Tạo bài học và lưu kèm bộ Quiz
   const handleCreateLesson = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || isSubmitting) return;
+
+    if (quizQuestions.length > 0) {
+      const invalidIndex = quizQuestions.findIndex(
+        (q) =>
+          !q.question_text.trim() ||
+          q.options.length !== 4 ||
+          q.options.some((o) => !o.text.trim()) ||
+          !q.explanation.trim(),
+      );
+      if (invalidIndex >= 0) {
+        alert(`Câu ${invalidIndex + 1}: vui lòng nhập đủ nội dung câu hỏi, 4 đáp án và giải thích.`);
+        return;
+      }
+    }
 
     setIsSubmitting(true);
-    const orderIndex = lessons.length + 1;
-    const durationSeconds = parseInt(newDuration, 10) * 60 || 2700;
-
-    const newLessonData: LessonItem = {
-      id: Date.now(),
-      title: newTitle.trim(),
-      order_index: orderIndex,
-      duration: durationSeconds,
-      video_url: newVideoUrl.trim() || undefined,
-      transcript: newTranscript.trim() || undefined,
-      resources_url: newResourcesUrl.trim() || undefined,
-    };
+    const orderIndex =
+      lessons.reduce((max, lesson) => Math.max(max, Number(lesson.order_index) || 0), 0) + 1;
+    const durationSeconds = (parseInt(newDuration, 10) || 45) * 60;
+    const selectedDocumentFile = documentFiles.new;
+    const pendingQuizQuestions = quizQuestions;
 
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-      // 1. Tạo bài học trong database qua instructor API
+      // 1. Tạo bài học trong database
       const res = await fetch(`${apiUrl}/api/v1/courses/${courseId}/lessons`, {
         method: 'POST',
         headers: {
@@ -223,63 +326,138 @@ export default function CourseManagePage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          title: newLessonData.title,
-          order_index: newLessonData.order_index,
-          duration: newLessonData.duration,
-          video_url: newLessonData.video_url,
-          transcript: newLessonData.transcript,
-          resources_url: newLessonData.resources_url,
+          title: newTitle.trim(),
+          order_index: orderIndex,
+          duration: durationSeconds,
+          video_url: newVideoUrl.trim() || undefined,
+          transcript: newTranscript.trim() || undefined,
+          resources_url: newResourcesUrl.trim() || undefined,
         }),
       });
 
-      if (res.ok) {
-        const created = await res.json();
-        setLessons((prev) => [...prev, created]);
-      } else {
-        const errData = await res.json().catch(() => null);
-        alert('Tạo bài học thất bại: ' + (errData?.detail || 'Lỗi máy chủ'));
-        return;
+      const created = await res.json().catch(() => null);
+      if (!res.ok) {
+        const detail =
+          typeof created?.detail === 'string' ? created.detail : created?.detail?.[0]?.msg || 'Lỗi máy chủ khi tạo bài học';
+        throw new Error(detail);
       }
 
-      // 2. Nếu có bộ câu hỏi Quiz đã duyệt, lưu vào bảng quizzes
-      if (quizQuestions.length > 0) {
-        try {
-          await fetch(`${apiUrl}/api/v1/courses/${courseId}/quizzes`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              title: `Trắc nghiệm ôn tập: ${newTitle.trim()}`,
-              description: `Bộ đề củng cố kiến thức bài giảng #${orderIndex}`,
-              time_limit: 600,
-              pass_score: 0.6,
-              questions: quizQuestions.map((q, idx) => ({
-                question_text: q.question_text,
-                options: q.options,
-                correct_answer: q.correct_option,
-                explanation: q.explanation,
-                order_index: idx + 1,
-              })),
-            }),
-          });
-        } catch (quizErr) {
-          console.warn('Lỗi khi lưu đề thi vào PostgreSQL:', quizErr);
+      setLessons((prev) => [
+        ...prev,
+        {
+          ...created,
+          duration: parseDurationSeconds(created?.duration ?? durationSeconds),
+          video_url: created?.video_url ?? newVideoUrl.trim(),
+          resources_url: created?.resources_url ?? newResourcesUrl.trim(),
+          transcript: created?.transcript ?? newTranscript.trim(),
+        },
+      ]);
+
+      if (selectedDocumentFile && created?.id) {
+        await uploadDocument(created.id, selectedDocumentFile);
+      }
+
+      // 2. Lưu bộ đề đã duyệt (nếu có)
+      if (pendingQuizQuestions.length > 0) {
+        const quizRes = await fetch(`${apiUrl}/api/v1/courses/${courseId}/quizzes`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            lesson_id: created?.id ? Number(created.id) : null,
+            title: `Trắc nghiệm ôn tập: ${newTitle.trim()}`,
+            description: `Bộ đề củng cố kiến thức bài giảng "${newTitle.trim()}"`,
+            time_limit: 600,
+            pass_score: 0.6,
+            questions: pendingQuizQuestions.map((q, idx) => ({
+              question_text: q.question_text,
+              options: q.options,
+              correct_answer: q.correct_option,
+              explanation: q.explanation,
+              order_index: idx + 1,
+            })),
+          }),
+        });
+
+        if (!quizRes.ok) {
+          const quizErrorData = await quizRes.json().catch(() => null);
+          const detail =
+            typeof quizErrorData?.detail === 'string'
+              ? quizErrorData.detail
+              : quizErrorData?.detail?.[0]?.msg || 'Lỗi không xác định';
+          alert(`Bài học đã được tạo nhưng chưa lưu được bộ đề: ${detail}`);
         }
       }
-    } catch (err: any) {
-      alert('Lỗi kết nối khi tạo bài học: ' + (err.message || 'Vui lòng thử lại'));
-      return;
-    } finally {
-      setIsSubmitting(false);
+
       setShowAddForm(false);
       setNewTitle('');
       setNewVideoUrl('');
       setNewTranscript('');
+      setNewResourcesUrl('');
+      setDocumentFiles({});
       setQuizQuestions([]);
-      setSuccessMessage('🎉 Đã thêm bài học & bộ Quiz thành công vào hệ thống!');
+      setSuccessMessage('Đã thêm bài học và bộ đề trắc nghiệm vào hệ thống!');
       setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err: any) {
+      alert('Không thể tạo bài học: ' + (err.message || 'Vui lòng thử lại'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const uploadDocument = async (lessonId: string | number, file: File) => {
+    const key = String(lessonId);
+    setDocumentStates((prev) => ({ ...prev, [key]: 'uploading' }));
+    setDocumentMessages((prev) => ({ ...prev, [key]: `Đang tải ${file.name}...` }));
+
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch(
+        `${apiUrl}/api/v1/courses/${courseId}/lessons/${lessonId}/documents/upload`,
+        {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        },
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.detail || 'Không thể xử lý tài liệu');
+      }
+
+      setDocumentStates((prev) => ({ ...prev, [key]: 'ready' }));
+      setDocumentMessages((prev) => ({
+        ...prev,
+        [key]: `${file.name} đã được parse, tạo embedding và liên kết với bài học.`,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Lỗi không xác định khi upload tài liệu';
+      setDocumentStates((prev) => ({ ...prev, [key]: 'error' }));
+      setDocumentMessages((prev) => ({ ...prev, [key]: message }));
+    }
+  };
+
+  const handlePublishCourse = async () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/publish`, {
+        method: 'PATCH',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.detail || 'Không thể xuất bản khóa học');
+      }
+      setCourseStatus('published');
+      setSuccessMessage('Khóa học đã được xuất bản.');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Không thể xuất bản khóa học');
     }
   };
 
@@ -295,7 +473,12 @@ export default function CourseManagePage() {
         },
       });
       if (res.ok || res.status === 204) {
-        setLessons((prev) => prev.filter((l) => l.id !== lessonId));
+        setLessons((prev) => prev.filter((l) => String(l.id) !== String(lessonId)));
+        setCourseQuizzes((prev) =>
+          prev.map((quiz) =>
+            String(quiz.lesson_id) === String(lessonId) ? { ...quiz, lesson_id: null } : quiz,
+          ),
+        );
       } else {
         const errJson = await res.json().catch(() => null);
         alert(errJson?.detail || 'Không thể xóa bài học trên cơ sở dữ liệu.');
@@ -307,7 +490,7 @@ export default function CourseManagePage() {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center text-xs font-semibold text-slate-500">
+      <div className="flex min-h-screen items-center justify-center text-xs font-semibold text-muted-foreground">
         Đang xác thực quyền Giảng viên...
       </div>
     );
@@ -319,65 +502,61 @@ export default function CourseManagePage() {
     <div className="pb-32 md:pb-16 font-sans">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* Navigation Breadcrumb */}
-        <div className="flex items-center justify-between">
-          <Link
-            href="/instructor-dashboard"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-indigo-600 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-2xs transition"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Bảng điều khiển Giảng viên
-          </Link>
-
-          <div className="flex items-center gap-2">
-            <Link
-              href="/quiz/bank"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:text-indigo-600 px-3.5 py-1.5 rounded-xl shadow-2xs transition"
-            >
-              <Layers className="w-3.5 h-3.5 text-indigo-600" /> Ngân hàng đề thi
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/instructor-dashboard">
+              <ArrowLeft /> Bảng điều khiển Giảng viên
             </Link>
+          </Button>
 
-            <Link
-              href={`/courses/${courseId}/learn?preview=true`}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 px-3.5 py-1.5 rounded-xl shadow-2xs transition"
-            >
-              <Eye className="w-3.5 h-3.5" /> Xem trước bài giảng (Focus Player)
-            </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/quiz/bank">
+                <Layers className="text-primary" /> Ngân hàng đề thi
+              </Link>
+            </Button>
+
+            <Button variant="outline" size="sm" asChild className="text-primary">
+              <Link href={`/courses/${courseId}/learn?preview=true`}>
+                <Eye /> Xem trước bài giảng
+              </Link>
+            </Button>
           </div>
         </div>
 
         {/* Course Header Banner */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col justify-between rounded-3xl border border-border bg-card p-6 shadow-sm gap-4 sm:flex-row sm:items-start sm:p-8 md:flex-row md:items-center">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                Khóa học #{courseId}
-              </span>
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                courseStatus === 'published'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-amber-50 text-amber-700 border-amber-200'
-              }`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="info">Khóa học #{courseId}</Badge>
+              {courseSlug && <Badge variant="outline">/{courseSlug}</Badge>}
+              <Badge variant={courseStatus === 'published' ? 'success' : 'warning'}>
                 {courseStatus === 'published' ? '✓ Đã xuất bản' : '✏️ Bản nháp'}
-              </span>
+              </Badge>
             </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
               {courseTitle}
             </h1>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Quản lý học liệu đa phương tiện (Video YouTube, Slide PDF), trích xuất Transcript cho pgvector và duyệt Bộ đề trắc nghiệm AI
             </p>
           </div>
 
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md shadow-indigo-100 transition shrink-0"
-          >
-            <PlusCircle className="w-4 h-4" /> Soạn thảo bài học mới
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" onClick={() => setShowAddForm(true)} className="shrink-0">
+              <PlusCircle /> Soạn thảo bài học mới
+            </Button>
+            {courseStatus !== 'published' && (
+              <Button type="button" variant="success" onClick={handlePublishCourse} className="shrink-0">
+                <CheckCircle2 /> Xuất bản khóa học
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Success Alert */}
         {successMessage && (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-2 animate-in fade-in">
+          <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs font-semibold text-emerald-800 animate-in fade-in">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             {successMessage}
           </div>
@@ -385,88 +564,109 @@ export default function CourseManagePage() {
 
         {/* Form thêm bài học tích hợp Video YouTube + Slide + AI Quiz Generator */}
         {showAddForm && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-indigo-400 shadow-lg space-y-6 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="space-y-6 rounded-3xl border-2 border-primary/60 bg-card p-6 shadow-lg sm:p-8 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 font-bold text-primary">
                   <Sparkles className="w-4 h-4 text-indigo-600" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-extrabold text-slate-900">
+                  <h2 className="text-sm font-extrabold text-foreground">
                     Studio Soạn thảo Bài giảng & Nạp Học liệu AI
                   </h2>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-muted-foreground">
                     Dữ liệu bạn nạp tại đây sẽ hiển thị trực tiếp cho học viên và làm tri thức cho Trợ lý Gia sư AI.
                   </p>
                 </div>
               </div>
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => setShowAddForm(false)}
-                className="text-slate-400 hover:text-slate-600 text-xs font-bold px-2 py-1"
+                className="text-muted-foreground"
               >
-                Đóng ✕
-              </button>
+                Đóng
+              </Button>
             </div>
 
             <form onSubmit={handleCreateLesson} className="space-y-5">
               {/* 1. Tiêu đề & Thời lượng */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Tiêu đề bài học *
-                  </label>
-                  <input
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="manage-lesson-title">
+                    Tiêu đề bài học <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="manage-lesson-title"
                     type="text"
                     required
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     placeholder="Ví dụ: Bài 4: Tích hợp Vector Database và RAG Pipeline"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="font-semibold"
                   />
+                  <Label htmlFor="manage-lesson-file" className="mt-3 block">
+                    Upload học liệu để AI Tutor xử lý
+                  </Label>
+                  <Input
+                    id="manage-lesson-file"
+                    type="file"
+                    accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setDocumentFiles((prev) => ({ ...prev, new: file }));
+                      }
+                    }}
+                    className="cursor-pointer file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-indigo-700"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Tài liệu sẽ được upload và xử lý RAG sau khi bài học được tạo.
+                  </p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Thời lượng ước tính (phút)
-                  </label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label htmlFor="manage-lesson-duration">Thời lượng ước tính (phút)</Label>
+                  <Input
+                    id="manage-lesson-duration"
                     type="number"
+                    min={1}
                     value={newDuration}
                     onChange={(e) => setNewDuration(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="font-semibold"
                   />
                 </div>
               </div>
 
               {/* 2. Khối Video YouTube với Live Preview */}
-              <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <Video className="w-4 h-4 text-rose-600" />
+                <div className="rounded-2xl border border-border bg-muted/50 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label htmlFor="manage-lesson-video" className="flex items-center gap-1.5">
+                    <Video className="h-4 w-4 text-rose-600" />
                     Đường dẫn Video YouTube bài giảng
-                  </label>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    Hỗ trợ link: https://www.youtube.com/watch?v=... hoặc https://youtu.be/...
+                  </Label>
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    Hỗ trợ link youtube.com/watch?v=... hoặc youtu.be/...
                   </span>
                 </div>
 
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={newVideoUrl}
-                    onChange={(e) => setNewVideoUrl(e.target.value)}
-                    placeholder="Dán đường dẫn video YouTube (ví dụ: https://www.youtube.com/watch?v=...)"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                  />
-                </div>
+                <Input
+                  id="manage-lesson-video"
+                  type="url"
+                  value={newVideoUrl}
+                  onChange={(e) => setNewVideoUrl(e.target.value)}
+                  placeholder="Dán đường dẫn video YouTube (ví dụ: https://www.youtube.com/watch?v=...)"
+                  className="font-mono text-xs"
+                />
 
                 {/* Trình phát Video Preview thu nhỏ */}
                 {embedUrl && (
                   <div className="pt-2">
-                    <p className="text-[11px] font-bold text-slate-600 mb-1.5 flex items-center gap-1">
+                    <p className="mb-1.5 flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                       <Eye className="w-3.5 h-3.5 text-indigo-600" /> Xem trước Video sẽ phát cho sinh viên:
                     </p>
-                    <div className="w-full max-w-md aspect-video rounded-xl overflow-hidden border border-slate-300 shadow-sm bg-black">
+                    <div className="aspect-video w-full max-w-md overflow-hidden rounded-xl border-border shadow-sm bg-black">
                       <iframe
                         src={embedUrl}
                         title="Video Preview"
@@ -481,80 +681,75 @@ export default function CourseManagePage() {
 
               {/* 3. Khối Tài liệu Slide PDF & Transcript */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-indigo-600" />
-                    Tài liệu Slide bài giảng (PDF / URL)
-                  </label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label htmlFor="manage-lesson-resources" className="flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-indigo-600" />
+                    Tài liệu Slide bài giảng (PDF / DOCX / PPTX)
+                  </Label>
+                  <Input
+                    id="manage-lesson-resources"
                     type="text"
                     value={newResourcesUrl}
                     onChange={(e) => setNewResourcesUrl(e.target.value)}
                     placeholder="Tên file hoặc link tài liệu (Ví dụ: Slide_BaiGiang.pdf)"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                    className="font-mono text-xs"
                   />
-                  <p className="text-[11px] text-emerald-600 font-medium mt-1">
-                    ✓ Slide này sẽ hiển thị ở tab &ldquo;Tài liệu Slide&rdquo; và được nạp vào pgvector cho AI Tutor.
+                  <p className="text-[11px] font-medium text-emerald-600">
+                    Slide này sẽ hiển thị ở tab &ldquo;Tài liệu Slide&rdquo; và được nạp vào pgvector cho AI Tutor.
                   </p>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-700">
-                      Nội dung Transcript có mốc thời gian
-                    </label>
-                  </div>
-                  <textarea
+                <div className="space-y-1.5">
+                  <Label htmlFor="manage-lesson-transcript">Nội dung Transcript có mốc thời gian</Label>
+                  <Textarea
+                    id="manage-lesson-transcript"
                     rows={4}
                     value={newTranscript}
                     onChange={(e) => setNewTranscript(e.target.value)}
-                    placeholder="[00:00 - 05:00] Giới thiệu mục tiêu bài học&#10;[05:01 - 20:00] Trình bày lý thuyết trọng tâm&#10;[20:01 - 40:00] Hướng dẫn thực hành chi tiết"
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono leading-relaxed"
+                    placeholder={
+                      '[00:00 - 05:00] Giới thiệu mục tiêu bài học\n[05:01 - 20:00] Trình bày lý thuyết trọng tâm\n[20:01 - 40:00] Hướng dẫn thực hành chi tiết'
+                    }
+                    className="font-mono text-xs leading-relaxed"
                   />
                 </div>
               </div>
 
               {/* 4. Khối AI Tự Động Sinh Quiz & Teacher Review */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-violet-50/70 via-indigo-50/50 to-white border border-indigo-200 space-y-4">
+              <div className="space-y-4 rounded-2xl border border-primary/30 bg-gradient-to-r from-purple-500/10 via-primary/5 to-transparent p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-indigo-950 flex items-center gap-1.5">
+                    <h3 className="flex items-center gap-1.5 text-xs font-bold text-primary sm:text-sm">
                       <Sparkles className="w-4 h-4 text-amber-500" />
                       AI Quiz Generator & Kiểm duyệt Câu hỏi (Teacher Studio)
                     </h3>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-muted-foreground">
                       AI sẽ tự động đọc nội dung bài học và sinh câu hỏi trắc nghiệm chuẩn Bloom. Bạn có thể duyệt và chỉnh sửa trực tiếp.
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={numQuizQuestions}
-                      onChange={(e) => setNumQuizQuestions(parseInt(e.target.value, 10))}
-                      className="px-2.5 py-1.5 text-xs rounded-xl border border-slate-200 bg-white font-semibold"
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={String(numQuizQuestions)}
+                      onValueChange={(value) => setNumQuizQuestions(parseInt(value, 10))}
                     >
-                      <option value={3}>3 câu hỏi</option>
-                      <option value={5}>5 câu hỏi</option>
-                    </select>
+                      <SelectTrigger className="h-9 w-[130px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 câu hỏi</SelectItem>
+                        <SelectItem value="5">5 câu hỏi</SelectItem>
+                      </SelectContent>
+                    </Select>
 
-                    <button
+                    <Button
                       type="button"
+                      variant="purple"
                       onClick={handleAiGenerateQuiz}
                       disabled={isGeneratingQuiz}
-                      className="inline-flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition disabled:opacity-50"
                     >
-                      {isGeneratingQuiz ? (
-                        <>
-                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span>AI đang sinh đề...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                          <span>AI Sinh Bộ Đề Ôn Tập</span>
-                        </>
-                      )}
-                    </button>
+                      <Sparkles className={cn(isGeneratingQuiz && 'animate-spin')} />
+                      {isGeneratingQuiz ? 'AI đang sinh đề...' : 'AI Sinh Bộ Đề Ôn Tập'}
+                    </Button>
                   </div>
                 </div>
 
@@ -568,71 +763,90 @@ export default function CourseManagePage() {
                     {quizQuestions.map((q, qIdx) => (
                       <div
                         key={qIdx}
-                        className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-3"
+                        className="space-y-3 rounded-xl border border-border bg-card p-4"
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg shrink-0 mt-1">
+                          <Badge variant="secondary" className="mt-0.5 shrink-0">
                             Câu #{q.question_number}
-                          </span>
-                          <input
+                          </Badge>
+                          <Input
                             type="text"
                             value={q.question_text}
                             onChange={(e) => handleUpdateQuestionText(qIdx, e.target.value)}
-                            className="w-full text-xs font-bold text-slate-900 border-b border-dashed border-slate-300 focus:border-indigo-500 focus:outline-none pb-0.5"
+                            aria-label={`Nội dung câu hỏi ${q.question_number}`}
+                            className="h-8 flex-1 border-0 border-b border-dashed border-border/60 px-0 text-xs font-bold shadow-none focus-visible:border-primary focus-visible:ring-0"
                           />
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="icon-sm"
                             onClick={() => handleRemoveQuestion(qIdx)}
-                            className="text-slate-400 hover:text-red-500 text-xs p-1"
+                            className="shrink-0 text-muted-foreground hover:text-destructive"
                             title="Xóa câu này"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                            <Trash2 />
+                          </Button>
                         </div>
 
                         {/* 4 Lựa chọn A, B, C, D */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
                           {q.options.map((opt) => {
                             const isCorrect = q.correct_option === opt.key;
                             return (
                               <div
                                 key={opt.key}
                                 onClick={() => handleChangeCorrectOption(qIdx, opt.key)}
-                                className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition ${
+                                className={cn(
+                                  'flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 transition',
                                   isCorrect
-                                    ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold'
-                                    : 'bg-slate-50 border-slate-200 hover:border-slate-300 text-slate-700'
-                                }`}
+                                    ? 'border-emerald-500/40 bg-emerald-500/10 font-bold text-emerald-950'
+                                    : 'border-border bg-muted/50 text-foreground/80 hover:border-ring/40',
+                                )}
                               >
                                 <span
-                                  className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                                  className={cn(
+                                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-black',
                                     isCorrect
                                       ? 'bg-emerald-600 text-white'
-                                      : 'bg-white text-slate-600 border border-slate-200'
-                                  }`}
+                                      : 'border-border bg-card text-muted-foreground',
+                                  )}
                                 >
                                   {opt.key}
                                 </span>
-                                <input
+                                <Input
                                   type="text"
                                   value={opt.text}
                                   onClick={(e) => e.stopPropagation()}
                                   onChange={(e) => handleUpdateOptionText(qIdx, opt.key, e.target.value)}
-                                  className="w-full bg-transparent focus:outline-none text-xs"
+                                  aria-label={`Đáp án ${opt.key}`}
+                                  className="h-7 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0"
                                 />
                                 {isCorrect && (
-                                  <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold shrink-0">
+                                  <Badge className="shrink-0 bg-emerald-600 text-[10px] text-white hover:bg-emerald-600">
                                     Đúng
-                                  </span>
+                                  </Badge>
                                 )}
                               </div>
                             );
                           })}
                         </div>
 
-                        <p className="text-[11px] text-slate-500 italic">
-                          💡 Giải thích: {q.explanation}
-                        </p>
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor={`manage-quiz-explanation-${qIdx}`}
+                            className="text-[11px] text-muted-foreground"
+                          >
+                            Giải thích đáp án (bắt buộc)
+                          </Label>
+                          <Textarea
+                            id={`manage-quiz-explanation-${qIdx}`}
+                            rows={2}
+                            value={q.explanation}
+                            onChange={(e) => handleUpdateExplanation(qIdx, e.target.value)}
+                            placeholder="Vì sao đáp án này đúng?"
+                            className="text-xs"
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -640,94 +854,117 @@ export default function CourseManagePage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowAddForm(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
-                >
+              <div className="flex justify-end gap-2 border-t border-border pt-2">
+                <Button type="button" variant="outline" onClick={() => setShowAddForm(false)}>
                   Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !newTitle.trim()}
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-100 transition flex items-center gap-2 disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
+                </Button>
+                <Button type="submit" disabled={isSubmitting || !newTitle.trim()}>
+                  <Save />
                   {isSubmitting ? 'Đang lưu bài học & Bộ Quiz...' : 'Lưu bài học & Xuất bản'}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         )}
 
         {/* Danh sách bài học hiện tại */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
+        <div className="space-y-4 rounded-3xl border border-border/90 bg-card p-6 shadow-sm sm:p-8">
+          <div className="flex items-center justify-between border-b border-border pb-4">
+            <h2 className="text-sm font-extrabold uppercase tracking-wider text-foreground">
               Danh sách bài giảng khóa học ({lessons.length} bài)
             </h2>
-            <span className="text-xs text-slate-400">Đồng bộ 100% với Focus Player của Sinh viên</span>
+            <span className="text-xs text-muted-foreground">Đồng bộ 100% với Focus Player của Sinh viên</span>
           </div>
 
           <div className="space-y-3">
             {lessons.map((lesson, idx) => (
               <div
                 key={lesson.id}
-                className="p-4 rounded-2xl border border-slate-200 hover:border-slate-300 transition bg-slate-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              className="flex flex-col justify-between rounded-2xl border border-border/80 bg-muted/40 p-4 transition-colors hover:border-ring/40 gap-3 sm:flex-row sm:items-center"
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
                     {idx + 1}
                   </div>
                   <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+                    <h3 className="text-xs font-bold leading-snug text-foreground sm:text-sm">
                       {lesson.title}
                     </h3>
-                    <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[11px] text-slate-500">
+                    <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[11px] text-muted-foreground">
                       <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-slate-400" />
-                        {lesson.duration ? `${Math.round(lesson.duration / 60)} phút` : '45 phút'}
+                        <Clock className="w-3 h-3 text-muted-foreground/70" />
+                        {lesson.durationText ||
+                          (lesson.duration ? `${Math.round(lesson.duration / 60)} phút` : 'Chưa cập nhật')}
                       </span>
 
                       {lesson.video_url && (
-                        <span className="flex items-center gap-1 text-rose-600 font-semibold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
+                        <Badge variant="destructive" className="rounded-md px-2 py-0.5 text-[10px] font-semibold">
                           <Video className="w-3 h-3" />
                           Video YouTube HD
-                        </span>
+                        </Badge>
                       )}
 
                       {lesson.resources_url && (
-                        <span className="flex items-center gap-1 text-indigo-600 font-medium bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                        <Badge variant="info" className="rounded-md px-2 py-0.5 text-[10px] font-medium">
                           <FileText className="w-3 h-3" />
                           {lesson.resources_url}
-                        </span>
+                        </Badge>
                       )}
 
-                      <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        pgvector RAG Ready
-                      </span>
+                      {documentStates[String(lesson.id)] === 'ready' ? (
+                        <Badge variant="success" className="rounded-md px-2 py-0.5 text-[10px] font-semibold">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" /> RAG đã xử lý
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="rounded-md px-2 py-0.5 text-[10px] font-medium">
+                          <FileText className="w-3 h-3" /> Chưa có học liệu RAG
+                        </Badge>
+                      )}
                     </div>
+                    {documentMessages[String(lesson.id)] && (
+                      <p className={`mt-2 text-[11px] ${
+                        documentStates[String(lesson.id)] === 'error' ? 'text-destructive' : 'text-muted-foreground'
+                      }`}>
+                        {documentMessages[String(lesson.id)]}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                  <Link
-                    href={`/courses/${courseId}/learn?lessonId=${lesson.id}`}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition shadow-2xs"
-                    title="Mở phòng học trực tuyến của Sinh viên"
-                  >
-                    <Eye className="w-3.5 h-3.5" /> Xem bài học
-                  </Link>
+                <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
+                  <Button variant="outline" size="sm" asChild>
+                    <label className="cursor-pointer">
+                      <Upload /> Tải PDF/DOCX/PPTX
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void uploadDocument(lesson.id, file);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link
+                      href={`/courses/${courseId}/learn?lessonId=${lesson.id}`}
+                      title="Mở phòng học trực tuyến của Sinh viên"
+                    >
+                      <Eye /> Xem bài học
+                    </Link>
+                  </Button>
 
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
                     onClick={() => handleDeleteLesson(lesson.id)}
-                    className="p-1.5 rounded-xl bg-white border border-slate-200 hover:bg-red-50 text-slate-400 hover:text-red-600 text-xs transition"
+                    className="text-muted-foreground hover:text-destructive"
                     title="Xóa bài học"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                    <Trash2 />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -735,102 +972,108 @@ export default function CourseManagePage() {
         </div>
 
         {/* ── Danh sách Bộ đề thi trắc nghiệm của khóa học ── */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div className="space-y-4 rounded-3xl border border-border/90 bg-card p-6 shadow-sm sm:p-8">
+          <div className="flex flex-col justify-between gap-3 border-b border-border pb-4 sm:flex-row sm:items-center">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md border border-purple-200">
+                <Badge variant="purple" className="rounded-md text-[10px] font-bold uppercase tracking-wider">
                   Khảo thí & Đánh giá
-                </span>
-                <span className="text-xs text-slate-400">Đồng bộ PostgreSQL</span>
+                </Badge>
+                <span className="text-xs text-muted-foreground">Đồng bộ PostgreSQL</span>
               </div>
-              <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider mt-1">
+              <h2 className="mt-1 text-sm font-extrabold uppercase tracking-wider text-foreground">
                 Bộ đề thi trắc nghiệm của khóa học ({courseQuizzes.length} đề thi)
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Các đề thi này hiển thị tại tab &ldquo;Quiz ôn tập&rdquo; trong phòng học của sinh viên và tính điểm cấp Chứng chỉ.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Link
-                href="/quiz/bank"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-indigo-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition shadow-2xs"
-              >
-                <Layers className="w-3.5 h-3.5 text-indigo-600" /> Ngân hàng đề thi
-              </Link>
-              <Link
-                href={`/quiz/generate?courseId=${courseId}`}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-xs"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" /> Tạo thêm đề với AI
-              </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/quiz/bank">
+                  <Layers className="text-primary" /> Ngân hàng đề thi
+                </Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link href={`/quiz/generate?courseId=${courseId}`}>
+                  <Sparkles className="text-amber-500" /> Tạo thêm đề với AI
+                </Link>
+              </Button>
             </div>
           </div>
 
           {courseQuizzes.length === 0 ? (
-            <div className="p-8 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center space-y-2">
-              <Layers className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="text-xs font-bold text-slate-700">Khóa học này chưa có bộ đề thi nào trong PostgreSQL</p>
-              <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+            <div className="space-y-2 rounded-2xl border border-dashed border-border bg-muted/40 p-8 text-center">
+              <Layers className="w-8 h-8 text-muted-foreground/70 mx-auto" />
+              <p className="text-xs font-bold text-foreground">Khóa học này chưa có bộ đề thi nào trong PostgreSQL</p>
+              <p className="text-[11px] text-muted-foreground max-w-md mx-auto">
                 Hãy sử dụng Trợ lý AI để tự động tạo bộ câu hỏi Bloom Taxonomy chuẩn giáo trình chỉ trong vài giây.
               </p>
-              <Link
-                href={`/quiz/generate?courseId=${courseId}`}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition mt-2 shadow-sm"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" /> Tạo đề thi đầu tiên cho khóa này
-              </Link>
+              <Button size="sm" asChild className="mt-2">
+                <Link href={`/quiz/generate?courseId=${courseId}`}>
+                  <Sparkles className="text-amber-500" /> Tạo đề thi đầu tiên cho khóa này
+                </Link>
+              </Button>
             </div>
           ) : (
             <div className="space-y-3">
               {courseQuizzes.map((quiz, qIdx) => (
                 <div
                   key={quiz.id}
-                  className="p-4 rounded-2xl border border-slate-200 hover:border-indigo-200 hover:shadow-xs transition bg-slate-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                className="flex flex-col justify-between rounded-2xl border border-border/80 bg-muted/40 p-4 transition-colors hover:border-ring/40 hover:shadow-xs gap-3 sm:flex-row sm:items-center"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-xs font-bold text-purple-600">
                       Q{qIdx + 1}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.2 rounded border border-indigo-200">
+                        <Badge variant="info" className="rounded text-[10px] font-bold">
                           Đề #{quiz.id}
-                        </span>
-                        <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                        </Badge>
+                        <h3 className="text-xs font-bold text-foreground sm:text-sm">
                           {quiz.title}
                         </h3>
                       </div>
-                      <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                      <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
                         {quiz.description || 'Đề thi trắc nghiệm đánh giá kiến thức bài học.'}
                       </p>
-                      <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500">
-                        <span className="font-semibold text-slate-700">
+                      <div className="flex items-center gap-3 mt-1.5 text-[11px] text-muted-foreground">
+                        <span className="font-semibold text-foreground/80">
                           {quiz.questions?.length || 0} câu hỏi
                         </span>
+                        {quiz.lesson_id && (
+                          <>
+                            <span>•</span>
+                            <span className="truncate max-w-[220px]">
+                              Bài học:{' '}
+                              {lessons.find((lesson) => String(lesson.id) === String(quiz.lesson_id))?.title ||
+                                `#${quiz.lesson_id}`}
+                            </span>
+                          </>
+                        )}
                         <span>•</span>
                         <span>Tự động chấm điểm & cấp chứng chỉ</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                    <Link
-                      href={`/quiz/${quiz.id}?courseId=${courseId}`}
-                      target="_blank"
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition"
-                      title="Làm thử bài thi như học viên"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" /> Làm thử
-                    </Link>
-                    <Link
-                      href="/quiz/bank"
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition"
-                      title="Quản lý trong Ngân hàng đề thi"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-slate-500" /> Xem chi tiết
-                    </Link>
+                  <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link
+                        href={`/quiz/${quiz.id}?courseId=${courseId}`}
+                        target="_blank"
+                        title="Làm thử bài thi như học viên"
+                      >
+                        <ExternalLink /> Làm thử
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href="/quiz/bank" title="Quản lý trong Ngân hàng đề thi">
+                        <Eye /> Xem chi tiết
+                      </Link>
+                    </Button>
                   </div>
                 </div>
               ))}

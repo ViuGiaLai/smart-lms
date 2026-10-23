@@ -35,6 +35,7 @@ interface LessonItem {
   id: string | number;
   title: string;
   duration?: number | string;
+  durationText?: string;
   video_url?: string;
   videoUrl?: string;
   order_index?: number;
@@ -44,12 +45,25 @@ interface LessonItem {
   resources_url?: string;
 }
 
+function formatLessonDuration(lesson: LessonItem): string {
+  if (lesson.durationText) return lesson.durationText;
+  if (typeof lesson.duration === 'number') {
+    const minutes = Math.round(lesson.duration / 60);
+    return minutes > 0 ? `${minutes} phút` : '0 phút';
+  }
+  return lesson.duration || 'Chưa cập nhật';
+}
+
 export default function LearnPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  const courseId = (params?.id as string) || '1';
-  const initialLessonId = searchParams?.get('lessonId') || '1';
+  const courseId = (params?.id as string) || '';
+  const initialLessonId = searchParams?.get('lessonId') || '';
+
+  const [resolvedCourseId, setResolvedCourseId] = useState<string>(
+    /^\d+$/.test(courseId) ? courseId : '',
+  );
 
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [courseTitle, setCourseTitle] = useState('Đang tải khóa học...');
@@ -76,6 +90,13 @@ export default function LearnPage() {
     } catch {}
   }, []);
 
+  useEffect(() => {
+    const tab = searchParams?.get('tab');
+    if (tab === 'overview' || tab === 'materials' || tab === 'quiz' || tab === 'chat') {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
   const isOwner = Boolean(
     currentUser &&
     courseInstructorId &&
@@ -101,9 +122,14 @@ export default function LearnPage() {
     const fetchCourseData = async () => {
       setIsLoading(true);
       try {
-        const res = await coursesApi.getById(courseId);
+        const res = /^\d+$/.test(courseId)
+          ? await coursesApi.getById(courseId)
+          : await coursesApi.getBySlug(courseId);
+        let numericCourseId = /^\d+$/.test(courseId) ? courseId : '';
         if (res.data?.data && isMounted) {
           const c = res.data.data;
+          numericCourseId = String(c.id);
+          setResolvedCourseId(numericCourseId);
           setCourseTitle(c.title || 'Khóa học trực tuyến');
           if (c.instructor?.id) {
             setCourseInstructorId(Number(c.instructor.id));
@@ -124,11 +150,13 @@ export default function LearnPage() {
         }
 
         // Tải tiến độ thực tế đã lưu trong PostgreSQL
-        const progRes = await coursesApi.getProgress(courseId);
-        if (progRes.data?.data && isMounted) {
-          const p = progRes.data.data;
-          if (p.completedLessons) setCompletedLessonIds(p.completedLessons);
-          if (p.percentage !== undefined) setProgress(p.percentage);
+        if (numericCourseId) {
+          const progRes = await coursesApi.getProgress(numericCourseId);
+          if (progRes.data?.data && isMounted) {
+            const p = progRes.data.data;
+            if (p.completedLessons) setCompletedLessonIds(p.completedLessons);
+            if (p.percentage !== undefined) setProgress(p.percentage);
+          }
         }
       } catch (err) {
         console.error('Lỗi tải dữ liệu bài giảng từ máy chủ:', err);
@@ -148,10 +176,16 @@ export default function LearnPage() {
   const currentIndex = lessons.findIndex((l) => String(l.id) === String(activeLessonId));
   const hasNextLesson = currentIndex >= 0 && currentIndex < lessons.length - 1;
   const nextLessonId = hasNextLesson ? lessons[currentIndex + 1].id : null;
-  const activeQuizItem = courseQuizzes.find((q: any) =>
-    q.title?.toLowerCase().includes(`bài ${currentLesson?.order || currentLesson?.order_index || (currentIndex + 1)}`)
-  ) || courseQuizzes[0];
-  const targetQuizId = activeQuizItem?.id || currentLesson?.id || '1';
+  const activeQuizItem =
+    courseQuizzes.find(
+      (q: any) => q.lesson_id != null && String(q.lesson_id) === String(currentLesson?.id),
+    ) ||
+    courseQuizzes.find((q: any) =>
+      q.title?.toLowerCase().includes(`bài ${currentLesson?.order || currentLesson?.order_index || (currentIndex + 1)}`)
+    ) ||
+    courseQuizzes[0];
+  const targetQuizId = activeQuizItem?.id ?? null;
+  const quizCourseId = resolvedCourseId || courseId;
 
   const isCurrentCompleted = completedLessonIds.includes(String(currentLesson?.id));
 
@@ -165,7 +199,12 @@ export default function LearnPage() {
       setProgress(newPct);
     }
     try {
-      await coursesApi.markLessonComplete(courseId, lid, (currentLesson.duration as number) || 1800);
+      if (!resolvedCourseId) return;
+      await coursesApi.markLessonComplete(
+        resolvedCourseId,
+        lid,
+        typeof currentLesson.duration === 'number' ? currentLesson.duration : 0,
+      );
     } catch (err) {
       console.warn('Lỗi lưu tiến độ bài học:', err);
     }
@@ -277,14 +316,16 @@ export default function LearnPage() {
             <span className="hidden xs:inline">Bài học</span>
           </button>
 
-          <Link
-            href={`/quiz/${targetQuizId}?courseId=${courseId}`}
-            className="flex items-center gap-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 sm:px-3.5 py-1.5 rounded-lg shadow-sm transition shadow-emerald-900/30"
-          >
-            <HelpCircle className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Trắc nghiệm</span>
-            <span className="sm:hidden text-[11px]">Quiz</span>
-          </Link>
+          {targetQuizId != null && (
+            <Link
+              href={`/quiz/${targetQuizId}?courseId=${quizCourseId}`}
+              className="flex items-center gap-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 sm:px-3.5 py-1.5 rounded-lg shadow-sm transition shadow-emerald-900/30"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Trắc nghiệm</span>
+              <span className="sm:hidden text-[11px]">Quiz</span>
+            </Link>
+          )}
 
           {/* Toggle Chatbot - Desktop & Mobile */}
           <button
@@ -374,9 +415,7 @@ export default function LearnPage() {
                     <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {typeof lesson.duration === 'number'
-                          ? `${Math.round(lesson.duration / 60)} phút`
-                          : lesson.duration || '45 phút'}
+                        {formatLessonDuration(lesson)}
                       </span>
                       <span>•</span>
                       <span className="text-indigo-400/80">Có Video & RAG</span>
@@ -466,9 +505,7 @@ export default function LearnPage() {
                         <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            {typeof lesson.duration === 'number'
-                              ? `${Math.round(lesson.duration / 60)} phút`
-                              : lesson.duration || '45 phút'}
+                            {formatLessonDuration(lesson)}
                           </span>
                         </div>
                       </div>
@@ -494,8 +531,9 @@ export default function LearnPage() {
                   setCompletedLessonIds((prev) => [...prev, String(currentLesson.id)]);
                 }
                 setProgress(100);
-                const dur = typeof currentLesson.duration === 'number' ? currentLesson.duration : 2700;
-                coursesApi.markLessonComplete(courseId, String(currentLesson.id), dur).catch((err) => {
+                const dur = typeof currentLesson.duration === 'number' ? currentLesson.duration : 0;
+                if (!resolvedCourseId) return;
+                coursesApi.markLessonComplete(resolvedCourseId, String(currentLesson.id), dur).catch((err) => {
                   console.warn('Lỗi ghi nhận tiến độ vào PostgreSQL:', err);
                 });
               }}
@@ -699,11 +737,7 @@ export default function LearnPage() {
                 )}
 
                 {activeTab === 'quiz' && (() => {
-                  const activeQuizItem = courseQuizzes.find((q: any) =>
-                    q.title?.toLowerCase().includes(`bài ${currentLesson.order || currentLesson.order_index || (currentIndex + 1)}`)
-                  ) || courseQuizzes[0];
                   const quizQuestionsList = activeQuizItem?.questions || [];
-                  const targetQuizId = activeQuizItem?.id || currentLesson.id;
 
                   return (
                     <div className="space-y-5">
@@ -722,7 +756,7 @@ export default function LearnPage() {
 
                         {activeQuizItem && (
                           <Link
-                            href={`/quiz/${targetQuizId}?courseId=${courseId}`}
+                            href={`/quiz/${targetQuizId}?courseId=${quizCourseId}`}
                             className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md shadow-emerald-950 transition shrink-0"
                           >
                             Phòng thi đầy đủ <ChevronRight className="w-3.5 h-3.5" />
@@ -746,7 +780,7 @@ export default function LearnPage() {
                               text: typeof opt === 'object' ? (opt.text || String(opt)) : String(opt),
                             }));
                             const correct = q.correct_answer || q.correct || 'A';
-                            const explain = q.explanation || 'Được phân tích và suy luận từ tài liệu bài giảng.';
+                            const explain = q.explanation || 'Chưa có giải thích cho câu hỏi này.';
                             const selectedKey = inTabAnswers[num];
                             const isCorrect = selectedKey === correct;
 
@@ -844,7 +878,7 @@ export default function LearnPage() {
                         )}
 
                         <Link
-                          href={`/quiz/${targetQuizId}?courseId=${courseId}`}
+                          href={`/quiz/${targetQuizId}?courseId=${quizCourseId}`}
                           className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1"
                         >
                           Thi trắc nghiệm có chấm điểm & lưu chứng chỉ <ChevronRight className="w-3.5 h-3.5" />

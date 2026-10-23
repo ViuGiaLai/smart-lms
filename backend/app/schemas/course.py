@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+CourseStatusLiteral = Literal["draft", "published", "archived"]
 
 
 # ── Shared ───────
@@ -47,11 +50,11 @@ class CourseBase(BaseModel):
     thumbnail: str | None = None
     category: str | None = None
     level: str | None = None
-    status: str = "published"
+    status: CourseStatusLiteral = "draft"
 
 
 class CourseCreate(CourseBase):
-    pass
+    slug: str | None = Field(None, max_length=255)
 
 
 class CourseUpdate(BaseModel):
@@ -59,13 +62,15 @@ class CourseUpdate(BaseModel):
     description: str | None = None
     price: Decimal | None = Field(None, ge=0)
     thumbnail: str | None = None
-    status: str | None = None
+    status: CourseStatusLiteral | None = None
     category: str | None = None
     level: str | None = None
+    slug: str | None = Field(None, max_length=255)
 
 
 class CourseResponse(CourseBase):
     id: int
+    slug: str
     instructor_id: int
     status: str
     created_at: datetime
@@ -77,6 +82,7 @@ class CourseResponse(CourseBase):
 
 class CourseListResponse(CourseBase):
     id: int
+    slug: str
     instructor_id: int
     status: str
     created_at: datetime

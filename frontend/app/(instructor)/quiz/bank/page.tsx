@@ -11,18 +11,28 @@ import {
   CheckCircle2,
   Trash2,
   Eye,
-  PlusCircle,
   Search,
   RefreshCw,
-  HelpCircle,
-  ChevronRight,
-  X,
   FileCheck,
-  AlertCircle,
-  ArrowRight,
 } from 'lucide-react';
 import { instructorApi } from '@/lib/api';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { PageHeader } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface QuestionItem {
   id: number;
@@ -112,8 +122,8 @@ export default function QuizBankPage() {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
-        <div className="animate-pulse text-xs font-semibold text-slate-500">
+      <div className="flex min-h-screen items-center justify-center font-sans">
+        <div className="animate-pulse text-xs font-semibold text-muted-foreground">
           Đang xác thực quyền truy cập Ngân hàng đề thi...
         </div>
       </div>
@@ -121,325 +131,297 @@ export default function QuizBankPage() {
   }
 
   return (
-    <div className="font-sans space-y-6 pb-16">
-      {/* ── HEADER BANNER ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200">
-              Khảo thí & Ngân hàng đề thi
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Đồng bộ PostgreSQL
-            </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            Ngân hàng Đề thi Trắc nghiệm
-          </h1>
-          <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
-            {isAdmin
-              ? 'Quản lý tập trung toàn bộ bộ đề kiểm tra trắc nghiệm của hệ thống. Học viên chỉ làm bài từ trang khóa học của mình.'
-              : 'Quản lý các bộ đề kiểm tra trắc nghiệm thuộc khóa học bạn phụ trách. Học viên chỉ làm bài từ trang khóa học của mình.'}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            onClick={fetchQuizzes}
-            disabled={loading}
-            className="p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition"
-            title="Tải lại danh sách"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
-          </button>
-
-          <Link
-            href="/quiz/generate"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold shadow-md shadow-indigo-200 transition"
-          >
-            <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>Sinh đề thi mới bằng AI</span>
-          </Link>
-        </div>
-      </div>
+    <div className="space-y-6 pb-16 font-sans">
+      {/* ── HEADER ── */}
+      <PageHeader
+        badges={[
+          { label: 'Khảo thí & Ngân hàng đề thi', variant: 'info' },
+          { label: 'Đồng bộ PostgreSQL', variant: 'success' },
+        ]}
+        title="Ngân hàng Đề thi Trắc nghiệm"
+        description={
+          isAdmin
+            ? 'Quản lý tập trung toàn bộ bộ đề kiểm tra trắc nghiệm của hệ thống. Học viên chỉ làm bài từ trang khóa học của mình.'
+            : 'Quản lý các bộ đề kiểm tra trắc nghiệm thuộc khóa học bạn phụ trách. Học viên chỉ làm bài từ trang khóa học của mình.'
+        }
+        actions={[
+          {
+            label: 'Làm mới',
+            icon: (
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-primary' : ''}`} />
+            ),
+            onClick: fetchQuizzes,
+            disabled: loading,
+          },
+          {
+            label: 'Sinh đề thi mới bằng AI',
+            icon: <Sparkles className="h-4 w-4" />,
+            href: '/quiz/generate',
+          },
+        ]}
+      />
 
       {/* ── THỐNG KÊ NHANH ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 flex items-center gap-3.5 shadow-xs">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-            <Layers className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-lg font-black text-slate-900">{quizzes.length}</div>
-            <div className="text-xs text-slate-500 font-medium">Tổng số bộ đề thi đã lưu</div>
-          </div>
-        </div>
-
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 flex items-center gap-3.5 shadow-xs">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <FileCheck className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-lg font-black text-slate-900">{totalQuestionsSum}</div>
-            <div className="text-xs text-slate-500 font-medium">Tổng số câu hỏi trắc nghiệm</div>
-          </div>
-        </div>
-
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 flex items-center gap-3.5 shadow-xs">
-          <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
-            <BookOpen className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-lg font-black text-slate-900">{uniqueCourses.length}</div>
-            <div className="text-xs text-slate-500 font-medium">Khóa học đã thiết lập đề thi</div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard icon={Layers} label="Tổng số bộ đề thi đã lưu" value={quizzes.length} accent="primary" loading={loading} />
+        <StatCard icon={FileCheck} label="Tổng số câu hỏi trắc nghiệm" value={totalQuestionsSum} accent="emerald" loading={loading} />
+        <StatCard icon={BookOpen} label="Khóa học đã thiết lập đề thi" value={uniqueCourses.length} accent="purple" loading={loading} />
       </div>
 
       {/* ── THANH CÔNG CỤ TÌM KIẾM & BỘ LỌC ── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Tìm theo tên đề thi, nội dung hoặc khóa học..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
+      <Card className="p-4">
+        <CardContent className="flex flex-col items-stretch justify-between gap-3 p-0 sm:flex-row sm:items-center">
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Tìm theo tên đề thi, nội dung hoặc khóa học..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-9 pl-9 text-xs"
+            />
+          </div>
 
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-500 font-medium hidden md:block">Lọc theo khóa:</label>
-          <select
-            value={selectedCourseFilter}
-            onChange={(e) => setSelectedCourseFilter(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="all">Tất cả khóa học ({quizzes.length})</option>
-            {uniqueCourses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+          <div className="flex items-center gap-2">
+            <label className="hidden text-xs font-medium text-muted-foreground md:block">
+              Lọc theo khóa:
+            </label>
+            <select
+              value={selectedCourseFilter}
+              onChange={(e) => setSelectedCourseFilter(e.target.value)}
+              className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="all">Tất cả khóa học ({quizzes.length})</option>
+              {uniqueCourses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ── DANH SÁCH BỘ ĐỀ THI TRẮC NGHIỆM ── */}
       {loading ? (
-        <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center flex flex-col items-center justify-center gap-3">
-          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-semibold text-slate-500">Đang tải danh sách đề thi từ PostgreSQL...</p>
+        <div className="space-y-3.5">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i} className="p-5">
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-16 rounded-md" />
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-5 w-20 rounded-md" />
+                </div>
+                <Skeleton className="h-4 w-72" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            </Card>
+          ))}
         </div>
       ) : filteredQuizzes.length === 0 ? (
-        <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center flex flex-col items-center justify-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-            <Layers className="w-6 h-6" />
-          </div>
-          <h3 className="text-sm font-bold text-slate-800">Chưa có đề thi nào trong ngân hàng</h3>
-          <p className="text-xs text-slate-500 max-w-md">
-            {searchQuery || selectedCourseFilter !== 'all'
+        <EmptyState
+          icon={<Layers className="h-6 w-6" />}
+          title="Chưa có đề thi nào trong ngân hàng"
+          description={
+            searchQuery || selectedCourseFilter !== 'all'
               ? 'Không tìm thấy bộ đề phù hợp với bộ lọc tìm kiếm hiện tại.'
-              : 'Bạn chưa lưu đề thi nào cho các khóa học của mình. Hãy sử dụng Trợ lý AI để tự động tạo đề thi theo chuẩn Bloom chỉ trong vài giây!'}
-          </p>
-          <Link
-            href="/quiz/generate"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-sm mt-2"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>Tạo đề thi đầu tiên với AI</span>
-          </Link>
-        </div>
+              : 'Bạn chưa lưu đề thi nào cho các khóa học của mình. Hãy sử dụng Trợ lý AI để tự động tạo đề thi theo chuẩn Bloom chỉ trong vài giây!'
+          }
+        >
+          <Button asChild variant="default" size="sm">
+            <Link href="/quiz/generate">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Tạo đề thi đầu tiên với AI</span>
+            </Link>
+          </Button>
+        </EmptyState>
       ) : (
         <div className="grid grid-cols-1 gap-3.5">
           {filteredQuizzes.map((quiz) => (
-            <div
+            <Card
               key={quiz.id}
-              className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-indigo-200 hover:shadow-md transition flex flex-col md:flex-row md:items-center justify-between gap-4 group"
+              className="group transition-colors hover:border-ring/40 hover:shadow-md"
             >
-              <div className="space-y-1.5 flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                    Đề #{quiz.id}
-                  </span>
-                  <span className="text-xs font-bold text-slate-600 truncate max-w-xs flex items-center gap-1">
-                    <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{quiz.courseTitle}</span>
-                  </span>
-                  {quiz.isAiGenerated && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200">
-                      <Sparkles className="w-3 h-3 text-violet-500" />
-                      AI Bloom
+              <CardContent className="flex flex-col justify-between gap-4 p-5 md:flex-row md:items-center">
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="info" className="rounded-md text-[10px] font-bold">
+                      Đề #{quiz.id}
+                    </Badge>
+                    <span className="flex max-w-xs items-center gap-1 truncate text-xs font-bold text-foreground/80">
+                      <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>{quiz.courseTitle}</span>
                     </span>
-                  )}
+                    {quiz.isAiGenerated && (
+                      <Badge variant="purple" className="rounded-md text-[10px] font-semibold">
+                        <Sparkles className="h-3 w-3 text-purple-500" />
+                        AI Bloom
+                      </Badge>
+                    )}
+                  </div>
+
+                  <h3 className="truncate text-sm font-bold text-foreground transition-colors group-hover:text-primary">
+                    {quiz.title}
+                  </h3>
+
+                  <p className="line-clamp-1 text-xs text-muted-foreground">
+                    {quiz.description || 'Không có mô tả chi tiết'}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-4 pt-1 text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <FileCheck className="h-3.5 w-3.5 text-emerald-500" />
+                      <strong className="font-semibold text-foreground/80">{quiz.totalQuestions}</strong> câu hỏi
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5 text-amber-500" />
+                      <strong className="font-semibold text-foreground/80">{Math.round(quiz.timeLimit / 60)}</strong> phút
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Award className="h-3.5 w-3.5 text-violet-500" />
+                      Điểm đạt: <strong className="font-semibold text-foreground/80">{Math.round(quiz.passScore * 100)}%</strong>
+                    </span>
+                    {quiz.createdAt && (
+                      <span className="hidden text-[10px] text-muted-foreground/60 sm:inline-block">
+                        Tạo lúc: {quiz.createdAt}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition truncate">
-                  {quiz.title}
-                </h3>
+                {/* Action Buttons */}
+                <div className="flex shrink-0 items-center gap-2 border-t border-border pt-3 md:border-t-0 md:pt-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedQuizPreview(quiz)}
+                    title="Xem các câu hỏi và đáp án chi tiết"
+                  >
+                    <Eye className="text-muted-foreground group-hover:text-primary" />
+                    <span>Xem câu hỏi</span>
+                  </Button>
 
-                <p className="text-xs text-slate-500 line-clamp-1">{quiz.description || 'Không có mô tả chi tiết'}</p>
-
-                <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-500 pt-1">
-                  <span className="flex items-center gap-1">
-                    <FileCheck className="w-3.5 h-3.5 text-emerald-500" />
-                    <strong className="text-slate-700 font-semibold">{quiz.totalQuestions}</strong> câu hỏi
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-amber-500" />
-                    <strong className="text-slate-700 font-semibold">{Math.round(quiz.timeLimit / 60)}</strong> phút
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Award className="w-3.5 h-3.5 text-violet-500" />
-                    Điểm đạt: <strong className="text-slate-700 font-semibold">{Math.round(quiz.passScore * 100)}%</strong>
-                  </span>
-                  {quiz.createdAt && (
-                    <span className="text-slate-400 text-[10px] hidden sm:inline-block">
-                      Tạo lúc: {quiz.createdAt}
-                    </span>
-                  )}
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={() => handleDeleteQuiz(quiz.courseId, quiz.id)}
+                    disabled={deletingId === quiz.id}
+                    title="Xóa đề thi khỏi ngân hàng"
+                  >
+                    <Trash2 className="text-muted-foreground transition-colors hover:text-destructive" />
+                  </Button>
                 </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
-                {/* Nút Xem chi tiết bộ câu hỏi */}
-                <button
-                  onClick={() => setSelectedQuizPreview(quiz)}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 text-xs font-semibold text-slate-700 transition"
-                  title="Xem các câu hỏi và đáp án chi tiết"
-                >
-                  <Eye className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-600" />
-                  <span>Xem câu hỏi</span>
-                </button>
-
-                {/* Nút Xóa đề thi */}
-                <button
-                  onClick={() => handleDeleteQuiz(quiz.courseId, quiz.id)}
-                  disabled={deletingId === quiz.id}
-                  className="p-2 rounded-xl border border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
-                  title="Xóa đề thi khỏi ngân hàng"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
-      {/* ── MODAL XEM CHI TIẾT CÂU HỎI & ĐÁP ÁN (DRAWER PREVIEW) ── */}
-      {selectedQuizPreview && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl max-h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
+      {/* ── MODAL XEM CHI TIẾT CÂU HỎI & ĐÁP ÁN (shadcn Dialog) ── */}
+      <Dialog open={Boolean(selectedQuizPreview)} onOpenChange={(open) => !open && setSelectedQuizPreview(null)}>
+        <DialogContent
+          className="flex max-h-[85vh] flex-col p-0"
+          aria-describedby={undefined}
+        >
+          {selectedQuizPreview && (
+            <>
+              <DialogHeader className="border-b border-border bg-muted/50 text-left">
+                <div className="flex items-center gap-2 pr-8">
+                  <Badge variant="info" className="rounded text-[10px] font-bold">
                     Đề #{selectedQuizPreview.id}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-600">
+                  </Badge>
+                  <span className="text-xs font-semibold text-foreground/80">
                     {selectedQuizPreview.courseTitle}
                   </span>
                 </div>
-                <h3 className="text-sm sm:text-base font-bold text-slate-900 pt-1">
-                  {selectedQuizPreview.title}
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedQuizPreview(null)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+                <DialogTitle className="pt-1">{selectedQuizPreview.title}</DialogTitle>
+                <DialogDescription className="sr-only">
+                  Chi tiết câu hỏi và đáp án của đề thi #{selectedQuizPreview.id}
+                </DialogDescription>
+              </DialogHeader>
 
-            {/* Modal Questions List */}
-            <div className="p-5 overflow-y-auto space-y-4 flex-1">
-              {selectedQuizPreview.questions && selectedQuizPreview.questions.length > 0 ? (
-                selectedQuizPreview.questions.map((q, idx) => (
-                  <div key={q.id || idx} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs font-bold text-indigo-700">Câu {idx + 1}:</span>
-                      <span className="text-xs text-slate-400 font-medium">1 điểm</span>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-800 leading-relaxed">
-                      {q.questionText}
-                    </p>
-
-                    {/* Options list */}
-                    <div className="space-y-1.5 pt-1">
-                      {(q.options || []).map((opt: any, optIdx: number) => {
-                        const optKey = typeof opt === 'object' ? opt.key || String.fromCharCode(65 + optIdx) : String.fromCharCode(65 + optIdx);
-                        const optText = typeof opt === 'object' ? opt.text || String(opt) : String(opt);
-                        const isCorrect =
-                          String(optKey).toUpperCase() === String(q.correctAnswer).toUpperCase() ||
-                          optIdx === q.correctAnswer;
-
-                        return (
-                          <div
-                            key={optIdx}
-                            className={`p-2.5 rounded-xl text-xs flex items-center justify-between border ${
-                              isCorrect
-                                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-semibold'
-                                : 'bg-white border-slate-200 text-slate-600'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold ${
-                                  isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
-                                }`}
-                              >
-                                {optKey}
-                              </span>
-                              <span>{optText}</span>
-                            </div>
-                            {isCorrect && (
-                              <span className="text-[10px] uppercase font-bold text-emerald-700 flex items-center gap-1">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Đáp án đúng
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Explanation */}
-                    {q.explanation && (
-                      <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 text-[11px] text-amber-900">
-                        <span className="font-bold">Giải thích: </span>
-                        {q.explanation}
+              {/* Modal Questions List */}
+              <div className="flex-1 space-y-4 overflow-y-auto p-5">
+                {selectedQuizPreview.questions && selectedQuizPreview.questions.length > 0 ? (
+                  selectedQuizPreview.questions.map((q, idx) => (
+                    <div key={q.id || idx} className="space-y-3 rounded-2xl border border-border bg-muted/50 p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-xs font-bold text-primary">Câu {idx + 1}:</span>
+                        <span className="text-xs font-medium text-muted-foreground">1 điểm</span>
                       </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <div className="py-8 text-center text-xs text-slate-400">
-                  Bộ đề này chưa có danh sách câu hỏi chi tiết trong hệ thống.
-                </div>
-              )}
-            </div>
+                      <p className="text-xs font-semibold leading-relaxed text-foreground">
+                        {q.questionText}
+                      </p>
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
-              <span className="text-xs text-slate-500 font-medium">
-                Tổng cộng: {selectedQuizPreview.questions?.length || 0} câu hỏi
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSelectedQuizPreview(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
-                >
-                  Đóng
-                </button>
+                      {/* Options list */}
+                      <div className="space-y-1.5 pt-1">
+                        {(q.options || []).map((opt: any, optIdx: number) => {
+                          const optKey = typeof opt === 'object' ? opt.key || String.fromCharCode(65 + optIdx) : String.fromCharCode(65 + optIdx);
+                          const optText = typeof opt === 'object' ? opt.text || String(opt) : String(opt);
+                          const isCorrect =
+                            String(optKey).toUpperCase() === String(q.correctAnswer).toUpperCase() ||
+                            optIdx === q.correctAnswer;
+
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`flex items-center justify-between rounded-xl border p-2.5 text-xs ${
+                                isCorrect
+                                  ? 'border-emerald-500/40 bg-emerald-500/10 font-semibold text-emerald-900'
+                                  : 'border-border bg-card text-muted-foreground'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold ${
+                                    isCorrect ? 'bg-emerald-600 text-white' : 'bg-muted text-foreground/70'
+                                  }`}
+                                >
+                                  {optKey}
+                                </span>
+                                <span>{optText}</span>
+                              </div>
+                              {isCorrect && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold uppercase text-emerald-700">
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Đáp án đúng
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Explanation */}
+                      {q.explanation && (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-900">
+                          <span className="font-bold">Giải thích: </span>
+                          {q.explanation}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    Bộ đề này chưa có danh sách câu hỏi chi tiết trong hệ thống.
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
-        </div>
-      )}
+
+              {/* Modal Footer */}
+              <DialogFooter className="border-t border-border bg-muted/50">
+                <span className="mr-auto text-xs font-medium text-muted-foreground">
+                  Tổng cộng: {selectedQuizPreview.questions?.length || 0} câu hỏi
+                </span>
+                <Button variant="outline" size="sm" onClick={() => setSelectedQuizPreview(null)}>
+                  Đóng
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

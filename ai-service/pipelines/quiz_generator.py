@@ -220,6 +220,13 @@ class QuizGenerator:
             try:
                 raw_q = q.get("question") or q.get("question_text") or q.get("câu_hỏi") or ""
                 raw_opts = q.get("options") or q.get("đáp_án") or []
+                if not isinstance(raw_opts, list) or len(raw_opts) != 4:
+                    raise ValueError("Câu hỏi phải có đúng 4 phương án")
+                normalized_opts = []
+                for opt_idx, opt in enumerate(raw_opts):
+                    key = chr(65 + opt_idx)
+                    text = opt.get("text", "") if isinstance(opt, dict) else str(opt)
+                    normalized_opts.append({"key": key, "text": text})
                 raw_ans = q.get("correct_answer") if q.get("correct_answer") is not None else q.get("đáp_án_đúng")
 
                 # Chuẩn hóa raw_ans sang index số nguyên
@@ -235,8 +242,8 @@ class QuizGenerator:
                     else:
                         # Thử match với nội dung trong raw_opts
                         found = False
-                        for opt_idx, opt_val in enumerate(raw_opts):
-                            opt_text = opt_val if isinstance(opt_val, str) else getattr(opt_val, "text", str(opt_val))
+                        for opt_idx, opt_val in enumerate(normalized_opts):
+                            opt_text = opt_val["text"]
                             if raw_ans_strip.lower() in opt_text.lower() or opt_text.lower() in raw_ans_strip.lower():
                                 normalized_ans = opt_idx
                                 found = True
@@ -247,7 +254,7 @@ class QuizGenerator:
                 question = QuizQuestion(
                     question_number=i + 1,
                     question=raw_q,
-                    options=raw_opts,
+                    options=normalized_opts,
                     correct_answer=normalized_ans,
                     explanation=q.get("explanation", q.get("giải_thích", "")),
                     difficulty=q.get("difficulty", q.get("difficulty_level", q.get("độ_khó", "medium"))),
@@ -255,7 +262,11 @@ class QuizGenerator:
                 )
                 questions.append(question)
             except Exception as e:
-                logger.warning("Skipping invalid question", index=i, error=str(e))
+                logger.error("Invalid generated question", index=i, error=str(e))
+                raise ValueError(f"Câu hỏi AI thứ {i + 1} không hợp lệ: {e}") from e
+
+        if not questions:
+            raise ValueError("AI không tạo được câu hỏi hợp lệ")
 
         return QuizSet(
             lesson_id=lesson_id,

@@ -10,6 +10,11 @@ import {
 import { adminApi } from '@/lib/api';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
 import { useAuth } from '@/lib/auth-context';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Section = 'overview' | 'users' | 'courses' | 'ai';
 type ServiceStatus = 'online' | 'offline';
@@ -23,7 +28,12 @@ const emptyStats: Stats = { totalUsers: 0, totalStudents: 0, totalInstructors: 0
 
 function StatusPill({ status }: { status: ServiceStatus }) {
   const online = status === 'online';
-  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${online ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}><span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-rose-500'}`} />{online ? 'Sẵn sàng' : 'Không kết nối'}</span>;
+  return (
+    <Badge variant={online ? 'success' : 'destructive'} className="gap-1.5 px-2.5 py-1 text-[11px] font-bold">
+      <span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+      {online ? 'Sẵn sàng' : 'Không kết nối'}
+    </Badge>
+  );
 }
 
 export default function AdminDashboardPage() {
@@ -80,29 +90,240 @@ export default function AdminDashboardPage() {
     ai: ['Giám sát AI & dữ liệu', 'Trạng thái được kiểm tra từ backend, PostgreSQL/pgvector và AI Service.'],
   };
 
-  if (!isAuthorized || authLoading) return <div className="min-h-[60vh] grid place-items-center text-sm font-medium text-slate-500">Đang kiểm tra quyền truy cập…</div>;
+  if (!isAuthorized || authLoading) return <div className="grid min-h-[60vh] place-items-center text-sm font-medium text-muted-foreground">Đang kiểm tra quyền truy cập…</div>;
 
-  return <main className="p-5 sm:p-7 lg:p-8 max-w-[1600px] mx-auto space-y-6">
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div><h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-950">{heading[section][0]}</h1><p className="mt-1 text-sm text-slate-500">{heading[section][1]}</p></div>
-      <div className="flex gap-2"><Link href="/quiz/bank" className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3.5 py-2 text-xs font-bold text-violet-700"><Layers className="w-4 h-4" />Ngân hàng đề</Link><button onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 disabled:opacity-60"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />Làm mới</button></div>
-    </div>
+  return (
+    <main className="mx-auto max-w-[1600px] space-y-6 p-5 sm:p-7 lg:p-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-3xl">{heading[section][0]}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{heading[section][1]}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/quiz/bank">
+              <Layers className="h-4 w-4" />Ngân hàng đề
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Làm mới
+          </Button>
+        </div>
+      </div>
 
-    {section === 'overview' && <Overview stats={stats} />}
-    {section === 'users' && <UsersPanel users={filteredUsers} search={search} role={role} setSearch={setSearch} setRole={setRole} onToggle={toggleUser} onRoleChange={changeRole} />}
-    {section === 'courses' && <CoursesPanel courses={courses} onStatusChange={changeCourse} />}
-    {section === 'ai' && <AiPanel monitoring={monitoring} />}
-  </main>;
+      {section === 'overview' && <Overview stats={stats} />}
+      {section === 'users' && <UsersPanel users={filteredUsers} search={search} role={role} setSearch={setSearch} setRole={setRole} onToggle={toggleUser} onRoleChange={changeRole} />}
+      {section === 'courses' && <CoursesPanel courses={courses} onStatusChange={changeCourse} />}
+      {section === 'ai' && <AiPanel monitoring={monitoring} />}
+    </main>
+  );
 }
 
 function Overview({ stats }: { stats: Stats }) {
   const cards = [[Users, 'Người dùng', stats.totalUsers, `${stats.totalStudents} học viên · ${stats.totalInstructors} giảng viên`], [BookOpen, 'Khóa học', stats.totalCourses, `${stats.publishedCourses} đã xuất bản`], [Layers, 'Bài học đã số hóa', stats.totalLessons, `${stats.totalIndexedChunks} đoạn dữ liệu vector`], [Activity, 'Lượt làm bài', stats.totalQuizSubmissions, 'Dữ liệu ghi nhận từ hệ thống']] as const;
-  return <><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([Icon, label, value, note]) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4 grid h-10 w-10 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="w-5 h-5" /></div><p className="text-sm font-medium text-slate-500">{label}</p><p className="mt-1 text-3xl font-black text-slate-950">{value}</p><p className="mt-2 text-xs text-slate-500">{note}</p></div>)}</div><div className="rounded-2xl border border-slate-200 bg-white p-6"><h2 className="font-bold text-slate-900">Điều hướng quản trị</h2><p className="mt-1 text-sm text-slate-500">Các phân hệ nằm ở menu trái để URL, mục đang chọn và nội dung luôn nhất quán.</p><div className="mt-5 grid gap-3 md:grid-cols-3"><QuickLink href="/admin-dashboard?tab=users" icon={<Users className="w-5 h-5" />} title="Tài khoản & phân quyền" text="Quản lý truy cập và vai trò." /><QuickLink href="/admin-dashboard?tab=courses" icon={<BookOpen className="w-5 h-5" />} title="Kiểm duyệt khóa học" text="Quản lý vòng đời khóa học." /><QuickLink href="/admin-dashboard?tab=ai" icon={<Bot className="w-5 h-5" />} title="AI & dữ liệu" text="Xem tình trạng hạ tầng thực tế." /></div></div></>;
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map(([Icon, label, value, note]) => (
+          <Card key={label}>
+            <CardContent className="p-5">
+              <div className="mb-4 grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                <Icon className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">{label}</p>
+              <p className="mt-1 text-3xl font-black text-foreground">{value}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{note}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card>
+        <CardContent className="p-6">
+          <h2 className="font-bold text-foreground">Điều hướng quản trị</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Các phân hệ nằm ở menu trái để URL, mục đang chọn và nội dung luôn nhất quán.</p>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <QuickLink href="/admin-dashboard?tab=users" icon={<Users className="h-5 w-5" />} title="Tài khoản & phân quyền" text="Quản lý truy cập và vai trò." />
+            <QuickLink href="/admin-dashboard?tab=courses" icon={<BookOpen className="h-5 w-5" />} title="Kiểm duyệt khóa học" text="Quản lý vòng đời khóa học." />
+            <QuickLink href="/admin-dashboard?tab=ai" icon={<Bot className="h-5 w-5" />} title="AI & dữ liệu" text="Xem tình trạng hạ tầng thực tế." />
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
 }
-function QuickLink({ href, icon, title, text }: { href: string; icon: React.ReactNode; title: string; text: string }) { return <Link href={href} className="rounded-xl border border-slate-200 p-4 hover:border-indigo-300 hover:bg-indigo-50/30 transition"><div className="text-indigo-600">{icon}</div><p className="mt-3 text-sm font-bold text-slate-900">{title}</p><p className="mt-1 text-xs text-slate-500">{text}</p></Link>; }
 
-function UsersPanel({ users, search, role, setSearch, setRole, onToggle, onRoleChange }: { users: UserItem[]; search: string; role: string; setSearch: (s: string) => void; setRole: (s: string) => void; onToggle: (id: string) => void; onRoleChange: (id: string, role: string) => void }) { return <section className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-bold text-slate-900">Danh sách người dùng ({users.length})</h2><p className="text-xs text-slate-500 mt-1">Thay đổi quyền hoặc khóa/mở khóa tài khoản.</p></div><div className="flex gap-2"><label className="relative"><Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tên hoặc email" className="w-48 rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-indigo-400" /></label><select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-xl border border-slate-200 px-3 text-xs font-semibold"><option value="all">Tất cả vai trò</option><option value="student">Học viên</option><option value="instructor">Giảng viên</option><option value="admin">Admin</option></select></div></div><div className="overflow-x-auto"><table className="w-full min-w-[780px] text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-4 font-bold">NGƯỜI DÙNG</th><th className="p-4 font-bold">VAI TRÒ</th><th className="p-4 font-bold">TRẠNG THÁI</th><th className="p-4 font-bold">NGÀY TẠO</th><th className="p-4 font-bold text-right">THAO TÁC</th></tr></thead><tbody>{users.map((u) => <tr key={u.id} className="border-t border-slate-100"><td className="p-4"><p className="font-bold text-slate-900">{u.name}</p><p className="mt-0.5 text-slate-500">{u.email}</p></td><td className="p-4"><select value={u.role} onChange={(e) => onRoleChange(u.id, e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold"><option value="student">Học viên</option><option value="instructor">Giảng viên</option><option value="admin">Admin</option></select></td><td className="p-4"><span className={`rounded-full px-2.5 py-1 font-bold ${u.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{u.isActive ? 'Hoạt động' : 'Đã khóa'}</span></td><td className="p-4 text-slate-500">{u.createdAt}</td><td className="p-4 text-right"><button onClick={() => onToggle(u.id)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 font-bold text-slate-700 hover:bg-slate-50">{u.isActive ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}{u.isActive ? 'Khóa' : 'Mở khóa'}</button></td></tr>)}</tbody></table></div></section>; }
+function QuickLink({ href, icon, title, text }: { href: string; icon: React.ReactNode; title: string; text: string }) {
+  return (
+    <Button asChild variant="outline" size="default" className="h-auto block w-full justify-start rounded-xl p-4 text-left">
+      <Link href={href}>
+        <div className="text-primary">{icon}</div>
+        <p className="mt-3 text-sm font-bold text-foreground">{title}</p>
+        <p className="mt-1 text-xs font-normal text-muted-foreground">{text}</p>
+      </Link>
+    </Button>
+  );
+}
 
-function CoursesPanel({ courses, onStatusChange }: { courses: CourseItem[]; onStatusChange: (id: string, status: CourseItem['status']) => void }) { const label: Record<CourseItem['status'], string> = { draft: 'Bản nháp', published: 'Đã xuất bản', archived: 'Đã lưu trữ' }; return <section className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 p-5"><h2 className="font-bold text-slate-900">Tất cả khóa học ({courses.length})</h2><p className="mt-1 text-xs text-slate-500">Chỉ Admin có quyền thay đổi trạng thái xuất bản.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr><th className="p-4">KHÓA HỌC</th><th className="p-4">GIẢNG VIÊN</th><th className="p-4">BÀI HỌC</th><th className="p-4">CẤP ĐỘ</th><th className="p-4">TRẠNG THÁI</th></tr></thead><tbody>{courses.map((c) => <tr key={c.id} className="border-t border-slate-100"><td className="p-4 font-bold text-slate-900">{c.title}</td><td className="p-4 text-slate-600">{c.instructor.fullName}</td><td className="p-4 text-slate-600">{c.totalLessons}</td><td className="p-4 capitalize text-slate-600">{c.level}</td><td className="p-4"><select value={c.status} onChange={(e) => onStatusChange(c.id, e.target.value as CourseItem['status'])} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold"><option value="draft">{label.draft}</option><option value="published">{label.published}</option><option value="archived">{label.archived}</option></select></td></tr>)}</tbody></table></div></section>; }
+function UsersPanel({ users, search, role, setSearch, setRole, onToggle, onRoleChange }: { users: UserItem[]; search: string; role: string; setSearch: (s: string) => void; setRole: (s: string) => void; onToggle: (id: string) => void; onRoleChange: (id: string, role: string) => void }) {
+  return (
+    <Card>
+      <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-bold text-foreground">Danh sách người dùng ({users.length})</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Thay đổi quyền hoặc khóa/mở khóa tài khoản.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <label className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tên hoặc email"
+              className="h-9 w-48 pl-9 text-xs"
+            />
+          </label>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-semibold text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="all">Tất cả vai trò</option>
+            <option value="student">Học viên</option>
+            <option value="instructor">Giảng viên</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[780px] text-left text-xs">
+          <thead className="bg-muted/50 text-muted-foreground">
+            <tr>
+              <th className="p-4 font-bold">NGƯỜI DÙNG</th>
+              <th className="p-4 font-bold">VAI TRÒ</th>
+              <th className="p-4 font-bold">TRẠNG THÁI</th>
+              <th className="p-4 font-bold">NGÀY TẠO</th>
+              <th className="p-4 text-right font-bold">THAO TÁC</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} className="border-t border-border">
+                <td className="p-4">
+                  <p className="font-bold text-foreground">{u.name}</p>
+                  <p className="mt-0.5 text-muted-foreground">{u.email}</p>
+                </td>
+                <td className="p-4">
+                  <select
+                    value={u.role}
+                    onChange={(e) => onRoleChange(u.id, e.target.value)}
+                    className="rounded-lg border border-input bg-background px-2.5 py-1.5 font-semibold text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="student">Học viên</option>
+                    <option value="instructor">Giảng viên</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </td>
+                <td className="p-4">
+                  <Badge variant={u.isActive ? 'success' : 'destructive'} className="font-bold">
+                    {u.isActive ? 'Hoạt động' : 'Đã khóa'}
+                  </Badge>
+                </td>
+                <td className="p-4 text-muted-foreground">{u.createdAt}</td>
+                <td className="p-4 text-right">
+                  <Button variant="outline" size="sm" onClick={() => onToggle(u.id)} className="gap-1.5">
+                    {u.isActive ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                    {u.isActive ? 'Khóa' : 'Mở khóa'}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
 
-function AiPanel({ monitoring }: { monitoring: Monitoring | null }) { if (!monitoring) return <section className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">Chưa nhận được dữ liệu giám sát. Hãy làm mới để kiểm tra lại.</section>; const services = [[Server, 'Backend API', monitoring.backend.status, `Phiên bản ${monitoring.backend.version || 'không xác định'}`], [Database, 'PostgreSQL + pgvector', monitoring.database.status, `${monitoring.database.vectorChunks} đoạn vector · ${monitoring.database.indexedLessons} bài học đã lập chỉ mục`], [Bot, 'AI Service', monitoring.aiService.status, monitoring.aiService.status === 'online' ? `${monitoring.aiService.provider || 'AI'} · ${monitoring.aiService.model || 'mô hình không công bố'}` : 'Không nhận được phản hồi từ AI Service']] as const; return <><div className="grid gap-4 lg:grid-cols-3">{services.map(([Icon, name, status, detail]) => <section key={name} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Icon className="w-5 h-5" /></div><StatusPill status={status} /></div><h2 className="mt-5 font-bold text-slate-900">{name}</h2><p className="mt-1 text-xs leading-relaxed text-slate-500">{detail}</p></section>)}</div><section className="rounded-2xl border border-slate-200 bg-white p-6"><div className="flex gap-3"><ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" /><div><h2 className="font-bold text-slate-900">Phạm vi giám sát</h2><p className="mt-1 text-sm leading-relaxed text-slate-600">Trang này chỉ hiển thị trạng thái dịch vụ và dữ liệu có thể xác minh. Hệ thống hiện chưa lưu telemetry cho token, độ trễ hay tỉ lệ thành công, nên các chỉ số suy diễn đã được loại bỏ thay vì hiển thị số liệu không chính xác.</p></div></div></section></>; }
+function CoursesPanel({ courses, onStatusChange }: { courses: CourseItem[]; onStatusChange: (id: string, status: CourseItem['status']) => void }) {
+  const label: Record<CourseItem['status'], string> = { draft: 'Bản nháp', published: 'Đã xuất bản', archived: 'Đã lưu trữ' };
+  return (
+    <Card>
+      <div className="border-b border-border p-5">
+        <h2 className="font-bold text-foreground">Tất cả khóa học ({courses.length})</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Chỉ Admin có quyền thay đổi trạng thái xuất bản.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[700px] text-left text-xs">
+          <thead className="bg-muted/50 text-muted-foreground">
+            <tr>
+              <th className="p-4 font-bold">KHÓA HỌC</th>
+              <th className="p-4 font-bold">GIẢNG VIÊN</th>
+              <th className="p-4 font-bold">BÀI HỌC</th>
+              <th className="p-4 font-bold">CẤP ĐỘ</th>
+              <th className="p-4 font-bold">TRẠNG THÁI</th>
+            </tr>
+          </thead>
+          <tbody>
+            {courses.map((c) => (
+              <tr key={c.id} className="border-t border-border">
+                <td className="p-4 font-bold text-foreground">{c.title}</td>
+                <td className="p-4 text-muted-foreground">{c.instructor.fullName}</td>
+                <td className="p-4 text-muted-foreground">{c.totalLessons}</td>
+                <td className="p-4 capitalize text-muted-foreground">{c.level}</td>
+                <td className="p-4">
+                  <select
+                    value={c.status}
+                    onChange={(e) => onStatusChange(c.id, e.target.value as CourseItem['status'])}
+                    className="rounded-lg border border-input bg-background px-2.5 py-1.5 font-semibold text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="draft">{label.draft}</option>
+                    <option value="published">{label.published}</option>
+                    <option value="archived">{label.archived}</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function AiPanel({ monitoring }: { monitoring: Monitoring | null }) {
+  if (!monitoring) {
+    return (
+      <Card className="p-8 text-sm text-muted-foreground">Chưa nhận được dữ liệu giám sát. Hãy làm mới để kiểm tra lại.</Card>
+    );
+  }
+  const services = [[Server, 'Backend API', monitoring.backend.status, `Phiên bản ${monitoring.backend.version || 'không xác định'}`], [Database, 'PostgreSQL + pgvector', monitoring.database.status, `${monitoring.database.vectorChunks} đoạn vector · ${monitoring.database.indexedLessons} bài học đã lập chỉ mục`], [Bot, 'AI Service', monitoring.aiService.status, monitoring.aiService.status === 'online' ? `${monitoring.aiService.provider || 'AI'} · ${monitoring.aiService.model || 'mô hình không công bố'}` : 'Không nhận được phản hồi từ AI Service']] as const;
+  return (
+    <>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {services.map(([Icon, name, status, detail]) => (
+          <Card key={name}>
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <StatusPill status={status} />
+              </div>
+              <h2 className="mt-5 font-bold text-foreground">{name}</h2>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{detail}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card>
+        <CardContent className="flex gap-3 p-6">
+          <ShieldCheck className="h-5 w-5 shrink-0 text-primary" />
+          <div>
+            <h2 className="font-bold text-foreground">Phạm vi giám sát</h2>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Trang này chỉ hiển thị trạng thái dịch vụ và dữ liệu có thể xác minh. Hệ thống hiện chưa lưu telemetry cho token, độ trễ hay tỉ lệ thành công, nên các chỉ số suy diễn đã được loại bỏ thay vì hiển thị số liệu không chính xác.</p>
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
+}

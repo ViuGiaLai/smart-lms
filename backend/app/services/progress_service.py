@@ -91,13 +91,14 @@ class ProgressService:
         records = progress_result.scalars().all()
 
         completed_lessons = sum(1 for r in records if r.is_completed)
-        avg_percent = (
-            sum(r.percent_complete for r in records) / total_lessons if records else 0.0
-        )
+        # Chia cho TỔNG số bài học (không phải số bài đã có bản ghi tiến độ),
+        # nếu không học viên chỉ học 1/10 bài sẽ bị hiển thị sai thành ~100%.
+        total_percent = sum(r.percent_complete for r in records)
+        overall_percent = (total_percent / total_lessons) if total_lessons else 0.0
 
         return CourseSummary(
             course_id=course_id,
             total_lessons=total_lessons,
             completed_lessons=completed_lessons,
-            overall_percent=round(avg_percent, 2),
+            overall_percent=round(overall_percent, 2),
         )

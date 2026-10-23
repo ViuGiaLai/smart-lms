@@ -63,40 +63,49 @@ def format_gemini_error(e: Exception) -> str:
 def build_no_context_answer(lesson_id: int) -> str:
     """Thông báo minh bạch khi học liệu của bài học không có nội dung liên quan đến câu hỏi."""
     return (
-        "⚠️ **Chưa tìm thấy đoạn trích phù hợp trong học liệu số hóa của bài học này.**\n\n"
+        "⚠️ **Không tìm thấy nội dung liên quan trong học liệu số hóa của bài học này.**\n\n"
         "Trợ lý AI Tutor hoạt động theo cơ chế ràng buộc ngữ cảnh (Lesson-Bounded RAG), chỉ giải đáp bám sát nội dung bài học để đảm bảo tính chuẩn xác tuyệt đối.\n\n"
         "💡 **Gợi ý:** Bạn có thể đặt câu hỏi về các khái niệm chính trong bài học, hoặc xem qua phần nội dung tóm tắt và slide đính kèm."
     )
 
 
-async def call_groq_fallback(question: str, context: str, lesson_id: int) -> str:
+async def call_groq_fallback(
+    question: str,
+    context: str,
+    lesson_id: int,
+    reason: str = "gemini_error",
+) -> str:
     """
-    Gọi Groq LLM làm fallback khi Gemini hết quota.
+    Gọi Groq LLM làm fallback khi Gemini hết quota hoặc trả nội dung rỗng.
     Sử dụng cùng system prompt và context như Gemini để đảm bảo chất lượng nhất quán.
+
+    Thông báo lỗi phản ánh ĐÚNG nguyên nhân thật (hết quota vs. nội dung rỗng),
+    tránh báo nhầm "hết hạn mức" khi Gemini chỉ trả về nội dung trống.
     """
     if not has_valid_groq_key():
-        logger.warning("Groq API key chưa được cấu hình, không thể dùng fallback")
-        return (
-            "⚠️ **Dịch vụ AI tạm thời không khả dụng.**\n\n"
-            "Gemini đã hết quota miễn phí và chưa cấu hình fallback AI. "
-            "Vui lòng thử lại sau hoặc liên hệ quản trị viên."
+        logger.warning("Groq API key is not configured; fallback unavailable", reason=reason)
+        if reason == "empty":
+            raise RuntimeError(
+                "Gemini trả về nội dung rỗng và chưa cấu hình fallback AI. Vui lòng thử lại sau."
+            )
+        raise RuntimeError(
+            "Gemini đã hết hạn mức hoặc gặp sự cố và chưa cấu hình fallback AI. Vui lòng thử lại sau."
         )
 
     system_prompt = build_tutor_system_prompt(lesson_id=lesson_id)
     user_message = build_rag_user_prompt(question=question, context=context)
 
-    logger.info("Chuyển sang Groq fallback do Gemini hết quota", lesson_id=lesson_id)
+    logger.info("Switching to Groq fallback because Gemini failed", lesson_id=lesson_id)
     try:
         answer = await groq_generate(prompt=user_message, system_prompt=system_prompt)
         return answer.strip() if answer else (
             "Groq không trả về phản hồi. Vui lòng thử lại."
         )
     except Exception as e:
-        logger.error("Groq fallback cũng thất bại", error=str(e))
-        return (
-            "⚠️ **Cả hai dịch vụ AI đều tạm thời không khả dụng.**\n\n"
-            "Vui lòng thử lại sau vài phút. Nếu vấn đề tiếp tục, hãy liên hệ quản trị viên hệ thống."
-        )
+        logger.error("Groq fallback failed", error=str(e))
+        raise RuntimeError(
+            "Gemini và Groq đều không khả dụng. Vui lòng thử lại sau."
+        ) from e
 
 
 class RAGPipeline:
@@ -170,12 +179,12 @@ class RAGPipeline:
             )
         except Exception as e:
             logger.warning("Gemini generate_content failed, switching to Groq fallback", error=str(e))
-            answer = await call_groq_fallback(question, context, lesson_id)
+            answer = await call_groq_fallback(question, context, lesson_id, reason="gemini_error")
         else:
             answer = (response.text or "").strip() if response else ""
             if not answer:
-                logger.warning("Gemini trả về rỗng, chuyển sang Groq fallback")
-                answer = await call_groq_fallback(question, context, lesson_id)
+                logger.warning("Gemini returned empty content; switching to Groq fallback")
+                answer = await call_groq_fallback(question, context, lesson_id, reason="empty")
 
         return {
             "answer": answer,
@@ -183,6 +192,9 @@ class RAGPipeline:
                 {
                     "content": c["content"][:200] + "...",
                     "similarity": round(c["similarity"], 3) if isinstance(c.get("similarity"), (int, float)) else None,
+                    "document_id": c.get("document_id"),
+                    "page": (c.get("metadata") or {}).get("page"),
+                    "filename": (c.get("metadata") or {}).get("filename") or c.get("document_id"),
                     "chunk_index": c.get("chunk_index", 1),
                 }
                 for c in chunks
@@ -216,7 +228,7 @@ class RAGPipeline:
 
         # Bước 1: Kiểm tra cấu hình & Retrieve chunks an toàn
         if not has_valid_google_key():
-            logger.error("GOOGLE_API_KEY chưa được cấu hình cho AI Service")
+            logger.error("GOOGLE_API_KEY is not configured for AI Service")
             yield sse({"type": "error", "error": NO_API_KEY_MESSAGE})
             yield sse({"type": "done", "done": True})
             return
@@ -225,12 +237,12 @@ class RAGPipeline:
             chunks = await self._retrieve_chunks(question, lesson_id, top_k)
         except RuntimeError as e:
             # Lỗi embedding/cấu hình: báo lỗi thật, không giả vờ là hết tri thức
-            logger.error("Lỗi embedding khi truy xuất học liệu", error=str(e))
+            logger.error("Embedding failed during document retrieval", error=str(e))
             yield sse({"type": "error", "error": str(e)})
             yield sse({"type": "done", "done": True})
             return
         except Exception as e:
-            logger.error("Lỗi retrieve chunks trong stream", error=str(e))
+            logger.error("Chunk retrieval failed during streaming", error=str(e))
             chunks = []
 
         # Bước 2: Không có tri thức liên quan trong học liệu → nói thật, không bịa
@@ -261,7 +273,7 @@ class RAGPipeline:
                     await asyncio.sleep(0.01)
         except Exception as e:
             gemini_error = e
-            logger.warning("Gemini streaming thất bại, chuyển sang Groq fallback", error=str(e))
+            logger.warning("Gemini streaming failed; switching to Groq fallback", error=str(e))
 
         # Nếu Gemini không stream được gì → fallback sang Groq
         if not streamed_any:
@@ -276,7 +288,7 @@ class RAGPipeline:
                             yield sse({"type": "chunk", "content": chunk_text, "token": chunk_text})
                             await asyncio.sleep(0.005)
                 except Exception as groq_err:
-                    logger.error("Groq streaming cũng thất bại", error=str(groq_err))
+                    logger.error("Groq streaming fallback failed", error=str(groq_err))
                     yield sse({"type": "error", "error": "Cả Gemini và Groq đều không khả dụng. Vui lòng thử lại sau."})
                     yield sse({"type": "done", "done": True})
                     return
@@ -294,6 +306,9 @@ class RAGPipeline:
                 {
                     "content": c["content"][:200] + "...",
                     "similarity": round(c["similarity"], 3) if isinstance(c.get("similarity"), (int, float)) else None,
+                    "document_id": c.get("document_id"),
+                    "page": (c.get("metadata") or {}).get("page"),
+                    "filename": (c.get("metadata") or {}).get("filename") or c.get("document_id"),
                 }
                 for c in chunks
             ],
@@ -322,47 +337,10 @@ class RAGPipeline:
                     top_k=top_k,
                 )
         except Exception as e:
-            logger.warning("Lỗi similarity search trong pgvector", error=str(e))
-
-        # Fallback 1: Nếu chưa tìm thấy chunk theo vector search, lấy các chunks có sẵn của lesson_id
-        if not chunks:
-            try:
-                from sqlalchemy import select
-                from vector_store.pgvector_store import DocumentChunk
-                async with AsyncSessionLocal() as db:
-                    res = await db.execute(
-                        select(DocumentChunk)
-                        .where(DocumentChunk.lesson_id == lesson_id)
-                        .order_by(DocumentChunk.chunk_index)
-                        .limit(top_k or 4)
-                    )
-                    existing = res.scalars().all()
-                    if existing:
-                        # Fallback lay chunks tho (khong qua vector search) nen KHONG bia diem
-                        # tuong dong. De None de bao trung thuc rang day khong phai ket qua
-                        # duoc xep hang theo ngu nghia.
-                        chunks = [
-                            {"content": c.content, "similarity": None, "chunk_index": c.chunk_index}
-                            for c in existing
-                        ]
-            except Exception as e:
-                logger.warning("Lỗi fallback lấy document_chunks có sẵn", error=str(e))
-
-        # Fallback 2: Nếu bài học chưa có vector chunks, lấy trực tiếp transcript/mô tả từ bảng lessons trong PostgreSQL
-        if not chunks:
-            try:
-                from sqlalchemy import text
-                async with AsyncSessionLocal() as db:
-                    res = await db.execute(
-                        text("SELECT title, transcript, description FROM lessons WHERE id = :lid"),
-                        {"lid": lesson_id}
-                    )
-                    row = res.fetchone()
-                    if row and (row[1] or row[2]):
-                        text_content = f"Chủ đề bài học: {row[0] or ''}\n\n{row[2] or ''}\n\nNội dung bài giảng:\n{row[1] or ''}"
-                        chunks = [{"content": text_content, "similarity": None, "chunk_index": 0}]
-            except Exception as e:
-                logger.warning("Lỗi fallback lấy lessons transcript", error=str(e))
+            logger.error("pgvector similarity search failed", error=str(e))
+            raise RuntimeError(
+                "Không thể truy xuất kho học liệu vector của bài học. Vui lòng thử lại sau."
+            ) from e
 
         return chunks
 
@@ -377,8 +355,12 @@ class RAGPipeline:
         for i, chunk in enumerate(sorted_chunks, 1):
             sim = chunk.get("similarity")
             sim_label = f"{sim:.2f}" if isinstance(sim, (int, float)) else "n/a"
+            metadata = chunk.get("metadata") or {}
+            source = metadata.get("filename") or chunk.get("document_id") or "học liệu"
+            page = metadata.get("page")
+            source_label = f"{source}, trang {page}" if page else source
             context_parts.append(
-                f"[Đoạn {i} - Độ liên quan: {sim_label}]\n{chunk['content']}"
+                f"[Đoạn {i} - Nguồn: {source_label} - Độ liên quan: {sim_label}]\n{chunk['content']}"
             )
 
         return "\n\n---\n\n".join(context_parts)

@@ -16,6 +16,9 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Keep frontend source code (lib/ above is only meant for Python build artifacts)
+!frontend/lib/
+!frontend/lib/**
 parts/
 sdist/
 var/

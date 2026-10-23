@@ -78,13 +78,14 @@ async def groq_stream(prompt: str, system_prompt: str = "") -> AsyncGenerator[st
     messages.append({"role": "user", "content": prompt})
 
     logger.info("Gọi Groq API (streaming)", model=settings.GROQ_MODEL)
-    async with client.chat.completions.stream(
+    stream = await client.chat.completions.create(
         model=settings.GROQ_MODEL,
         messages=messages,
         temperature=0.3,
         max_tokens=2048,
-    ) as stream:
-        async for chunk in stream:
-            delta = chunk.choices[0].delta.content if chunk.choices else None
-            if delta:
-                yield delta
+        stream=True,
+    )
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content if chunk.choices else None
+        if delta:
+            yield delta

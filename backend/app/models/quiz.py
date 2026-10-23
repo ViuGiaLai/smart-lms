@@ -25,6 +25,9 @@ class Quiz(Base):
     course_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    lesson_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lessons.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     time_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)  # seconds

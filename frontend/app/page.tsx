@@ -54,6 +54,9 @@ export default function HomePage() {
   const router = useRouter();
   const [searchKeyword, setSearchKeyword] = useState('');
   const [courses, setCourses] = useState<CourseItem[]>([]);
+  const [courseCategories, setCourseCategories] = useState<
+    { name: string; slug: string; count: number }[]
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
   const [platformStats, setPlatformStats] = useState<{
     totalCourses: number;
@@ -67,13 +70,17 @@ export default function HomePage() {
     let isMounted = true;
     const fetchLandingData = async () => {
       try {
-        const [coursesRes, statsRes] = await Promise.allSettled([
+        const [coursesRes, statsRes, categoriesRes] = await Promise.allSettled([
           coursesApi.getAll({ limit: 6 }),
           publicApi.getStats(),
+          coursesApi.getCategories(),
         ]);
         if (!isMounted) return;
         if (coursesRes.status === 'fulfilled' && coursesRes.value.data?.data) {
           setCourses(coursesRes.value.data.data);
+        }
+        if (categoriesRes.status === 'fulfilled' && categoriesRes.value.data?.data) {
+          setCourseCategories(categoriesRes.value.data.data);
         }
         if (statsRes.status === 'fulfilled' && statsRes.value.data?.data) {
           setPlatformStats(statsRes.value.data.data);
@@ -101,22 +108,16 @@ export default function HomePage() {
 
 
 
-  const getCategoryCount = (keyword: string) => {
-    if (!courses || courses.length === 0) return 'Đang cập nhật';
-    const matched = courses.filter((c) => {
-      const catName = typeof c.category === 'object' ? c.category?.name || '' : c.category || '';
-      const text = `${catName} ${c.title || ''} ${c.description || ''}`.toLowerCase();
-      return text.includes(keyword.toLowerCase());
-    }).length;
-    return `${matched > 0 ? matched : 1} khóa học`;
-  };
-
-  const categories = [
-    { name: 'Trí tuệ Nhân tạo & Python', count: getCategoryCount('python'), icon: Brain, color: 'text-indigo-600 bg-indigo-50 border-indigo-200' },
-    { name: 'Lập trình Backend & API', count: getCategoryCount('backend'), icon: Cpu, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-    { name: 'Lập trình Frontend & Web', count: getCategoryCount('web'), icon: Layers, color: 'text-violet-600 bg-violet-50 border-violet-200' },
-    { name: 'Cơ sở dữ liệu & pgvector', count: getCategoryCount('vector'), icon: Database, color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  const categoryVisuals = [
+    { match: /python|trí tuệ|tri tue|ai|machine|data science/i, icon: Brain, color: 'text-indigo-600 bg-indigo-50 border-indigo-200' },
+    { match: /backend|api|server|java|node|fastapi/i, icon: Cpu, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+    { match: /frontend|web|react|next|ui|ux/i, icon: Layers, color: 'text-violet-600 bg-violet-50 border-violet-200' },
+    { match: /dữ liệu|du lieu|data|vector|database|sql|devops|cloud/i, icon: Database, color: 'text-amber-600 bg-amber-50 border-amber-200' },
   ];
+
+  const getCategoryVisual = (name: string, index: number) =>
+    categoryVisuals.find((item) => item.match.test(name)) ||
+    categoryVisuals[index % categoryVisuals.length];
 
   return (
     <div className="min-h-screen bg-white font-sans text-slate-800 pb-20 md:pb-0">
@@ -361,7 +362,7 @@ export default function HomePage() {
               {courses.map((course) => (
               <Link
                 key={course.id}
-                href={`/courses/${course.id}`}
+                href={`/courses/${course.slug || course.id}`}
                 className="group bg-white rounded-2xl overflow-hidden border border-slate-200 hover:border-indigo-300 shadow-xs hover:shadow-md transition flex flex-col justify-between"
               >
                 <div>
@@ -412,7 +413,7 @@ export default function HomePage() {
 
                 <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-xs text-slate-600 font-medium">
-                    {course.instructor?.fullName || 'Giảng viên chuyên môn'}
+                    {course.instructor?.fullName || 'Chưa cập nhật'}
                   </span>
                   <span className="font-extrabold text-sm text-slate-900">
                     {course.price === 0 ? (
@@ -445,22 +446,23 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {categories.map((cat, idx) => {
-              const Icon = cat.icon;
+            {courseCategories.map((cat, idx) => {
+              const visual = getCategoryVisual(cat.name, idx);
+              const Icon = visual.icon;
               return (
                 <Link
-                  key={idx}
+                  key={cat.slug || idx}
                   href={`/courses?category=${encodeURIComponent(cat.name)}`}
                   className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-indigo-300 hover:shadow-sm transition flex items-center gap-4 group"
                 >
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${cat.color}`}>
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${visual.color}`}>
                     <Icon className="w-6 h-6" />
                   </div>
                   <div className="min-w-0">
                     <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
                       {cat.name}
                     </h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{cat.count}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">{cat.count} khóa học</p>
                   </div>
                 </Link>
               );
@@ -686,16 +688,34 @@ export default function HomePage() {
               <p className="text-white font-bold uppercase tracking-wider text-[11px]">Khóa học & Học liệu</p>
               <ul className="space-y-1.5 text-slate-400">
                 <li><Link href="/courses" className="hover:text-white transition">Danh mục khóa học</Link></li>
-                <li><Link href="/courses/1" className="hover:text-white transition">Lập trình Python & AI</Link></li>
-                <li><Link href="/courses/2" className="hover:text-white transition">FastAPI RESTful API</Link></li>
-                <li><Link href="/courses/3" className="hover:text-white transition">Next.js 14 App Router</Link></li>
+                {courses.slice(0, 3).map((course) => (
+                  <li key={course.id}>
+                    <Link
+                      href={`/courses/${course.slug || course.id}`}
+                      className="hover:text-white transition line-clamp-1"
+                    >
+                      {course.title}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
 
             <div className="space-y-2">
               <p className="text-white font-bold uppercase tracking-wider text-[11px]">Công nghệ & Tính năng</p>
               <ul className="space-y-1.5 text-slate-400">
-                <li><Link href="/courses/1/learn" className="hover:text-white transition">Focus Player & AI Tutor</Link></li>
+                <li>
+                  <Link
+                    href={
+                      courses[0]
+                        ? `/courses/${courses[0].slug || courses[0].id}/learn`
+                        : '/courses'
+                    }
+                    className="hover:text-white transition"
+                  >
+                    Focus Player & AI Tutor
+                  </Link>
+                </li>
                 <li><Link href="/quiz/generate" className="hover:text-white transition">AI Quiz Generator</Link></li>
                 <li><Link href="/dashboard" className="hover:text-white transition">Theo dõi tiến độ học tập</Link></li>
                 <li><Link href="/admin-dashboard" className="hover:text-white transition">Hạ tầng PostgreSQL pgvector</Link></li>

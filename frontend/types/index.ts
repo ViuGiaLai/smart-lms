@@ -292,6 +292,7 @@ export type SortOrder = 'asc' | 'desc'
 
 export interface CourseFilters {
   search?: string
+  category?: string
   categoryId?: string
   level?: Course['level']
   minPrice?: number

@@ -65,6 +65,7 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     )
     db.add(user)
     await db.flush()
+    await db.commit()
     await db.refresh(user)
 
     token_data = {"sub": str(user.id), "role": str(user.role.value if hasattr(user.role, "value") else user.role)}

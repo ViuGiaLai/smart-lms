@@ -11,6 +11,7 @@ from app.models.course import Course
 from app.models.lesson import Lesson
 from app.models.user import User
 from app.schemas.course import LessonCreate, LessonUpdate, LessonResponse
+from app.services.enrollment_service import require_course_access
 
 router = APIRouter(prefix="/courses/{course_id}/lessons")
 
@@ -36,11 +37,11 @@ async def _get_lesson_or_404(lesson_id: int, course_id: int, db: AsyncSession) -
 @router.get("", response_model=list[LessonResponse])
 async def list_lessons(
     course_id: int,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Lesson]:
     """List all lessons for a course ordered by order_index."""
-    await _get_course_or_404(course_id, db)
+    await require_course_access(db, current_user, course_id)
     result = await db.execute(
         select(Lesson).where(Lesson.course_id == course_id).order_by(Lesson.order_index)
     )
@@ -51,9 +52,10 @@ async def list_lessons(
 async def get_lesson(
     course_id: int,
     lesson_id: int,
-    _: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> Lesson:
+    await require_course_access(db, current_user, course_id)
     return await _get_lesson_or_404(lesson_id, course_id, db)
 
 

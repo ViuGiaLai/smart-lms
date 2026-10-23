@@ -12,6 +12,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { DashboardSidebar } from './DashboardSidebar';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
 
 interface DashboardLayoutProps {
@@ -28,16 +30,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const isAdmin = role === 'admin';
   const isInstructor = role === 'instructor';
 
-  // Định nghĩa breadcrumb tự động
+  // Định nghĩa breadcrumb tự động (kiểm tra đường đi sâu trước đường đi chung)
   const getBreadcrumbTitle = () => {
-    if (pathname.includes('/courses/create')) return 'Tạo khóa học mới';
-    if (pathname.includes('/manage')) return 'Quản lý học liệu & Bài giảng';
-    if (pathname.includes('/quiz/generate')) return 'Sinh đề thi trắc nghiệm AI (Bloom)';
     if (pathname.includes('/admin-dashboard')) return 'Bảng Quản trị Hệ thống';
     if (pathname.includes('/instructor-dashboard')) return 'Bảng điều khiển Giảng viên';
+    if (pathname.includes('/instructor/materials')) return 'Bài học & Tài liệu (RAG)';
+    if (pathname.includes('/instructor/students')) return 'Học viên của tôi';
+    if (pathname.includes('/instructor/results')) return 'Bài làm & Kết quả';
+    if (pathname.includes('/courses/create')) return 'Tạo khóa học mới';
+    if (pathname.includes('/manage')) return 'Quản lý khóa học';
+    if (pathname.includes('/quiz/generate')) return 'Sinh đề thi trắc nghiệm AI (Bloom)';
+    if (pathname.includes('/quiz/bank')) return 'Ngân hàng đề thi';
+    if (pathname.includes('/my-courses')) return 'Khóa học của tôi';
+    if (pathname.includes('/results')) return 'Kết quả học tập';
     if (pathname.includes('/progress')) return 'Tiến độ học tập';
     if (pathname.includes('/dashboard')) return 'Bảng học tập';
-    if (pathname.includes('/courses')) return 'Khóa học của tôi';
+    if (pathname.includes('/courses')) return 'Khám phá khóa học';
     return 'Bảng điều khiển';
   };
 
@@ -115,18 +123,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               if (courseManageMatch) {
                 const manageId = courseManageMatch[1];
                 return (
-                  <Link
-                    href={`/courses/${manageId}/learn?preview=true`}
-                    target="_blank"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 transition shadow-2xs"
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="text-primary hover:text-primary"
                     title="Mở trình phát bài giảng của khóa học này để kiểm tra"
                   >
-                    <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                    <span className="hidden sm:inline">Xem trước bài giảng</span>
-                    <span className="text-[10px] bg-indigo-200/60 text-indigo-800 px-1 py-0.2 rounded font-black">
-                      Preview
-                    </span>
-                  </Link>
+                    <Link href={`/courses/${manageId}/learn?preview=true`} target="_blank">
+                      <Eye className="h-3.5 w-3.5 text-primary" />
+                      <span className="hidden sm:inline">Xem trước bài giảng</span>
+                      <Badge
+                        variant="info"
+                        className="rounded px-1 py-0 text-[10px] font-black"
+                      >
+                        Preview
+                      </Badge>
+                    </Link>
+                  </Button>
                 );
               }
               return null;
@@ -134,20 +148,19 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
             {/* Nút Tạo khóa học (ẩn khi đang ở chính trang /courses/create) */}
             {isInstructor && pathname !== '/courses/create' && (
-              <Link
-                href="/courses/create"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs shadow-indigo-200 transition"
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Tạo khóa học</span>
-              </Link>
+              <Button asChild variant="default" size="sm">
+                <Link href="/courses/create" className="gap-1.5">
+                  <PlusCircle className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline">Tạo khóa học</span>
+                </Link>
+              </Button>
             )}
 
             {isAdmin && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                <ShieldCheck className="w-3.5 h-3.5" />
+              <Badge variant="purple" className="gap-1 text-[11px] font-bold">
+                <ShieldCheck className="h-3.5 w-3.5" />
                 <span>Super Admin</span>
-              </span>
+              </Badge>
             )}
           </div>
         </header>

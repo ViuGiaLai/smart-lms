@@ -8,17 +8,17 @@ import {
   BookOpen,
   Users,
   Settings,
-  ArrowUpRight,
   Eye,
-  CheckCircle2,
-  Video,
-  FileCheck,
   TrendingUp,
   Layers,
 } from 'lucide-react';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
 import { instructorApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function InstructorDashboardPage() {
   const { isAuthorized } = useRoleGuard(['instructor', 'admin']);
@@ -26,11 +26,15 @@ export default function InstructorDashboardPage() {
 
   const [courses, setCourses] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-useEffect(() => {
-      if (!isAuthorized || authLoading) return;
-      let isMounted = true;
-      const fetchData = async () => {
+  useEffect(() => {
+    if (!isAuthorized || authLoading) return;
+    let isMounted = true;
+    const fetchData = async () => {
+      setLoading(true);
+      setError('');
       try {
         const [coursesRes, statsRes] = await Promise.allSettled([
           instructorApi.getCourses(),
@@ -58,9 +62,15 @@ useEffect(() => {
           if (statsRes.status === 'fulfilled' && statsRes.value.data?.data) {
             setStats(statsRes.value.data.data);
           }
+          if (coursesRes.status === 'rejected' || statsRes.status === 'rejected') {
+            setError('Không thể tải đầy đủ dữ liệu giảng viên. Vui lòng thử lại.');
+          }
         }
       } catch (err) {
         console.error('Lỗi khi tải dữ liệu bảng điều khiển giảng viên:', err);
+        if (isMounted) setError('Không thể tải dữ liệu bảng giảng viên. Vui lòng thử lại.');
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
     fetchData();
@@ -71,8 +81,8 @@ useEffect(() => {
 
   if (!isAuthorized || authLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-pulse text-xs font-semibold text-slate-500">
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-pulse text-xs font-semibold text-muted-foreground">
           Đang xác thực quyền Giảng viên...
         </div>
       </div>
@@ -81,200 +91,241 @@ useEffect(() => {
 
   return (
     <div className="font-sans">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         {/* Header Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                Phân hệ Giảng viên (Instructor Panel)
-              </span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            <Badge variant="info" className="mb-1 text-[11px]">
+              Phân hệ Giảng viên (Instructor Panel)
+            </Badge>
+            <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
               Bảng điều khiển Giảng viên {instructorUser?.name ? `• ${instructorUser.name}` : ''}
             </h1>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="mt-1 text-xs text-muted-foreground">
               Quản lý học liệu, chèn video YouTube, số hóa tài liệu RAG và sử dụng công cụ AI tự động sinh đề thi
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <Link
-              href="/quiz/bank"
-              className="inline-flex items-center gap-2 text-xs font-bold bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 px-4 py-2.5 rounded-xl shadow-xs transition"
-            >
-              <Layers className="w-4 h-4 text-indigo-600" /> Ngân hàng đề thi
-            </Link>
+            <Button asChild variant="outline" size="default" className="text-primary hover:text-primary">
+              <Link href="/quiz/bank">
+                <Layers className="h-4 w-4" /> Ngân hàng đề thi
+              </Link>
+            </Button>
 
-            <Link
-              href="/quiz/generate"
-              className="inline-flex items-center gap-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl shadow-md shadow-emerald-200 transition"
-            >
-              <Sparkles className="w-4 h-4" /> AI Sinh đề trắc nghiệm
-            </Link>
+            <Button asChild variant="success" size="default">
+              <Link href="/quiz/generate">
+                <Sparkles className="h-4 w-4" /> AI Sinh đề trắc nghiệm
+              </Link>
+            </Button>
 
-            <Link
-              href="/courses/create"
-              className="inline-flex items-center gap-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl shadow-md shadow-indigo-200 transition"
-            >
-              <PlusCircle className="w-4 h-4" /> Tạo khóa học mới
-            </Link>
+            <Button asChild variant="default" size="default">
+              <Link href="/courses/create">
+                <PlusCircle className="h-4 w-4" /> Tạo khóa học mới
+              </Link>
+            </Button>
           </div>
         </div>
 
+        {error && (
+          <Card className="border-destructive/30 bg-destructive/10 shadow-none">
+            <CardContent className="p-4">
+              <p className="text-xs font-semibold text-destructive">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Thống kê hiệu suất giảng dạy & Khảo thí */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-              <BookOpen className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Khóa học phụ trách</p>
-              <p className="text-xl font-extrabold text-slate-900">{stats?.totalCourses ?? courses.length}</p>
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-              <Users className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Tổng sinh viên theo học</p>
-              <p className="text-xl font-extrabold text-slate-900">
-                {stats?.totalStudents ?? courses.reduce((acc, c) => acc + (c.studentsCount || 0), 0)}
-              </p>
-            </div>
-          </div>
-
-          <Link
-            href="/quiz/bank"
-            className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-indigo-300 hover:shadow-md transition flex items-center justify-between group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 group-hover:bg-indigo-600 group-hover:text-white transition flex items-center justify-center font-bold">
-                <Layers className="w-6 h-6" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <Card>
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 font-bold text-primary">
+                <BookOpen className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 font-medium">Ngân hàng đề thi</p>
-                <p className="text-xl font-extrabold text-slate-900">
-                  {stats?.totalQuizzes ?? 0} bộ đề
+                <p className="text-xs text-muted-foreground">Khóa học phụ trách</p>
+                <p className="text-xl font-extrabold text-foreground">
+                  {loading ? <Skeleton className="h-6 w-14" /> : stats?.totalCourses ?? courses.length}
                 </p>
               </div>
-            </div>
-            <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition" />
-          </Link>
+            </CardContent>
+          </Card>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center font-bold">
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Tổng số bài học</p>
-              <p className="text-xl font-extrabold text-slate-900">
-                {stats?.totalLessons ?? courses.reduce((acc: number, c: any) => acc + (c.lessonsCount || 0), 0)} bài
-              </p>
-            </div>
-          </div>
+          <Card>
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 font-bold text-emerald-600">
+                <Users className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Tổng sinh viên theo học</p>
+                <p className="text-xl font-extrabold text-foreground">
+                  {loading ? (
+                    <Skeleton className="h-6 w-14" />
+                  ) : (
+                    stats?.totalStudents ??
+                    courses.reduce((acc, c) => acc + (c.studentsCount || 0), 0)
+                  )}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-              <TrendingUp className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Trạng thái AI Tutor & RAG</p>
-              <p className="text-xl font-extrabold text-slate-900">Hoạt động</p>
-            </div>
-          </div>
+          <Card className="flex h-full flex-row items-center transition-colors hover:border-ring/40">
+            <Link href="/quiz/bank" className="flex flex-1 items-center justify-between p-5">
+              <span className="flex items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-500/10 font-bold text-purple-600 transition-colors group-hover:bg-primary group-hover:text-white">
+                  <Layers className="h-6 w-6" />
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-xs font-medium text-muted-foreground">Bài nộp học viên</span>
+                  <span className="text-xl font-extrabold text-foreground">
+                    {loading ? <Skeleton className="h-6 w-14" /> : `${stats?.totalSubmissions ?? 0} lượt`}
+                  </span>
+                </span>
+              </span>
+              <Layers className="h-4 w-4 text-muted-foreground" />
+            </Link>
+          </Card>
+
+          <Card>
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/10 font-bold text-violet-600">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Tổng số bài học</p>
+                <p className="text-xl font-extrabold text-foreground">
+                  {loading ? (
+                    <Skeleton className="h-6 w-14" />
+                  ) : (
+                    `${stats?.totalLessons ?? courses.reduce((acc: number, c: any) => acc + (c.lessonsCount || 0), 0)} bài`
+                  )}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 font-bold text-amber-600">
+                <TrendingUp className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Trạng thái AI Tutor & RAG</p>
+                <p className="text-xl font-extrabold text-foreground">
+                  {loading ? (
+                    <Skeleton className="h-6 w-20" />
+                  ) : (
+                    `${stats?.publishedCourses ?? 0}/${stats?.totalCourses ?? courses.length} xuất bản`
+                  )}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Danh sách Khóa học đang quản lý */}
-        <section id="courses" tabIndex={-1} className="scroll-mt-24 bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm space-y-6 focus:outline-none">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <Card id="courses" tabIndex={-1} className="scroll-mt-24 focus:outline-none">
+          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
             <div>
-              <h2 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">
+              <CardTitle className="text-base uppercase tracking-wider">
                 Khóa học & Học liệu phụ trách
-              </h2>
-              <p className="text-xs text-slate-500">Bấm Quản lý để thêm bài học, dán link YouTube và nạp tài liệu cho AI Tutor</p>
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Bấm Quản lý để thêm bài học, dán link YouTube và nạp tài liệu cho AI Tutor
+              </CardDescription>
             </div>
-            <span className="text-xs font-bold text-slate-400">{courses.length} khóa học</span>
-          </div>
+            <Badge variant="secondary" className="text-[11px] font-bold">
+              {courses.length} khóa học
+            </Badge>
+          </CardHeader>
 
-          {courses.length === 0 ? (
-            <div className="py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-              <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-700">Chưa có khóa học nào được phân công</p>
-              <p className="text-xs text-slate-400 mt-1 mb-4">Bạn có thể tạo mới khóa học hoặc liên hệ Quản trị viên để phân công chuyên đề.</p>
-              <Link
-                href="/courses/create"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition"
-              >
-                <PlusCircle className="w-4 h-4" /> Tạo khóa học đầu tiên
-              </Link>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {courses.map((c) => (
-                <div
-                  key={c.id}
-                  className="rounded-2xl border border-slate-200 hover:border-indigo-300 transition bg-white shadow-xs overflow-hidden flex flex-col group"
-                >
-                  <div className="relative aspect-video w-full bg-slate-100 overflow-hidden">
-                    <img
-                      src={c.thumbnail}
-                      alt={c.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-2.5 left-2.5">
-                      <span className="text-[10px] font-bold bg-white/90 backdrop-blur-sm text-slate-800 px-2 py-0.5 rounded-full shadow-xs">
-                        {typeof c.category === 'object' && c.category ? (c.category as any).name : c.category}
-                      </span>
-                    </div>
-                    <div className="absolute top-2.5 right-2.5">
-                      <span className="text-[10px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-xs">
-                        {c.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                    <div className="space-y-2">
-                      <h3 className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">
-                        {c.title}
-                      </h3>
-
-                      <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5" /> {c.studentsCount} học viên
-                        </span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">
-                          <BookOpen className="w-3.5 h-3.5" /> {c.lessonsCount} bài học
-                        </span>
+          <CardContent className="space-y-6">
+            {courses.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border bg-muted/40 py-12 text-center">
+                <BookOpen className="mb-2 h-10 w-10 text-muted-foreground/50" />
+                <p className="text-sm font-bold text-foreground">Chưa có khóa học nào được phân công</p>
+                <p className="mb-4 mt-1 text-xs text-muted-foreground">
+                  Bạn có thể tạo mới khóa học hoặc liên hệ Quản trị viên để phân công chuyên đề.
+                </p>
+                <Button asChild variant="default" size="sm">
+                  <Link href="/courses/create">
+                    <PlusCircle className="h-4 w-4" /> Tạo khóa học đầu tiên
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+                {courses.map((c) => (
+                  <Card
+                    key={c.id}
+                    className="group flex flex-col overflow-hidden transition-colors hover:border-ring/40"
+                  >
+                    <div className="relative aspect-video w-full overflow-hidden bg-muted">
+                      <img
+                        src={c.thumbnail}
+                        alt={c.title}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                      <div className="absolute left-2.5 top-2.5">
+                        <Badge variant="secondary" className="text-[10px]">
+                          {typeof c.category === 'object' && c.category ? (c.category as any).name : c.category}
+                        </Badge>
+                      </div>
+                      <div className="absolute right-2.5 top-2.5">
+                        <Badge variant="success" className="text-[10px]">
+                          {c.status}
+                        </Badge>
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <Link
-                        href={`/courses/${c.id}/manage`}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold py-2 rounded-xl transition"
-                      >
-                        <Settings className="w-3.5 h-3.5" /> Quản lý bài học
-                      </Link>
+                    <CardContent className="flex flex-1 flex-col justify-between gap-4 p-5">
+                      <div className="space-y-2">
+                        <h3 className="line-clamp-2 text-sm font-bold leading-snug text-foreground">
+                          {c.title}
+                        </h3>
 
-                      <Link
-                        href={`/courses/${c.id}/learn?preview=true`}
-                        className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs transition"
-                        title="Xem trước Focus Player"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Users className="h-3.5 w-3.5" /> {c.studentsCount} học viên
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <BookOpen className="h-3.5 w-3.5" /> {c.lessonsCount} bài học
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-primary hover:text-primary"
+                        >
+                          <Link href={`/courses/${c.id}/manage`}>
+                            <Settings className="h-3.5 w-3.5" /> Quản lý bài học
+                          </Link>
+                        </Button>
+
+                        <Button
+                          asChild
+                          variant="secondary"
+                          size="icon-sm"
+                          title="Xem trước Focus Player"
+                        >
+                          <Link href={`/courses/${c.id}/learn?preview=true`}>
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

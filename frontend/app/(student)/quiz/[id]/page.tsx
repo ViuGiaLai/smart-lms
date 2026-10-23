@@ -16,7 +16,7 @@ interface QuestionItem {
   question_number: number;
   question_text: string;
   options: QuestionOption[];
-  correct: string;
+  correct?: string;
   explanation: string;
 }
 
@@ -25,6 +25,7 @@ interface ActiveQuizData {
   title: string;
   description?: string;
   pass_score: number;
+  lesson_id?: number | null;
   questions: QuestionItem[];
 }
 
@@ -32,8 +33,8 @@ export default function StudentQuizPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  const quizIdParam = (params?.id as string) || '1';
-  const courseId = searchParams?.get('courseId') || '1';
+  const quizIdParam = (params?.id as string) || '';
+  const courseId = searchParams?.get('courseId') || '';
 
   const [activeQuiz, setActiveQuiz] = useState<ActiveQuizData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +44,8 @@ export default function StudentQuizPage() {
   const [calculatedScore, setCalculatedScore] = useState(0);
   const [isPassed, setIsPassed] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [correctAnswers, setCorrectAnswers] = useState<Record<number, string>>({});
+  const [startedAt, setStartedAt] = useState<number>(0);
 
   const [resolvedCourseId, setResolvedCourseId] = useState<string>(courseId);
 
@@ -98,8 +101,8 @@ export default function StudentQuizPage() {
               key: typeof opt === 'object' ? (opt.key || String.fromCharCode(65 + optIdx)) : String.fromCharCode(65 + optIdx),
               text: typeof opt === 'object' ? (opt.text || String(opt)) : String(opt),
             })),
-            correct: q.correct_answer || 'A',
-            explanation: q.explanation || 'Phân tích suy luận từ tài liệu bài giảng.',
+            correct: undefined,
+            explanation: q.explanation || 'Chưa có giải thích cho câu hỏi này.',
           }));
 
           setActiveQuiz({
@@ -107,6 +110,7 @@ export default function StudentQuizPage() {
             title: matched.title || `Đề kiểm tra trắc nghiệm #${quizIdParam}`,
             description: matched.description || 'Được đồng bộ từ cơ sở dữ liệu PostgreSQL.',
             pass_score: matched.pass_score || 0.6,
+            lesson_id: matched.lesson_id ?? null,
             questions: mappedQuestions,
           });
         } else if (isMounted) {
@@ -129,6 +133,10 @@ export default function StudentQuizPage() {
 
   const questions = activeQuiz?.questions || [];
 
+  useEffect(() => {
+    if (activeQuiz) setStartedAt(Date.now());
+  }, [activeQuiz]);
+
   const handleSelect = (questionId: number, optKey: string) => {
     if (isSubmitted) return;
     setAnswers((prev) => ({ ...prev, [questionId]: optKey }));
@@ -141,6 +149,7 @@ export default function StudentQuizPage() {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const timeSpent = startedAt ? Math.max(1, Math.round((Date.now() - startedAt) / 1000)) : 0;
 
       // Nộp bài trực tiếp vào PostgreSQL để backend chấm điểm và lưu QuizSubmission
       let res = await fetch(`${apiUrl}/api/v1/quizzes/${activeQuiz.id}/submit`, {
@@ -151,59 +160,51 @@ export default function StudentQuizPage() {
         },
         body: JSON.stringify({
           answers,
-          time_spent: 120,
+          time_spent: timeSpent,
         }),
       });
 
       if (!res.ok) {
-        const targetCId = resolvedCourseId || courseId || '1';
-        res = await fetch(`${apiUrl}/api/v1/courses/${targetCId}/quizzes/${activeQuiz.id}/submit`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            answers,
-            time_spent: 120,
-          }),
-        });
+        const targetCId = resolvedCourseId || courseId;
+        if (targetCId) {
+          res = await fetch(`${apiUrl}/api/v1/courses/${targetCId}/quizzes/${activeQuiz.id}/submit`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              answers,
+              time_spent: timeSpent,
+            }),
+          });
+        }
       }
 
       if (res.ok) {
         const subData = await res.json();
         const scoreVal = Math.round((subData.score || 0) * questions.length);
+        const answerMap = (subData.results || []).reduce((acc: Record<number, string>, result: any) => {
+          if (result.question_id && result.correct_answer) {
+            acc[result.question_id] = result.correct_answer;
+          }
+          return acc;
+        }, {});
+        setCorrectAnswers(answerMap);
         setCalculatedScore(scoreVal);
         setIsPassed(subData.passed || scoreVal >= questions.length * activeQuiz.pass_score);
         setIsSubmitted(true);
 
         // Nếu đạt yêu cầu, cập nhật tiến độ bài học trong cơ sở dữ liệu
-        if (subData.passed) {
-          const targetCId = resolvedCourseId || courseId || '1';
-          coursesApi.markLessonComplete(targetCId, String(quizIdParam), 2700).catch(() => {});
+        const targetCId = resolvedCourseId || courseId;
+        if (subData.passed && activeQuiz.lesson_id && targetCId) {
+          coursesApi.markLessonComplete(targetCId, String(activeQuiz.lesson_id), 0).catch(() => {});
         }
       } else {
-        // Fallback tính điểm client nếu API submit lỗi
-        let score = 0;
-        questions.forEach((q) => {
-          if (answers[q.id] === q.correct) {
-            score += 1;
-          }
-        });
-        setCalculatedScore(score);
-        setIsPassed(score >= questions.length * (activeQuiz.pass_score || 0.6));
-        setIsSubmitted(true);
+        throw new Error('Không thể nộp bài lên máy chủ. Vui lòng thử lại.');
       }
-    } catch {
-      let score = 0;
-      questions.forEach((q) => {
-        if (answers[q.id] === q.correct) {
-          score += 1;
-        }
-      });
-      setCalculatedScore(score);
-      setIsPassed(score >= questions.length * (activeQuiz?.pass_score || 0.6));
-      setIsSubmitted(true);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Không thể nộp bài. Vui lòng thử lại.');
     } finally {
       setSubmitting(false);
     }
@@ -213,7 +214,8 @@ export default function StudentQuizPage() {
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
     } else {
-      router.push(`/courses/${courseId}/learn?lessonId=${quizIdParam}`);
+      const backCourseId = resolvedCourseId || courseId;
+      router.push(backCourseId ? `/courses/${backCourseId}/learn` : '/courses');
     }
   };
 
@@ -266,7 +268,7 @@ export default function StudentQuizPage() {
           </button>
 
           <Link
-            href={`/courses/${courseId}`}
+            href={resolvedCourseId || courseId ? `/courses/${resolvedCourseId || courseId}` : '/courses'}
             className="text-xs text-slate-500 hover:text-slate-800 font-medium transition"
           >
             Về tổng quan khóa học
@@ -277,7 +279,7 @@ export default function StudentQuizPage() {
         <div className="p-6 rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 text-white shadow-xl space-y-2 relative overflow-hidden">
           <div className="flex items-center gap-2 text-indigo-300 text-xs font-bold uppercase tracking-wider">
             <Sparkles className="w-4 h-4 text-amber-300" />
-            Đề kiểm tra AI Bloom Taxonomy • Bài #{quizIdParam}
+            Đề kiểm tra AI Bloom Taxonomy • Bài ${quizIdParam}
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-white">
             {activeQuiz.title}
@@ -385,7 +387,7 @@ export default function StudentQuizPage() {
                 Giải thích đáp án chi tiết từ AI Tutor
               </h3>
               {questions.map((q) => {
-                const isCorrect = answers[q.id] === q.correct;
+                const isCorrect = answers[q.id] === correctAnswers[q.id];
                 return (
                   <div
                     key={q.id}
@@ -415,7 +417,7 @@ export default function StudentQuizPage() {
                       </p>
                       <p>
                         Đáp án chính xác:{' '}
-                        <span className="font-bold text-emerald-600">{q.correct}</span>
+                        <span className="font-bold text-emerald-600">{correctAnswers[q.id] || '—'}</span>
                       </p>
                     </div>
 

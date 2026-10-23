@@ -78,16 +78,24 @@ async def get_ai_monitoring(
 ):
     """Trạng thái hạ tầng AI dựa trên các kiểm tra thực tế, không suy diễn telemetry."""
     database_online = True
-    total_chunks = 0
-    indexed_lessons = 0
     try:
         await db.execute(text("SELECT 1"))
-        total_chunks = (await db.execute(text("SELECT count(*) FROM document_chunks"))).scalar() or 0
-        indexed_lessons = (
-            await db.execute(text("SELECT count(DISTINCT lesson_id) FROM document_chunks"))
-        ).scalar() or 0
     except Exception:
         database_online = False
+
+    # Bảng document_chunks do AI Service tạo; nếu chưa tồn tại thì coi như chưa
+    # số hóa học liệu, KHÔNG được kết luận database offline.
+    total_chunks = 0
+    indexed_lessons = 0
+    if database_online:
+        try:
+            total_chunks = (await db.execute(text("SELECT count(*) FROM document_chunks"))).scalar() or 0
+            indexed_lessons = (
+                await db.execute(text("SELECT count(DISTINCT lesson_id) FROM document_chunks"))
+            ).scalar() or 0
+        except Exception:
+            total_chunks = 0
+            indexed_lessons = 0
 
     ai_service: dict[str, Any] = {"status": "offline", "provider": None, "model": None, "version": None}
     try:
@@ -236,7 +244,9 @@ async def list_courses_for_moderation(
         "data": [
             {
                 "id": str(course.id),
+                "slug": course.slug,
                 "title": course.title,
+                "category": course.category,
                 "instructor": {
                     "id": str(course.instructor_id),
                     "fullName": course.instructor.name if course.instructor else "Chưa xác định",

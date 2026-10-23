@@ -14,11 +14,12 @@ def selected_answer_for_question(
     answers: dict[str, str],
     index: int,
 ) -> str | None:
-    """Khớp đáp án theo id câu hỏi, order_index, hoặc số thứ tự 1-based."""
+    """Khớp đáp án theo id câu hỏi (ưu tiên), hoặc số thứ tự 1-based."""
+    # Ưu tiên khớp theo id câu hỏi (đền nhất), sau đó mới thử order_index hoặc số thứ tự
     candidates = [
         str(getattr(question, "id", "")),
-        str(getattr(question, "order_index", "")),
         str(index + 1),
+        str(getattr(question, "order_index", "")),
     ]
     for key in candidates:
         if key and key in answers:
@@ -84,6 +85,7 @@ def serialize_quiz(quiz: Any, include_answers: bool) -> dict[str, Any]:
     return {
         "id": quiz.id,
         "course_id": quiz.course_id,
+        "lesson_id": quiz.lesson_id,
         "title": quiz.title,
         "description": quiz.description,
         "time_limit": quiz.time_limit,

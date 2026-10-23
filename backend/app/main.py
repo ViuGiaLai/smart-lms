@@ -12,7 +12,7 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.database import engine, Base
 import app.models  # ensure models are registered in Base.metadata
-from app.api.v1 import auth, courses, lessons, quiz as quiz_router, progress as progress_router, ai_tutor, ai_quiz_gen, student, instructor, admin, public
+from app.api.v1 import auth, courses, lessons, quiz as quiz_router, progress as progress_router, ai_tutor, ai_quiz_gen, student, instructor, admin, public, documents
 
 
 @asynccontextmanager
@@ -75,6 +75,7 @@ app.include_router(ai_quiz_gen.router,     prefix=prefix, tags=["AI Quiz Gen"])
 app.include_router(student.router,         prefix=prefix, tags=["Student"])
 app.include_router(instructor.router,      prefix=prefix, tags=["Instructor"])
 app.include_router(admin.router,           prefix=prefix, tags=["Admin"])
+app.include_router(documents.router,       prefix=prefix)
 
 
 @app.get("/", include_in_schema=False)

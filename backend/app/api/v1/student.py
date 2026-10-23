@@ -50,10 +50,15 @@ async def get_student_dashboard(
     total_watch_time = watch_time_res.scalar() or 0
 
     # Calculate streak
-    from app.services.enrollment_service import activity_dates_for_user, compute_streak
+    from app.services.enrollment_service import (
+        activity_dates_for_user,
+        compute_streak,
+        compute_longest_streak,
+    )
     from datetime import date
     activity_dates = await activity_dates_for_user(db, current_user.id)
     current_streak = compute_streak(activity_dates, date.today())
+    longest_streak = compute_longest_streak(activity_dates)
 
     return {
         "success": True,
@@ -64,7 +69,7 @@ async def get_student_dashboard(
             "totalInProgress": total_in_progress,
             "totalWatchTime": int(total_watch_time),
             "currentStreak": current_streak,
-            "longestStreak": max(current_streak, 1) if total_completed > 0 or total_in_progress > 0 else 0,
+            "longestStreak": longest_streak,
         },
     }
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,7 @@ from app.models.course import Course, CourseStatus
 from app.models.quiz import Quiz
 from app.models.user import User, UserRole
 from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse
-from app.services.course_service import CourseService
+from app.services.course_service import CourseService, slugify
 from app.services.enrollment_service import (
     ensure_enrollment,
     enrolled_course_ids,
@@ -45,6 +46,19 @@ def _status_value(course: Course) -> str:
     return course.status.value if hasattr(course.status, "value") else str(course.status)
 
 
+def _duration_label(seconds: int | None) -> str:
+    total = int(seconds or 0)
+    if total <= 0:
+        return "0 phút"
+    hours, remainder = divmod(total, 3600)
+    minutes = remainder // 60
+    if hours and minutes:
+        return f"{hours} giờ {minutes} phút"
+    if hours:
+        return f"{hours} giờ"
+    return f"{minutes} phút"
+
+
 def _format_course_dict(course: Course, student_progress: float | None = None, total_students: int = 0, is_enrolled: bool = False) -> dict[str, Any]:
     """Helper to convert Course model to frontend-friendly dict with live calculated fields."""
     actual_lessons_count = len(course.lessons) if course.lessons else 0
@@ -53,7 +67,7 @@ def _format_course_dict(course: Course, student_progress: float | None = None, t
     return {
         "id": str(course.id),
         "title": course.title,
-        "slug": f"khoa-hoc-{course.id}",
+        "slug": course.slug,
         "description": course.description or "",
         "shortDescription": (course.description[:120] + "...") if course.description and len(course.description) > 120 else (course.description or ""),
         "thumbnail": course.thumbnail or "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&fit=crop",
@@ -63,6 +77,7 @@ def _format_course_dict(course: Course, student_progress: float | None = None, t
         "status": status_value,
         "isPublished": status_value == CourseStatus.published.value,
         "duration": actual_duration,
+        "durationText": _duration_label(actual_duration),
         "totalLessons": actual_lessons_count,
         "totalStudents": total_students,
         "studentsCount": total_students,
@@ -71,13 +86,13 @@ def _format_course_dict(course: Course, student_progress: float | None = None, t
         "totalReviews": 0,
         "instructor": {
             "id": str(course.instructor_id),
-            "fullName": course.instructor.name if course.instructor else "Giảng viên",
+            "fullName": course.instructor.name if course.instructor else "Chưa cập nhật",
             "email": course.instructor.email if course.instructor else "",
         },
         "category": {
-            "id": f"cat-{course.category or 'it'}",
-            "name": course.category or "Công nghệ Thông tin",
-            "slug": "cong-nghe-thong-tin",
+            "id": f"cat-{slugify(course.category) or 'chua-phan-loai'}",
+            "name": course.category or "Chưa phân loại",
+            "slug": slugify(course.category) or "chua-phan-loai",
         },
         "isEnrolled": is_enrolled or student_progress is not None,
         "progress": student_progress if student_progress is not None else 0,
@@ -141,7 +156,7 @@ async def list_courses(
     total = total_result.scalar() or 0
 
     # Pagination calculation
-    offset = (page - 1) * limit if page > 1 else skip
+    offset = (page - 1) * limit
 
     # Order by sortBy parameter
     if sortBy == "newest":
@@ -174,57 +189,28 @@ async def list_courses(
 
 
 @router.get("/enrolled")
-async def get_enrolled_courses(request: Request, db: AsyncSession = Depends(get_db)):
+async def get_enrolled_courses(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Return enrolled courses with actual progress for the current authenticated user only."""
-    from app.core.security import decode_token
     from app.models.progress import Progress
     from app.models.enrollment import Enrollment
-    from app.models.lesson import Lesson
+    from app.services.enrollment_service import enrolled_course_ids as resolve_enrolled_course_ids
 
-    auth_header = request.headers.get("authorization")
-    user_id = None
-    if auth_header and auth_header.startswith("Bearer "):
-        try:
-            tok = auth_header.split(" ", 1)[1]
-            sub = decode_token(tok).get("sub")
-            if sub:
-                user_id = int(sub)
-        except Exception:
-            pass
+    user_id = current_user.id
+    course_ids = await resolve_enrolled_course_ids(db, user_id)
 
-    # Yêu cầu đăng nhập — không fallback sang user khác để tránh data leak
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Vui lòng đăng nhập để xem danh sách khóa học đã đăng ký",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Lấy enrolled course IDs từ bảng enrollments (chính xác)
-    enroll_res = await db.execute(
-        select(Enrollment.course_id).where(Enrollment.user_id == user_id)
-    )
-    enrolled_course_ids = set(enroll_res.scalars().all())
-
-    # Fallback: cũng lấy từ progress cũ nếu chưa có enrollment
-    if not enrolled_course_ids:
-        p_stmt = select(Progress).where(Progress.user_id == user_id)
-        p_res = await db.execute(p_stmt)
-        user_progress = p_res.scalars().all()
-        if user_progress:
-            les_stmt = select(Lesson.course_id).where(
-                Lesson.id.in_([p.lesson_id for p in user_progress])
-            ).distinct()
-            les_res = await db.execute(les_stmt)
-            enrolled_course_ids = set(les_res.scalars().all())
-
-    if not enrolled_course_ids:
+    if not course_ids:
         return {"success": True, "data": []}
 
     stmt = (
         select(Course)
         .options(selectinload(Course.instructor), selectinload(Course.lessons))
-        .where(Course.id.in_(enrolled_course_ids))
+        .where(
+            Course.id.in_(course_ids),
+            Course.status == CourseStatus.published,
+        )
         .order_by(Course.id.asc())
     )
     result = await db.execute(stmt)
@@ -240,7 +226,7 @@ async def get_enrolled_courses(request: Request, db: AsyncSession = Depends(get_
     enroll_date_res = await db.execute(
         select(Enrollment.course_id, Enrollment.enrolled_at).where(
             Enrollment.user_id == user_id,
-            Enrollment.course_id.in_(enrolled_course_ids)
+            Enrollment.course_id.in_(course_ids)
         )
     )
     enroll_dates = {row[0]: row[1] for row in enroll_date_res.all()}
@@ -258,8 +244,9 @@ async def get_enrolled_courses(request: Request, db: AsyncSession = Depends(get_
                 p_obj = progress_by_lesson[les.id]
                 if p_obj.is_completed:
                     completed_count += 1
-                if p_obj.updated_at:
-                    last_accessed = p_obj.updated_at.isoformat()
+                # Giữ mốc truy cập MỚI NHẤT, không phải bài học cuối theo thứ tự.
+                if p_obj.updated_at and (last_accessed is None or p_obj.updated_at > last_accessed):
+                    last_accessed = p_obj.updated_at
 
         pct = round((completed_count / total_l * 100), 1) if total_l > 0 else 0
         enrolled_at = enroll_dates.get(c.id)
@@ -272,7 +259,7 @@ async def get_enrolled_courses(request: Request, db: AsyncSession = Depends(get_
             "progress": pct,
             "completedLessons": completed_count,
             "totalLessons": total_l,
-            "lastAccessedAt": last_accessed or (c.created_at.isoformat() if c.created_at else None),
+            "lastAccessedAt": last_accessed.isoformat() if last_accessed else (c.created_at.isoformat() if c.created_at else None),
             "enrolledAt": enrolled_at.isoformat() if enrolled_at else (c.created_at.isoformat() if c.created_at else None),
         })
 
@@ -303,14 +290,81 @@ async def search_courses(
     }
 
 
+async def _can_view_answer_key(db: AsyncSession, course: Course, user: User | None) -> bool:
+    """Chỉ người quản lý khóa học (giảng viên/admin) hoặc học viên đã ghi danh
+    mới được thấy đáp án đúng của bộ đề. Khách/non-enrolled không được thấy
+    để tránh rò rỉ đáp án qua endpoint công khai."""
+    if user is None:
+        return False
+    role = _role_value(user)
+    if role == UserRole.admin.value or course.instructor_id == user.id:
+        return True
+    if role == UserRole.student.value:
+        # Dùng chung định nghĩa "đã ghi danh" (enrollment ∪ suy ra từ progress)
+        # với trang /courses/enrolled để học viên cũ vẫn thấy được đáp án.
+        return course.id in await enrolled_course_ids(db, user.id)
+    return False
+
+
+@router.get("/categories")
+async def list_course_categories(
+    status: str = Query("published"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Danh mục thực tế đang được dùng trong DB (kèm số lượng khóa học).
+
+    Dùng cho datalist gợi ý ở trang tạo khóa học thay vì hardcode danh sách
+    ở frontend. Giảng viên vẫn có thể nhập danh mục mới.
+    """
+    total = func.count(Course.id)
+    conditions = [Course.category.isnot(None), Course.category != ""]
+    if status != "all":
+        conditions.append(Course.status == status)
+    result = await db.execute(
+        select(Course.category, total)
+        .where(*conditions)
+        .group_by(Course.category)
+        .order_by(total.desc(), Course.category.asc())
+    )
+    return {
+        "success": True,
+        "data": [
+            {"name": name, "slug": slugify(name) or f"danh-muc-{index}", "count": count}
+            for index, (name, count) in enumerate(result.all(), start=1)
+        ],
+    }
+
+
+@router.get("/slug/{slug}")
+async def get_course_by_slug_route(
+    slug: str,
+    current_user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a course by its SEO slug."""
+    result = await db.execute(select(Course.id).where(Course.slug == slug))
+    course_id = result.scalar_one_or_none()
+    if course_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
+    return await get_course(course_id, current_user=current_user, db=db)
+
+
 @router.get("/id/{course_id}")
-async def get_course_by_id_route(course_id: int, db: AsyncSession = Depends(get_db)):
+async def get_course_by_id_route(
+    course_id: int,
+    current_user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get a single course by ID route."""
-    return await get_course(course_id, db)
+    return await get_course(course_id, current_user=current_user, db=db)
 
 
 @router.get("/{course_id}")
-async def get_course(course_id: int, db: AsyncSession = Depends(get_db)):
+async def get_course(
+    course_id: int,
+    current_user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get a single course with its lessons and instructor."""
     stmt = (
         select(Course)
@@ -326,13 +380,19 @@ async def get_course(course_id: int, db: AsyncSession = Depends(get_db)):
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
 
+    include_answers = await _can_view_answer_key(db, course, current_user)
+
     data = _format_course_dict(course)
     data["lessons"] = [
         {
             "id": str(lesson.id),
             "title": lesson.title,
             "description": lesson.description or "",
-            "duration": f"{lesson.duration // 60}m" if lesson.duration else "0m",
+            # `duration` luôn là số giây để mọi client tính toán thống nhất;
+            # nhãn hiển thị nằm ở `durationText`.
+            "duration": lesson.duration or 0,
+            "duration_seconds": lesson.duration or 0,
+            "durationText": _duration_label(lesson.duration),
             "videoUrl": lesson.video_url or "",
             "video_url": lesson.video_url or "",
             "transcript": lesson.transcript or "",
@@ -345,6 +405,7 @@ async def get_course(course_id: int, db: AsyncSession = Depends(get_db)):
     data["quizzes"] = [
         {
             "id": str(quiz.id),
+            "lesson_id": str(quiz.lesson_id) if quiz.lesson_id is not None else None,
             "title": quiz.title,
             "description": quiz.description,
             "questions": [
@@ -352,9 +413,9 @@ async def get_course(course_id: int, db: AsyncSession = Depends(get_db)):
                     "id": str(q.id),
                     "question_text": q.question_text,
                     "options": q.options,
-                    "correct_answer": q.correct_answer,
-                    "correct": q.correct_answer,
-                    "explanation": q.explanation,
+                    "correct_answer": q.correct_answer if include_answers else None,
+                    "correct": q.correct_answer if include_answers else None,
+                    "explanation": q.explanation if include_answers else None,
                     "order_index": q.order_index,
                 }
                 for q in quiz.questions
@@ -448,9 +509,11 @@ async def get_course_progress(course_id: int, request: Request, db: AsyncSession
     completed_ids = [str(p.lesson_id) for p in progress_records if p.is_completed]
     total = len(lessons)
     pct = round((len(completed_ids) / total * 100), 1) if total > 0 else 0
-    last_lesson = str(lesson_ids[0]) if lesson_ids else "1"
-    if progress_records:
-        last_lesson = str(progress_records[-1].lesson_id)
+    # Sort progress records by updated_at to get the most recently accessed lesson
+    sorted_records = sorted(progress_records, key=lambda p: p.updated_at or datetime.min.replace(tzinfo=timezone.utc))
+    last_lesson = str(lesson_ids[0]) if lesson_ids else None
+    if sorted_records:
+        last_lesson = str(sorted_records[-1].lesson_id)
 
     return {
         "success": True,
@@ -469,7 +532,7 @@ async def mark_lesson_complete(
     course_id: int,
     lesson_id: int,
     current_user: User = Depends(get_current_active_user),
-    payload: dict[str, Any] = {},
+    payload: dict[str, Any] | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Mark a lesson complete and persist in PostgreSQL for the CURRENT user.
@@ -479,6 +542,7 @@ async def mark_lesson_complete(
     from app.models.progress import Progress
     from datetime import datetime, timezone
 
+    payload = payload or {}
     user_id = current_user.id
     watched_seconds = payload.get("watchedSeconds", 0)
 

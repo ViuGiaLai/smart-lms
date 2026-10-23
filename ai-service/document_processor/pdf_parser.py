@@ -1,7 +1,7 @@
 """
 Smart LMS - Document Processor: PDF & DOCX Parser
-Parse các file PDF và Word thành plain text để đưa vào pipeline RAG.
-Hỗ trợ: PDF (PyPDF2 + pdfplumber), DOCX (python-docx)
+Parse các file PDF, Word và PowerPoint thành plain text để đưa vào pipeline RAG.
+Hỗ trợ: PDF (PyPDF2 + pdfplumber), DOCX (python-docx), PPTX (python-pptx)
 """
 
 import asyncio
@@ -16,6 +16,7 @@ import pdfplumber
 
 # Word document parsing
 from docx import Document as DocxDocument
+from pptx import Presentation
 
 logger = structlog.get_logger(__name__)
 
@@ -214,6 +215,42 @@ class DocxParser:
         }
 
 
+class PptxParser:
+    """Parse Microsoft PowerPoint (.pptx) thành text theo từng slide."""
+
+    async def parse_bytes(self, content: bytes, filename: str = "presentation.pptx") -> dict:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, self._parse_bytes_sync, content, filename
+        )
+
+    def _parse_bytes_sync(self, content: bytes, filename: str) -> dict:
+        presentation = Presentation(io.BytesIO(content))
+        pages = []
+        for slide_number, slide in enumerate(presentation.slides, start=1):
+            texts = []
+            for shape in slide.shapes:
+                if not hasattr(shape, "text"):
+                    continue
+                text = shape.text.strip()
+                if text:
+                    texts.append(text)
+            pages.append({"page": slide_number, "text": "\n".join(texts)})
+
+        return {
+            "text": "\n\n".join(
+                f"[Slide {page['page']}]\n{page['text']}"
+                for page in pages
+                if page["text"]
+            ),
+            "pages": pages,
+            "metadata": {
+                "filename": filename,
+                "total_pages": len(pages),
+                "parser": "python-pptx",
+            },
+        }
+
+
 # ===== Factory Function =====
 def get_parser(filename: str) -> Optional[object]:
     """
@@ -228,8 +265,12 @@ def get_parser(filename: str) -> Optional[object]:
     ext = Path(filename).suffix.lower()
     if ext == ".pdf":
         return PDFParser()
-    elif ext in (".docx", ".doc"):
+    elif ext == ".docx":
+        # Không nhận ".doc": python-docx không đọc được định dạng nhị phân cũ,
+        # nếu nhận sẽ lỗi 500 khó hiểu — trả về None để API báo 400 rõ ràng.
         return DocxParser()
+    elif ext == ".pptx":
+        return PptxParser()
     else:
         logger.warning("Unsupported file type", filename=filename, extension=ext)
         return None
