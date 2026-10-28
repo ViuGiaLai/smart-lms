@@ -30,6 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
 export default function StudentDashboardPage() {
   const { isAuthorized } = useRoleGuard(['student']);
@@ -106,18 +107,7 @@ export default function StudentDashboardPage() {
       : (stats?.totalCompleted ? 100 : 0);
 
   if (!isAuthorized || authLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <Card className="max-w-sm p-6 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 animate-spin items-center justify-center rounded-full bg-primary/10 text-primary">
-            <GraduationCap className="h-5 w-5" />
-          </div>
-          <p className="text-xs font-semibold text-foreground">
-            Đang kiểm tra quyền truy cập học viên...
-          </p>
-        </Card>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

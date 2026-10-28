@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -35,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
 interface LessonDraft {
   id: string;
@@ -487,26 +489,19 @@ export default function CreateCoursePage() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
       // 1. Lưu Khóa học (Course)
-      const descriptionParts = [
-        description.trim() || 'Khóa học đào tạo trực tuyến chuẩn chất lượng tích hợp Gia sư AI 24/7.',
-      ];
-      if (outcomes.length > 0) {
-        descriptionParts.push('\n\n### Mục tiêu và Chuẩn đầu ra:', ...outcomes.map((o) => `- ${o}`));
-      }
-      if (prerequisites.length > 0) {
-        descriptionParts.push('\n\n### Yêu cầu tiên quyết:', ...prerequisites.map((p) => `- ${p}`));
-      }
-      const formattedDescription = descriptionParts.join('\n');
-
+      // Mục tiêu/chuẩn đầu ra và yêu cầu tiên quyết được gửi thành trường riêng
+      // để lưu vào cột JSON, KHÔNG nối vào description nữa.
       const coursePayload = {
         title: title.trim(),
         slug: slug.trim() || undefined,
-        description: formattedDescription,
+        description: description.trim() || 'Khóa học đào tạo trực tuyến chuẩn chất lượng tích hợp Gia sư AI 24/7.',
         category: category.trim(),
         level,
         price: isFree ? 0 : Number(price) || 0,
         thumbnail: thumbnail.trim(),
         status: statusVal,
+        outcomes: outcomes.map((item) => item.trim()).filter(Boolean),
+        prerequisites: prerequisites.map((item) => item.trim()).filter(Boolean),
       };
 
       const courseRes = await coursesApi.createCourse(coursePayload);
@@ -627,11 +622,7 @@ export default function CreateCoursePage() {
   };
 
   if (!isAuthorized) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-xs font-semibold text-slate-500">
-        Đang xác thực quyền Giảng viên...
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const currentLessonPreview = lessons[activeLessonIndex] || lessons[0];
@@ -992,7 +983,13 @@ export default function CreateCoursePage() {
                           )}
                         >
                           <div className="relative mb-1.5 aspect-video w-full overflow-hidden rounded-lg bg-muted">
-                            <img src={preset.url} alt={preset.name} className="h-full w-full object-cover" />
+                            <Image
+                              src={preset.url}
+                              alt={preset.name}
+                              fill
+                              sizes="160px"
+                              className="object-cover"
+                            />
                             {thumbnail === preset.url && (
                               <div className="absolute right-1.5 top-1.5 rounded-full bg-primary p-1 text-primary-foreground">
                                 <Check className="h-3 w-3" />
@@ -1666,7 +1663,7 @@ export default function CreateCoursePage() {
                 <div className="overflow-hidden rounded-2xl border border-border bg-card">
                   <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-muted">
                     {thumbnail ? (
-                      <img src={thumbnail} alt="Preview" className="h-full w-full object-cover" />
+                      <Image src={thumbnail} alt="Preview" fill sizes="(max-width: 1024px) 100vw, 480px" className="object-cover" />
                     ) : (
                       <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-tr from-slate-100 to-indigo-50 p-4 text-center text-muted-foreground">
                         <BookOpen className="mb-1 h-8 w-8 text-muted-foreground/50" />

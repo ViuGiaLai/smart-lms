@@ -51,6 +51,8 @@ class CourseBase(BaseModel):
     category: str | None = None
     level: str | None = None
     status: CourseStatusLiteral = "draft"
+    outcomes: list[str] | None = None
+    prerequisites: list[str] | None = None
 
 
 class CourseCreate(CourseBase):
@@ -66,6 +68,8 @@ class CourseUpdate(BaseModel):
     category: str | None = None
     level: str | None = None
     slug: str | None = Field(None, max_length=255)
+    outcomes: list[str] | None = None
+    prerequisites: list[str] | None = None
 
 
 class CourseResponse(CourseBase):

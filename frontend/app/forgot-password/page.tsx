@@ -62,8 +62,8 @@ export default function ForgotPasswordPage() {
           <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-3.5 flex gap-3 mb-6">
             <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
             <p className="text-[11px] text-indigo-900 leading-relaxed">
-              Mẹo cho buổi thuyết minh/demo: bạn có thể dùng ngay 3 nút đăng nhập nhanh
-              (Admin, Giảng viên, Học viên) ở trang Đăng nhập mà không cần mật khẩu.
+              Không chia sẻ mật khẩu hoặc mã đăng nhập cho người khác. Ban quản trị
+              không bao giờ yêu cầu bạn cung cấp mật khẩu qua email.
             </p>
           </div>
 

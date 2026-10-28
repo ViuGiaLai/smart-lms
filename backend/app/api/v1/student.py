@@ -9,12 +9,28 @@ from app.models.course import Course, CourseStatus
 from app.models.lesson import Lesson
 from app.models.progress import Progress
 from app.models.user import User
-from app.models.enrollment import Enrollment
+from app.models.quiz import Quiz, QuizQuestion, QuizSubmission
 from app.core.security import get_current_active_user
+from app.services.enrollment_service import enrolled_course_ids
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
 
 router = APIRouter(prefix="/student", tags=["Student"])
+
+
+async def _visible_course_ids(current_user: User, db: AsyncSession) -> list[int]:
+    """Course scope: students see enrolled courses, instructors see owned ones, admin sees all."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role == "student":
+        # Dùng chung logic với /courses/enrolled: chỉ bảng enrollments (nguồn duy nhất).
+        return sorted(await enrolled_course_ids(db, current_user.id))
+    if role == "instructor":
+        res = await db.execute(
+            select(Course.id).where(Course.instructor_id == current_user.id)
+        )
+    else:
+        res = await db.execute(select(Course.id))
+    return [row[0] for row in res.all()]
 
 
 @router.get("/dashboard")
@@ -22,56 +38,198 @@ async def get_student_dashboard(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return live dashboard stats for the student from PostgreSQL."""
-    # Count total courses ENROLLED by this student
-    enrolled_result = await db.execute(
-        select(func.count(Enrollment.id)).where(Enrollment.user_id == current_user.id)
-    )
-    total_enrolled = enrolled_result.scalar() or 0
+    """Return live dashboard stats for the student from PostgreSQL.
 
-    # Query completed and in-progress lessons from Progress table FOR THIS STUDENT
-    completed_res = await db.execute(
-        select(func.count(Progress.id))
-        .where(Progress.user_id == current_user.id, Progress.is_completed == True)
-    )
-    total_completed = completed_res.scalar() or 0
-
-    in_progress_res = await db.execute(
-        select(func.count(Progress.id))
-        .where(Progress.user_id == current_user.id, Progress.is_completed == False)
-    )
-    total_in_progress = in_progress_res.scalar() or 0
-
-    # Sum actual watch time in seconds FOR THIS STUDENT
-    watch_time_res = await db.execute(
-        select(func.coalesce(func.sum(Progress.last_position), 0))
-        .where(Progress.user_id == current_user.id)
-    )
-    total_watch_time = watch_time_res.scalar() or 0
-
-    # Calculate streak
+    Trước đây hàm này chạy 5 truy vấn riêng biệt trên cùng bảng `progress`
+    (đếm completed, đếm in-progress, sum watch time, lấy mốc thời gian). Mỗi
+    round-trip tới DB ở xa tốn ~100-200 ms, nên gộp lại thành 1 truy vấn.
+    """
     from app.services.enrollment_service import (
-        activity_dates_for_user,
         compute_streak,
         compute_longest_streak,
+        enrolled_course_ids,
     )
     from datetime import date
-    activity_dates = await activity_dates_for_user(db, current_user.id)
-    current_streak = compute_streak(activity_dates, date.today())
-    longest_streak = compute_longest_streak(activity_dates)
+
+    # 1) Phạm vi khóa học đã ghi danh — chỉ đọc bảng `enrollments` (nguồn sự thật
+    #    duy nhất); migration 0007 đã backfill các cặp cũ vốn chỉ có trong progress.
+    course_ids = await enrolled_course_ids(db, current_user.id)
+
+    # 2) Một truy vấn duy nhất lấy tiến độ từng bài + khóa chứa bài đó
+    #    (join lessons để quy bài học về khóa, phục vụ thống kê theo khóa).
+    rows = await db.execute(
+        select(
+            Lesson.course_id,
+            Progress.is_completed,
+            Progress.last_position,
+            Progress.updated_at,
+            Progress.started_at,
+            Progress.completed_at,
+        )
+        .join(Lesson, Lesson.id == Progress.lesson_id)
+        .where(Progress.user_id == current_user.id)
+    )
+
+    completed_lessons_by_course: dict[int, int] = {}
+    total_completed_lessons = 0
+    total_in_progress_lessons = 0
+    total_watch_time = 0
+    activity_dates: set[date] = set()
+    for course_id, is_completed, last_position, updated_at, started_at, completed_at in rows.all():
+        if is_completed:
+            total_completed_lessons += 1
+            completed_lessons_by_course[course_id] = completed_lessons_by_course.get(course_id, 0) + 1
+        else:
+            total_in_progress_lessons += 1
+        total_watch_time += int(last_position or 0)
+        for stamp in (updated_at, started_at, completed_at):
+            if stamp is None:
+                continue
+            if stamp.tzinfo is not None:
+                stamp = stamp.astimezone(timezone.utc)
+            activity_dates.add(stamp.date())
+
+    # 3) Tổng số bài của từng khóa đã ghi danh — cần để biết khóa đã xong hay chưa.
+    lesson_totals: dict[int, int] = {}
+    if course_ids:
+        lesson_rows = await db.execute(
+            select(Lesson.course_id, func.count(Lesson.id))
+            .where(Lesson.course_id.in_(course_ids))
+            .group_by(Lesson.course_id)
+        )
+        lesson_totals = {cid: int(total) for cid, total in lesson_rows.all()}
+
+    total_completed_courses = 0
+    total_in_progress_courses = 0
+    for course_id in course_ids:
+        total_lessons = lesson_totals.get(course_id, 0)
+        done_lessons = completed_lessons_by_course.get(course_id, 0)
+        if total_lessons > 0 and done_lessons >= total_lessons:
+            total_completed_courses += 1
+        elif done_lessons > 0:
+            total_in_progress_courses += 1
 
     return {
         "success": True,
         "message": "Student stats retrieved successfully",
         "data": {
-            "totalEnrolled": total_enrolled,
-            "totalCompleted": total_completed,
-            "totalInProgress": total_in_progress,
-            "totalWatchTime": int(total_watch_time),
-            "currentStreak": current_streak,
-            "longestStreak": longest_streak,
+            # `totalCompleted` / `totalInProgress` là số KHÓA HỌC (đúng như tên gọi
+            # và như UI đang hiển thị). Thống kê theo bài học nằm ở 2 trường riêng.
+            "totalEnrolled": len(course_ids),
+            "totalCompleted": total_completed_courses,
+            "totalInProgress": total_in_progress_courses,
+            "totalCompletedLessons": total_completed_lessons,
+            "totalInProgressLessons": total_in_progress_lessons,
+            "totalWatchTime": total_watch_time,
+            "currentStreak": compute_streak(activity_dates, date.today()),
+            "longestStreak": compute_longest_streak(activity_dates),
         },
     }
+
+
+@router.get("/quizzes")
+async def get_my_quizzes(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """All quizzes of the courses visible to this user in a single request.
+
+    Replaces the old client-side fan-out (`enrollments` -> N x `quizzes`) that
+    made the student quiz page wait for many sequential round-trips.
+    """
+    course_ids = await _visible_course_ids(current_user, db)
+    if not course_ids:
+        return {"success": True, "data": []}
+
+    rows = await db.execute(
+        select(
+            Quiz.id,
+            Quiz.course_id,
+            Quiz.title,
+            Quiz.description,
+            Quiz.time_limit,
+            Quiz.pass_score,
+            Quiz.is_ai_generated,
+            Course.title,
+            func.count(QuizQuestion.id),
+        )
+        .join(Course, Course.id == Quiz.course_id)
+        .outerjoin(QuizQuestion, QuizQuestion.quiz_id == Quiz.id)
+        .where(Quiz.course_id.in_(course_ids))
+        .group_by(Quiz.id, Course.title)
+        .order_by(Quiz.created_at.desc())
+    )
+
+    data = [
+        {
+            "id": str(quiz_id),
+            "courseId": str(course_id),
+            "courseTitle": course_title,
+            "title": title,
+            "description": description,
+            "timeLimit": time_limit,
+            "passScore": pass_score,
+            "isAiGenerated": is_ai_generated,
+            "questionCount": int(question_count),
+        }
+        for (
+            quiz_id,
+            course_id,
+            title,
+            description,
+            time_limit,
+            pass_score,
+            is_ai_generated,
+            course_title,
+            question_count,
+        ) in rows.all()
+    ]
+    return {"success": True, "data": data}
+
+
+@router.get("/results")
+async def get_my_results(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """All quiz submissions of this user (with quiz/course titles) in one request."""
+    course_ids = await _visible_course_ids(current_user, db)
+    if not course_ids:
+        return {"success": True, "data": []}
+
+    question_counts = (
+        select(QuizQuestion.quiz_id.label("quiz_id"), func.count(QuizQuestion.id).label("total"))
+        .group_by(QuizQuestion.quiz_id)
+        .subquery()
+    )
+
+    rows = await db.execute(
+        select(QuizSubmission, Quiz, Course, question_counts.c.total)
+        .join(Quiz, Quiz.id == QuizSubmission.quiz_id)
+        .join(Course, Course.id == Quiz.course_id)
+        .outerjoin(question_counts, question_counts.c.quiz_id == Quiz.id)
+        .where(
+            QuizSubmission.user_id == current_user.id,
+            Quiz.course_id.in_(course_ids),
+        )
+        .order_by(QuizSubmission.submitted_at.desc())
+    )
+
+    data = [
+        {
+            "id": submission.id,
+            "quizId": str(quiz.id),
+            "quizTitle": quiz.title,
+            "courseId": str(course.id),
+            "courseTitle": course.title,
+            "score": float(submission.score or 0),
+            "passed": bool(submission.passed),
+            "submittedAt": submission.submitted_at.isoformat() if submission.submitted_at else None,
+            "totalQuestions": int(total) if total is not None else None,
+        }
+        for submission, quiz, course, total in rows.all()
+    ]
+    return {"success": True, "data": data}
 
 
 @router.get("/notifications")

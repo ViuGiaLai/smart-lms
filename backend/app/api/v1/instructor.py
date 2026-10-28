@@ -63,7 +63,7 @@ async def get_instructor_dashboard(
     published_count = sum(1 for course in courses if course.status == CourseStatus.published)
 
     # 2. Số lượng học viên đã ghi danh vào các khóa của giảng viên.
-    # Dùng chung định nghĩa với trang /instructor/students (enrollment ∪ progress)
+    # Dùng chung định nghĩa với trang /instructor/students (chỉ bảng enrollments)
     # để hai nơi không hiển thị hai con số khác nhau.
     from app.services.enrollment_service import unique_students_for_courses
 

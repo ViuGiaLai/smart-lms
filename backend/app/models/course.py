@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     Enum,
     ForeignKey,
@@ -42,6 +43,10 @@ class Course(Base):
     )
     category: Mapped[str | None] = mapped_column(String(255), nullable=True)
     level: Mapped[str | None] = mapped_column(String(50), nullable=True)  # beginner / intermediate / advanced
+    # Mục tiêu/chuẩn đầu ra và yêu cầu tiên quyết do giảng viên nhập.
+    # Lưu dạng mảng chuỗi thay vì nối vào description để hiển thị/nhận sửa độc lập.
+    outcomes: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    prerequisites: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

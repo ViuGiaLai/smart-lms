@@ -9,7 +9,6 @@ from fastapi import HTTPException, status
 
 from app.models.course import Course, CourseStatus
 from app.models.enrollment import Enrollment
-from app.models.lesson import Lesson
 from app.models.progress import Progress
 from app.models.user import User, UserRole
 
@@ -61,66 +60,44 @@ async def require_course_access(
 
 
 async def enrolled_course_ids(db: AsyncSession, user_id: int) -> set[int]:
-    """Tập khóa học đã ghi danh: bảng enrollments ∪ suy ra từ progress cũ."""
-    enroll_res = await db.execute(
+    """Tập khóa học đã ghi danh — CHỈ đọc bảng enrollments.
+
+    `enrollments` là nguồn sự thật duy nhất. Migration 0007 đã backfill các cặp
+    (user, course) cũ vốn chỉ tồn tại trong `progress`; mọi thao tác ghi tiến độ
+    đều gọi `ensure_enrollment` để không sinh dữ liệu lệch về sau.
+    """
+    result = await db.execute(
         select(Enrollment.course_id).where(Enrollment.user_id == user_id)
     )
-    ids: set[int] = set(enroll_res.scalars().all())
-
-    progress_res = await db.execute(
-        select(Lesson.course_id)
-        .join(Progress, Progress.lesson_id == Lesson.id)
-        .where(Progress.user_id == user_id)
-        .distinct()
-    )
-    ids |= set(progress_res.scalars().all())
-    return ids
+    return set(result.scalars().all())
 
 
 async def student_counts_by_course(db: AsyncSession, course_ids: list[int]) -> dict[int, int]:
-    """Số học viên duy nhất theo khóa (enrollment ∪ progress)."""
+    """Số học viên duy nhất theo khóa, đọc từ bảng enrollments."""
     if not course_ids:
         return {}
 
-    pairs: set[tuple[int, int]] = set()
-
-    enroll_res = await db.execute(
-        select(Enrollment.course_id, Enrollment.user_id).where(
-            Enrollment.course_id.in_(course_ids)
-        )
+    result = await db.execute(
+        select(Enrollment.course_id, func.count(func.distinct(Enrollment.user_id)))
+        .where(Enrollment.course_id.in_(course_ids))
+        .group_by(Enrollment.course_id)
     )
-    pairs.update((row[0], row[1]) for row in enroll_res.all())
-
-    progress_res = await db.execute(
-        select(Lesson.course_id, Progress.user_id)
-        .join(Progress, Progress.lesson_id == Lesson.id)
-        .where(Lesson.course_id.in_(course_ids))
-        .distinct()
-    )
-    pairs.update((row[0], row[1]) for row in progress_res.all())
-
     counts: dict[int, int] = {cid: 0 for cid in course_ids}
-    for course_id, _user_id in pairs:
-        counts[course_id] = counts.get(course_id, 0) + 1
+    for course_id, total in result.all():
+        counts[course_id] = int(total)
     return counts
 
 
 async def unique_students_for_courses(db: AsyncSession, course_ids: list[int]) -> int:
+    """Số học viên duy nhất trong các khóa, đọc từ bảng enrollments."""
     if not course_ids:
         return 0
-    pairs: set[int] = set()
-    enroll_res = await db.execute(
-        select(Enrollment.user_id).where(Enrollment.course_id.in_(course_ids)).distinct()
+    result = await db.execute(
+        select(func.count(func.distinct(Enrollment.user_id))).where(
+            Enrollment.course_id.in_(course_ids)
+        )
     )
-    pairs.update(enroll_res.scalars().all())
-    progress_res = await db.execute(
-        select(Progress.user_id)
-        .join(Lesson, Lesson.id == Progress.lesson_id)
-        .where(Lesson.course_id.in_(course_ids))
-        .distinct()
-    )
-    pairs.update(progress_res.scalars().all())
-    return len(pairs)
+    return int(result.scalar() or 0)
 
 
 def compute_streak(activity_dates: set[date], today: date | None = None) -> int:

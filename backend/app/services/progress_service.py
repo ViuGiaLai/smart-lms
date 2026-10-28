@@ -9,6 +9,7 @@ from sqlalchemy import select, func
 from app.models.lesson import Lesson
 from app.models.progress import Progress
 from app.schemas.progress import ProgressUpdate, CourseSummary
+from app.services.enrollment_service import ensure_enrollment
 
 
 class ProgressService:
@@ -24,8 +25,13 @@ class ProgressService:
         """Insert or update progress record for user/lesson pair."""
         # Verify lesson exists
         lesson_result = await db.execute(select(Lesson).where(Lesson.id == lesson_id))
-        if not lesson_result.scalar_one_or_none():
+        lesson = lesson_result.scalar_one_or_none()
+        if not lesson:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
+
+        # Ghi tiến độ cũng có nghĩa học viên đã ghi danh khóa học: bảo đảm
+        # `enrollments` là nguồn sự thật duy nhất, không suy ra từ `progress`.
+        await ensure_enrollment(db, user_id, lesson.course_id)
 
         result = await db.execute(
             select(Progress).where(

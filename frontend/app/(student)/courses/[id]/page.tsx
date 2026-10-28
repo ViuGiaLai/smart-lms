@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -61,6 +62,8 @@ interface CourseDetail {
   };
   level?: string;
   rating?: number;
+  outcomes?: string[];
+  prerequisites?: string[];
   lessons?: LessonDetail[];
 }
 
@@ -107,6 +110,8 @@ export default function CourseDetailPage() {
             category: apiCourse.category || { name: 'Chưa phân loại' },
             level: apiCourse.level || 'Chưa phân loại',
             rating: apiCourse.rating ?? undefined,
+            outcomes: apiCourse.outcomes || [],
+            prerequisites: apiCourse.prerequisites || [],
             lessons: apiCourse.lessons || [],
           });
         }
@@ -242,30 +247,39 @@ export default function CourseDetailPage() {
               </div>
             </div>
 
-            {/* Mục tiêu học tập */}
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs space-y-4">
-              <h2 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">
-                Bạn sẽ đạt được gì sau khóa học?
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-700">
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  <span>Làm chủ nền tảng kiến thức và các chuyên đề thực tiễn của {course.title}.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  <span>Thực hành trực tiếp qua các bài học, bài tập tình huống và tài liệu chuyên sâu.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  <span>Học tập tương tác 24/7 cùng Trợ lý Gia sư AI thông minh bám sát nội dung bài học.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                  <span>Làm bài kiểm tra trắc nghiệm AI để củng cố nhận thức và đánh giá sự tiến bộ.</span>
-                </div>
+            {/* Mục tiêu học tập & Yêu cầu tiên quyết (dữ liệu giảng viên nhập trong DB) */}
+            {((course.outcomes?.length ?? 0) > 0 || (course.prerequisites?.length ?? 0) > 0) && (
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs space-y-4">
+                {(course.outcomes?.length ?? 0) > 0 && (
+                  <>
+                    <h2 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">
+                      Bạn sẽ đạt được gì sau khóa học?
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-700">
+                      {(course.outcomes ?? []).map((item, idx) => (
+                        <div key={idx} className="flex items-start gap-2.5">
+                          <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                          <span>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {(course.prerequisites?.length ?? 0) > 0 && (
+                  <div className="pt-4 border-t border-slate-100 space-y-2">
+                    <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">
+                      Yêu cầu tiên quyết
+                    </h3>
+                    <ul className="list-disc pl-5 text-xs text-slate-700 space-y-1">
+                      {(course.prerequisites ?? []).map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
             {/* Giáo trình bài giảng (Curriculum) */}
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs space-y-4">
@@ -322,10 +336,12 @@ export default function CourseDetailPage() {
               {/* Thumbnail */}
               <div className="aspect-video w-full rounded-2xl overflow-hidden bg-slate-100 relative group">
                 {course.thumbnail ? (
-                  <img
+                  <Image
                     src={course.thumbnail}
                     alt={course.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 420px"
+                    className="object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600">

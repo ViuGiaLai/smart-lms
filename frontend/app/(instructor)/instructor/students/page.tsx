@@ -25,6 +25,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { StatCard } from '@/components/ui/stat-card';
 import { EmptyState, ErrorState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/course/ProgressBar';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
 interface StudentRow {
   studentId: string;
@@ -106,13 +107,7 @@ export default function InstructorStudentsPage() {
   }, [data.students, courseFilter, searchQuery]);
 
   if (!isAuthorized) {
-    return (
-      <div className="flex min-h-screen items-center justify-center font-sans">
-        <div className="animate-pulse text-xs font-semibold text-muted-foreground">
-          Đang xác thực quyền Giảng viên...
-        </div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

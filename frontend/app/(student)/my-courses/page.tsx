@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProgressBar } from '@/components/course/ProgressBar';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
 export default function MyCoursesPage() {
   const { isAuthorized } = useRoleGuard(['student']);
@@ -37,11 +38,7 @@ export default function MyCoursesPage() {
   }, [authLoading, isAuthorized]);
 
   if (!isAuthorized || authLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-        Đang kiểm tra quyền học viên...
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

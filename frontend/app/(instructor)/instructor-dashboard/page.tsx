@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   PlusCircle,
   Sparkles,
@@ -19,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
 export default function InstructorDashboardPage() {
   const { isAuthorized } = useRoleGuard(['instructor', 'admin']);
@@ -80,13 +82,7 @@ export default function InstructorDashboardPage() {
   }, [isAuthorized, authLoading]);
 
   if (!isAuthorized || authLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-pulse text-xs font-semibold text-muted-foreground">
-          Đang xác thực quyền Giảng viên...
-        </div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (
@@ -262,10 +258,12 @@ export default function InstructorDashboardPage() {
                     className="group flex flex-col overflow-hidden transition-colors hover:border-ring/40"
                   >
                     <div className="relative aspect-video w-full overflow-hidden bg-muted">
-                      <img
-                        src={c.thumbnail}
+                      <Image
+                        src={c.thumbnail || 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&fit=crop'}
                         alt={c.title}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
                       />
                       <div className="absolute left-2.5 top-2.5">
                         <Badge variant="secondary" className="text-[10px]">

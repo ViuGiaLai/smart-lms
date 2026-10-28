@@ -226,10 +226,12 @@ export default function HomePage() {
               {/* Bên trái: Video bài giảng */}
               <div className="lg:col-span-2 rounded-2xl bg-slate-950 border border-slate-800 p-4 flex flex-col justify-between min-h-[260px] relative overflow-hidden group">
                 <div className="aspect-video w-full rounded-xl bg-slate-900 flex items-center justify-center relative overflow-hidden">
-                  <img
+                  <Image
                     src="https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&fit=crop"
                     alt="Video Demo"
-                    className="w-full h-full object-cover opacity-60"
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 60vw"
+                    className="object-cover opacity-60"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent" />
                   <div className="w-14 h-14 rounded-full bg-indigo-600/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform cursor-pointer">
@@ -367,10 +369,12 @@ export default function HomePage() {
               >
                 <div>
                   <div className="relative aspect-video w-full bg-slate-100 overflow-hidden">
-                    <img
+                    <Image
                       src={course.thumbnail || 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&fit=crop'}
                       alt={course.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute top-3 left-3">
                       <span className="text-[10px] font-bold bg-white/90 backdrop-blur-sm text-slate-800 px-2.5 py-1 rounded-full shadow-xs">

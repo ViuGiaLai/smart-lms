@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
 export default function StudentProgressPage() {
   const { isAuthorized } = useRoleGuard(['student']);
@@ -87,13 +88,7 @@ export default function StudentProgressPage() {
   ];
 
   if (!isAuthorized || authLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-pulse text-xs font-semibold text-muted-foreground">
-          Đang kiểm tra quyền truy cập học viên...
-        </div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   BookOpen,
@@ -31,6 +31,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
 
 interface AuthUser {
   id?: string;
@@ -67,57 +68,27 @@ export function DashboardSidebar({
   onToggleCollapse,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
+  const currentUser = user as AuthUser | null;
   const [currentHash, setCurrentHash] = useState('');
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [currentSearch, setCurrentSearch] = useState('');
 
-  const loadUser = () => {
-    if (typeof window === 'undefined') return;
-    try {
-      const stored = localStorage.getItem('currentUser');
-      if (stored) {
-        setCurrentUser(JSON.parse(stored));
-      }
-    } catch {
-      setCurrentUser(null);
-    }
-
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      import('@/lib/api').then(({ authApi }) => {
-        authApi.getProfile()
-          .then((res) => {
-            if (res.data?.data) {
-              const freshUser = res.data.data;
-              setCurrentUser(freshUser);
-              localStorage.setItem('currentUser', JSON.stringify(freshUser));
-            }
-          })
-          .catch(() => {});
-      });
-    }
-  };
-
+  // Keep navigation highlighting in sync with the URL hash (e.g. #courses).
+  // Dùng useAuth thay vì tự gọi /auth/profile mỗi lần sidebar mount — bớt 1 request.
   useEffect(() => {
-    loadUser();
-    const handleAuth = () => loadUser();
-    window.addEventListener('auth-change', handleAuth);
-    window.addEventListener('storage', handleAuth);
-    return () => {
-      window.removeEventListener('auth-change', handleAuth);
-      window.removeEventListener('storage', handleAuth);
+    const sync = () => {
+      setCurrentHash(window.location.hash);
+      setCurrentSearch(window.location.search.replace(/^\?/, ''));
     };
-  }, []);
-
-  // pathname alone omits ?tab=... and #..., which previously highlighted the
-  // generic admin item even when the user had navigated to a specific section.
-  useEffect(() => {
-    const syncHash = () => setCurrentHash(window.location.hash);
-    syncHash();
-    window.addEventListener('hashchange', syncHash);
-    return () => window.removeEventListener('hashchange', syncHash);
-  }, [pathname, searchParams]);
+    sync();
+    window.addEventListener('hashchange', sync);
+    window.addEventListener('popstate', sync);
+    return () => {
+      window.removeEventListener('hashchange', sync);
+      window.removeEventListener('popstate', sync);
+    };
+  }, [pathname]);
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
@@ -320,8 +291,8 @@ export function DashboardSidebar({
     const isActive = hrefHash
       ? isExactPath && currentHash === `#${hrefHash}`
       : hasQuery
-        ? isExactPath && searchParams.toString() === hrefQuery
-        : (isExactPath || isChildPage) && !searchParams.toString() && !currentHash;
+        ? isExactPath && currentSearch === hrefQuery
+        : (isExactPath || isChildPage) && !currentSearch && !currentHash;
 
     const navButton = (
       <Button

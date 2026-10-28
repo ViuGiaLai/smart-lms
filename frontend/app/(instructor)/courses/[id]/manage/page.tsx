@@ -40,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
 interface LessonItem {
   id: string | number;
@@ -489,11 +490,7 @@ export default function CourseManagePage() {
   };
 
   if (!isAuthorized) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-xs font-semibold text-muted-foreground">
-        Đang xác thực quyền Giảng viên...
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   const embedUrl = getYouTubeEmbedUrl(newVideoUrl);

@@ -3,15 +3,15 @@
 import Link from 'next/link';
 import { Award, BookOpen, ClipboardCheck, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { coursesApi, quizApi } from '@/lib/api';
-import { Enrollment } from '@/types';
+import { studentApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
-type QuizItem = { id: number; title: string; description?: string; questions?: unknown[]; courseId: string; courseTitle: string };
+type QuizItem = { id: string | number; title: string; description?: string; questionCount?: number; questions?: unknown[]; courseId: string; courseTitle: string };
 
 export default function QuizzesPage() {
   const { isAuthorized } = useRoleGuard(['student']);
@@ -24,17 +24,8 @@ export default function QuizzesPage() {
     setLoading(true);
     setError('');
     try {
-      const enrolledResponse = await coursesApi.getEnrolled();
-      const enrollments: Enrollment[] = enrolledResponse.data?.data || [];
-      const results = await Promise.all(enrollments.map(async (enrollment) => {
-        const response = await quizApi.listByCourse(enrollment.courseId);
-        return (response.data || []).map((quiz: any) => ({
-          ...quiz,
-          courseId: enrollment.courseId,
-          courseTitle: enrollment.course?.title || `Khóa học #${enrollment.courseId}`,
-        }));
-      }));
-      setQuizzes(results.flat());
+      const res = await studentApi.getQuizzes();
+      setQuizzes(res.data?.data || []);
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Không thể tải bài kiểm tra của các khóa học đã đăng ký.');
     } finally {
@@ -47,11 +38,7 @@ export default function QuizzesPage() {
   }, [authLoading, isAuthorized]);
 
   if (!isAuthorized || authLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-        Đang kiểm tra quyền học viên...
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (
@@ -112,7 +99,7 @@ export default function QuizzesPage() {
                     <Award className="h-5 w-5 shrink-0 text-purple-500" />
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground">
-                    {quiz.questions?.length || 0} câu hỏi
+                    {quiz.questionCount ?? quiz.questions?.length ?? 0} câu hỏi
                   </p>
                   <Button asChild variant="default" size="sm" className="mt-4">
                     <Link href={`/quiz/${quiz.id}?courseId=${quiz.courseId}`}>

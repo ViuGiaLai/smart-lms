@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.cache import cache_get_json, cache_set_json, invalidate_course_caches
 from app.core.database import get_db
@@ -94,6 +94,9 @@ def _format_course_dict(course: Course, student_progress: float | None = None, t
             "name": course.category or "Chưa phân loại",
             "slug": slugify(course.category) or "chua-phan-loai",
         },
+        # Mục tiêu/chuẩn đầu ra và yêu cầu tiên quyết (dữ liệu giảng viên nhập).
+        "outcomes": list(course.outcomes or []),
+        "prerequisites": list(course.prerequisites or []),
         "isEnrolled": is_enrolled or student_progress is not None,
         "progress": student_progress if student_progress is not None else 0,
     }
@@ -206,7 +209,9 @@ async def get_enrolled_courses(
 
     stmt = (
         select(Course)
-        .options(selectinload(Course.instructor), selectinload(Course.lessons))
+        # instructor là quan hệ many-to-one: JOIN trong cùng truy vấn thay vì
+        # thêm 1 round-trip riêng (mỗi round-trip tới DB ở xa tốn ~100-200 ms).
+        .options(joinedload(Course.instructor), selectinload(Course.lessons))
         .where(
             Course.id.in_(course_ids),
             Course.status == CourseStatus.published,
@@ -230,6 +235,9 @@ async def get_enrolled_courses(
         )
     )
     enroll_dates = {row[0]: row[1] for row in enroll_date_res.all()}
+
+    # Số học viên theo khóa lấy từ bảng enrollments (nguồn sự thật duy nhất).
+    student_counts = await student_counts_by_course(db, course_ids)
 
     enrollments = []
     for c in courses:
@@ -255,7 +263,12 @@ async def get_enrolled_courses(
             "id": f"enroll-{c.id}-{user_id}",
             "userId": str(user_id),
             "courseId": str(c.id),
-            "course": _format_course_dict(c, student_progress=pct, is_enrolled=True),
+            "course": _format_course_dict(
+                c,
+                student_progress=pct,
+                total_students=student_counts.get(c.id, 0),
+                is_enrolled=True,
+            ),
             "progress": pct,
             "completedLessons": completed_count,
             "totalLessons": total_l,
@@ -284,9 +297,10 @@ async def search_courses(
     )
     result = await db.execute(stmt)
     courses = result.scalars().all()
+    counts = await student_counts_by_course(db, [c.id for c in courses])
     return {
         "success": True,
-        "data": [_format_course_dict(c) for c in courses],
+        "data": [_format_course_dict(c, total_students=counts.get(c.id, 0)) for c in courses],
     }
 
 
@@ -300,8 +314,8 @@ async def _can_view_answer_key(db: AsyncSession, course: Course, user: User | No
     if role == UserRole.admin.value or course.instructor_id == user.id:
         return True
     if role == UserRole.student.value:
-        # Dùng chung định nghĩa "đã ghi danh" (enrollment ∪ suy ra từ progress)
-        # với trang /courses/enrolled để học viên cũ vẫn thấy được đáp án.
+        # Dùng chung định nghĩa "đã ghi danh" (chỉ bảng enrollments) với trang
+        # /courses/enrolled; dữ liệu cũ đã được migration 0007 backfill.
         return course.id in await enrolled_course_ids(db, user.id)
     return False
 
@@ -315,7 +329,14 @@ async def list_course_categories(
 
     Dùng cho datalist gợi ý ở trang tạo khóa học thay vì hardcode danh sách
     ở frontend. Giảng viên vẫn có thể nhập danh mục mới.
+
+    Dữ liệu công khai, ít thay đổi -> cache ngắn (60s) và xoá khi có thao tác ghi.
     """
+    cache_key = f"courses:categories:{status}"
+    cached = await cache_get_json(cache_key)
+    if cached is not None:
+        return cached
+
     total = func.count(Course.id)
     conditions = [Course.category.isnot(None), Course.category != ""]
     if status != "all":
@@ -326,13 +347,15 @@ async def list_course_categories(
         .group_by(Course.category)
         .order_by(total.desc(), Course.category.asc())
     )
-    return {
+    payload = {
         "success": True,
         "data": [
             {"name": name, "slug": slugify(name) or f"danh-muc-{index}", "count": count}
             for index, (name, count) in enumerate(result.all(), start=1)
         ],
     }
+    await cache_set_json(cache_key, payload, ttl=60)
+    return payload
 
 
 @router.get("/slug/{slug}")
@@ -382,7 +405,8 @@ async def get_course(
 
     include_answers = await _can_view_answer_key(db, course, current_user)
 
-    data = _format_course_dict(course)
+    student_counts = await student_counts_by_course(db, [course.id])
+    data = _format_course_dict(course, total_students=student_counts.get(course.id, 0))
     data["lessons"] = [
         {
             "id": str(lesson.id),
@@ -540,11 +564,16 @@ async def mark_lesson_complete(
     Yeu cau dang nhap: khong con ghi tien do cho user dau tien/id=1 khi thieu token.
     """
     from app.models.progress import Progress
+    from app.services.enrollment_service import ensure_enrollment
     from datetime import datetime, timezone
 
     payload = payload or {}
     user_id = current_user.id
     watched_seconds = payload.get("watchedSeconds", 0)
+
+    # Hoàn thành bài học cũng là một hình thức ghi danh: giữ enrollments là
+    # nguồn sự thật duy nhất.
+    await ensure_enrollment(db, user_id, course_id)
 
     p_stmt = select(Progress).where(Progress.user_id == user_id, Progress.lesson_id == lesson_id)
     p_res = await db.execute(p_stmt)

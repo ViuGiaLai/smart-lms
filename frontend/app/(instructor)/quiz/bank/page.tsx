@@ -33,6 +33,7 @@ import {
 import { PageHeader } from '@/components/ui/page-header';
 import { StatCard } from '@/components/ui/stat-card';
 import { EmptyState } from '@/components/ui/empty-state';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
 interface QuestionItem {
   id: number;
@@ -121,13 +122,7 @@ export default function QuizBankPage() {
   const totalQuestionsSum = quizzes.reduce((acc, curr) => acc + (curr.totalQuestions || 0), 0);
 
   if (!isAuthorized) {
-    return (
-      <div className="flex min-h-screen items-center justify-center font-sans">
-        <div className="animate-pulse text-xs font-semibold text-muted-foreground">
-          Đang xác thực quyền truy cập Ngân hàng đề thi...
-        </div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

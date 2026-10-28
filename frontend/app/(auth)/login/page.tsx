@@ -17,6 +17,10 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>
 
+// Nút đăng nhập nhanh chỉ hiển thị khi được bật rõ ràng lúc build.
+// Backend cũng kiểm tra ALLOW_DEMO_LOGIN nên đây chỉ là lớp UI.
+const ALLOW_DEMO_LOGIN = process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === 'true'
+
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
@@ -118,46 +122,48 @@ export default function LoginPage() {
             Đăng nhập để trải nghiệm hệ thống và Trợ lý AI
           </p>
 
-          {/* Khối Tài khoản Trải nghiệm Nhanh */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 mb-6">
-            <p className="text-[11px] font-semibold text-slate-600 mb-2 uppercase tracking-wider text-center">
-              Chọn nhanh tài khoản thử nghiệm:
-            </p>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleQuickDemoLogin('admin')}
-                className="py-1.5 px-2 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 font-medium transition flex flex-col items-center gap-0.5 shadow-2xs"
-                title="Đăng nhập nhanh tài khoản Quản trị viên"
-              >
-                <ShieldCheck className="w-4 h-4 text-rose-600" />
-                <span className="font-bold text-[11px]">Admin</span>
-                <span className="text-[9px] text-slate-400">Quản trị viên</span>
-              </button>
+          {/* Khối Tài khoản Trải nghiệm Nhanh (chỉ bật khi ALLOW_DEMO_LOGIN=true) */}
+          {ALLOW_DEMO_LOGIN && (
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 mb-6">
+              <p className="text-[11px] font-semibold text-slate-600 mb-2 uppercase tracking-wider text-center">
+                Chọn nhanh tài khoản thử nghiệm:
+              </p>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('admin')}
+                  className="py-1.5 px-2 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 font-medium transition flex flex-col items-center gap-0.5 shadow-2xs"
+                  title="Đăng nhập nhanh tài khoản Quản trị viên"
+                >
+                  <ShieldCheck className="w-4 h-4 text-rose-600" />
+                  <span className="font-bold text-[11px]">Admin</span>
+                  <span className="text-[9px] text-slate-400">Quản trị viên</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleQuickDemoLogin('instructor')}
-                className="py-1.5 px-2 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 font-medium transition flex flex-col items-center gap-0.5 shadow-2xs"
-                title="Đăng nhập nhanh tài khoản Giảng viên"
-              >
-                <GraduationCap className="w-4 h-4 text-emerald-600" />
-                <span className="font-bold text-[11px]">Giảng viên</span>
-                <span className="text-[9px] text-slate-400">Giảng viên</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('instructor')}
+                  className="py-1.5 px-2 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 font-medium transition flex flex-col items-center gap-0.5 shadow-2xs"
+                  title="Đăng nhập nhanh tài khoản Giảng viên"
+                >
+                  <GraduationCap className="w-4 h-4 text-emerald-600" />
+                  <span className="font-bold text-[11px]">Giảng viên</span>
+                  <span className="text-[9px] text-slate-400">Giảng viên</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleQuickDemoLogin('student')}
-                className="py-1.5 px-2 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 font-medium transition flex flex-col items-center gap-0.5 shadow-2xs"
-                title="Đăng nhập nhanh tài khoản Học viên"
-              >
-                <BookOpen className="w-4 h-4 text-indigo-600" />
-                <span className="font-bold text-[11px]">Học viên</span>
-                <span className="text-[9px] text-slate-400">Học viên</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoLogin('student')}
+                  className="py-1.5 px-2 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 font-medium transition flex flex-col items-center gap-0.5 shadow-2xs"
+                  title="Đăng nhập nhanh tài khoản Học viên"
+                >
+                  <BookOpen className="w-4 h-4 text-indigo-600" />
+                  <span className="font-bold text-[11px]">Học viên</span>
+                  <span className="text-[9px] text-slate-400">Học viên</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {serverError && (
             <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl mb-6 text-xs">

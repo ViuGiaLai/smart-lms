@@ -2,15 +2,15 @@
 
 import { Award, CheckCircle2, Clock3, RefreshCw, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { coursesApi, quizApi } from '@/lib/api';
-import { Enrollment } from '@/types';
+import { studentApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
-type ResultItem = { id: number; quizTitle: string; courseTitle: string; score: number; passed: boolean; submittedAt?: string; totalQuestions?: number };
+type ResultItem = { id: number | string; quizTitle: string; courseTitle: string; score: number; passed: boolean; submittedAt?: string; totalQuestions?: number };
 
 export default function ResultsPage() {
   const { isAuthorized } = useRoleGuard(['student']);
@@ -22,26 +22,8 @@ export default function ResultsPage() {
   const loadResults = async () => {
     setLoading(true); setError('');
     try {
-      const response = await coursesApi.getEnrolled();
-      const enrollments: Enrollment[] = response.data?.data || [];
-      const grouped = await Promise.all(enrollments.map(async (enrollment) => {
-        const quizzesResponse = await quizApi.listByCourse(enrollment.courseId);
-        const quizzes = quizzesResponse.data || [];
-        const nested = await Promise.all(quizzes.map(async (quiz: any) => {
-          const submissionsResponse = await quizApi.getSubmissions(quiz.id);
-          return (submissionsResponse.data || []).map((submission: any) => ({
-            id: submission.id,
-            quizTitle: quiz.title,
-            courseTitle: enrollment.course?.title || `Khóa học #${enrollment.courseId}`,
-            score: Number(submission.score || 0),
-            passed: Boolean(submission.passed),
-            submittedAt: submission.submitted_at,
-            totalQuestions: submission.total_questions,
-          }));
-        }));
-        return nested.flat();
-      }));
-      setResults(grouped.flat().sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || ''))));
+      const response = await studentApi.getResults();
+      setResults(response.data?.data || []);
     } catch (err: any) {
       setError(err?.response?.data?.detail || 'Không thể tải kết quả học tập.');
     } finally { setLoading(false); }
@@ -50,11 +32,7 @@ export default function ResultsPage() {
   useEffect(() => { if (isAuthorized && !authLoading) void loadResults(); }, [authLoading, isAuthorized]);
 
   if (!isAuthorized || authLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-        Đang kiểm tra quyền học viên...
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 
 type Section = 'overview' | 'users' | 'courses' | 'ai';
 type ServiceStatus = 'online' | 'offline';
@@ -90,7 +91,9 @@ export default function AdminDashboardPage() {
     ai: ['Giám sát AI & dữ liệu', 'Trạng thái được kiểm tra từ backend, PostgreSQL/pgvector và AI Service.'],
   };
 
-  if (!isAuthorized || authLoading) return <div className="grid min-h-[60vh] place-items-center text-sm font-medium text-muted-foreground">Đang kiểm tra quyền truy cập…</div>;
+  if (!isAuthorized || authLoading) {
+    return <PageSkeleton />;
+  }
 
   return (
     <main className="mx-auto max-w-[1600px] space-y-6 p-5 sm:p-7 lg:p-8">

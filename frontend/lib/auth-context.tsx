@@ -1,6 +1,13 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useSyncExternalStore,
+  ReactNode,
+} from 'react'
 
 export interface AuthUser {
   id: string
@@ -23,94 +30,100 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+const AUTH_CHANGE_EVENT = 'auth-change'
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const stored = localStorage.getItem('currentUser')
-        const token = localStorage.getItem('accessToken')
-        if (stored && token) {
-          const parsed = JSON.parse(stored)
-          setUser(parsed)
-        }
-      } catch {
-        setUser(null)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    loadUser()
-
-    const handleAuthChange = () => {
-      const stored = localStorage.getItem('currentUser')
-      const token = localStorage.getItem('accessToken')
-      if (stored && token) {
-        try {
-          setUser(JSON.parse(stored))
-        } catch {
-          setUser(null)
-        }
-      } else {
-        setUser(null)
-      }
-    }
-
-    window.addEventListener('auth-change', handleAuthChange)
-    window.addEventListener('storage', handleAuthChange)
-
-    return () => {
-      window.removeEventListener('auth-change', handleAuthChange)
-      window.removeEventListener('storage', handleAuthChange)
-    }
-  }, [])
-
-  const login = (userData: AuthUser, accessToken: string, refreshToken: string) => {
-    localStorage.setItem('accessToken', accessToken)
-    localStorage.setItem('refreshToken', refreshToken)
-    localStorage.setItem('currentUser', JSON.stringify(userData))
-    setUser(userData)
-    window.dispatchEvent(new Event('auth-change'))
+/** Subscribe to every source that can change the stored session. */
+function subscribeToAuth(callback: () => void) {
+  window.addEventListener(AUTH_CHANGE_EVENT, callback)
+  window.addEventListener('storage', callback)
+  return () => {
+    window.removeEventListener(AUTH_CHANGE_EVENT, callback)
+    window.removeEventListener('storage', callback)
   }
+}
 
-  const logout = () => {
+/**
+ * Snapshot is a primitive string so `useSyncExternalStore` can compare it
+ * safely and re-render synchronously right after hydration. Reads localStorage
+ * directly, which removes the previous "checking permission" flash.
+ */
+function getAuthSnapshot(): string {
+  try {
+    const token = localStorage.getItem('accessToken')
+    const rawUser = localStorage.getItem('currentUser')
+    return `${token ? '1' : '0'}::${rawUser || ''}`
+  } catch {
+    return '0::'
+  }
+}
+
+function getServerAuthSnapshot(): string {
+  return '0::'
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const snapshot = useSyncExternalStore(
+    subscribeToAuth,
+    getAuthSnapshot,
+    getServerAuthSnapshot
+  )
+
+  const user = useMemo<AuthUser | null>(() => {
+    const rawUser = snapshot.slice(snapshot.indexOf('::') + 2)
+    if (!rawUser) return null
+    try {
+      return JSON.parse(rawUser) as AuthUser
+    } catch {
+      return null
+    }
+  }, [snapshot])
+
+  const login = useCallback(
+    (userData: AuthUser, accessToken: string, refreshToken: string) => {
+      localStorage.setItem('accessToken', accessToken)
+      localStorage.setItem('refreshToken', refreshToken)
+      localStorage.setItem('currentUser', JSON.stringify(userData))
+      window.dispatchEvent(new Event(AUTH_CHANGE_EVENT))
+    },
+    []
+  )
+
+  const logout = useCallback(() => {
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('currentUser')
-    setUser(null)
-    window.dispatchEvent(new Event('auth-change'))
-  }
+    window.dispatchEvent(new Event(AUTH_CHANGE_EVENT))
+  }, [])
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const { authApi } = await import('@/lib/api')
       const res = await authApi.getProfile()
       const userData = res.data?.data || res.data
       if (userData) {
         localStorage.setItem('currentUser', JSON.stringify(userData))
-        setUser(userData)
+        window.dispatchEvent(new Event(AUTH_CHANGE_EVENT))
       }
     } catch {
-      // Keep existing user if refresh fails
+      // Keep the existing user when the refresh request fails.
     }
-  }
+  }, [])
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        isAuthenticated: !!user,
-        login,
-        logout,
-        refreshUser,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      // Session is read synchronously from localStorage, so there is no
+      // asynchronous loading phase anymore.
+      isLoading: false,
+      isAuthenticated: !!user,
+      login,
+      logout,
+      refreshUser,
+    }),
+    [user, login, logout, refreshUser]
   )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

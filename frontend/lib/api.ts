@@ -256,6 +256,13 @@ export const studentApi = {
   getDashboardStats: () =>
     api.get('/api/v1/student/dashboard'),
 
+  // Tổng hợp 1 request: thay cho vòng lặp enrollments -> quizzes -> submissions
+  getQuizzes: () =>
+    api.get('/api/v1/student/quizzes'),
+
+  getResults: () =>
+    api.get('/api/v1/student/results'),
+
   getNotifications: () =>
     api.get('/api/v1/student/notifications'),
 

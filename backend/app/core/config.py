@@ -39,13 +39,23 @@ class Settings(BaseSettings):
     # ── Database ───────
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/smart_lms"
     DATABASE_ECHO: bool = False
+    # pool_pre_ping chạy "SELECT 1" mỗi lần mượn connection: với DB ở xa (VN→SG)
+    # tốn thêm ~1 round-trip (~200 ms/request). Đo được 503 → 240 ms khi tắt.
+    # Bù lại bằng pool_recycle để loại connection cũ trước khi server/pooler đóng.
+    DATABASE_POOL_PRE_PING: bool = True
+    DATABASE_POOL_RECYCLE: int = 240
 
     # ── Security ───────
     SECRET_KEY: str = "changeme-at-least-32-characters-long!!"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    SEED_SECRET_KEY: str = "smartlms_super_admin_seed_secure_987654321"
+    # Không đặt giá trị mặc định trong mã nguồn: secret dùng cho seed script phải
+    # được cấp qua biến môi trường (SEED_SECRET_KEY) và không commit lên git.
+    SEED_SECRET_KEY: str = ""
+    # Đăng nhập nhanh theo vai trò (không cần mật khẩu) chỉ dành cho demo nội bộ.
+    # Mặc định TẮT; production bắt buộc để false.
+    ALLOW_DEMO_LOGIN: bool = False
 
     # ── Redis / Celery ─
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -93,6 +103,16 @@ class Settings(BaseSettings):
             logger.warning(
                 "SECRET_KEY dang dung gia tri mac dinh/khong an toan. "
                 "Hay dat SECRET_KEY trong .env truoc khi trien khai thuc te."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_demo_login(self) -> "Settings":
+        """Chan viec bat dang nhap demo o moi truong production."""
+        if self.ALLOW_DEMO_LOGIN and self.ENVIRONMENT.strip().lower() in ("production", "prod"):
+            raise ValueError(
+                "ALLOW_DEMO_LOGIN phai la false o moi truong production. "
+                "Dang nhap demo khong yeu cau mat khau nen khong duoc phep bat."
             )
         return self
 

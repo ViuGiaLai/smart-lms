@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Optional
 
 import redis.asyncio as aioredis
@@ -20,6 +21,13 @@ _FAILURE_LIMIT = 3
 _client: Optional[aioredis.Redis] = None
 _redis_disabled = False
 _failures = 0
+
+# ── Cache trong tien trinh (fallback khi khong co Redis) ──────
+# Chi dung cho du lieu CONG KHAI (danh sach khoa hoc, thong ke trang chu).
+# Moi worker co cache rieng, nen TTL phai ngan va moi thao tac ghi deu phai
+# goi invalidate_* de tranh tra du lieu cu.
+_LOCAL_CACHE: dict[str, tuple[float, str]] = {}
+_LOCAL_MAX_ENTRIES = 256
 
 
 def _note_failure(exc: Exception) -> None:
@@ -56,8 +64,8 @@ def get_redis() -> Optional[aioredis.Redis]:
                 settings.REDIS_URL,
                 encoding="utf-8",
                 decode_responses=True,
-                socket_connect_timeout=0.5,
-                socket_timeout=0.5,
+                socket_connect_timeout=0.25,
+                socket_timeout=0.25,
             )
         except Exception as exc:  # pragma: no cover - phu thuoc moi truong
             logger.warning("Khong the khoi tao Redis client, tat cache: %s", exc)
@@ -66,23 +74,52 @@ def get_redis() -> Optional[aioredis.Redis]:
     return _client
 
 
+def _local_get(key: str) -> Any | None:
+    entry = _LOCAL_CACHE.get(key)
+    if entry is None:
+        return None
+    expires_at, raw = entry
+    if expires_at < time.monotonic():
+        _LOCAL_CACHE.pop(key, None)
+        return None
+    return json.loads(raw)
+
+
+def _local_set(key: str, value: Any, ttl: int) -> None:
+    if len(_LOCAL_CACHE) >= _LOCAL_MAX_ENTRIES:
+        now = time.monotonic()
+        # Don entry het han truoc, sau do moi loai bo entry cu nhat.
+        for k in [k for k, (exp, _) in _LOCAL_CACHE.items() if exp < now]:
+            _LOCAL_CACHE.pop(k, None)
+        while len(_LOCAL_CACHE) >= _LOCAL_MAX_ENTRIES:
+            _LOCAL_CACHE.pop(next(iter(_LOCAL_CACHE)))
+    _LOCAL_CACHE[key] = (time.monotonic() + ttl, json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _local_delete_prefix(prefix: str) -> None:
+    for k in [k for k in _LOCAL_CACHE if k.startswith(prefix)]:
+        _LOCAL_CACHE.pop(k, None)
+
+
 async def cache_get_json(key: str) -> Any | None:
     """Doc gia tri JSON tu cache. Tra ve None neu khong co/loi."""
     client = get_redis()
-    if client is None:
-        return None
-    try:
-        raw = await client.get(key)
-        _note_success()
-        return json.loads(raw) if raw is not None else None
-    except Exception as exc:
-        logger.warning("Redis cache_get that bai (%s): %s", key, exc)
-        _note_failure(exc)
-        return None
+    if client is not None:
+        try:
+            raw = await client.get(key)
+            _note_success()
+            if raw is not None:
+                return json.loads(raw)
+        except Exception as exc:
+            logger.warning("Redis cache_get that bai (%s): %s", key, exc)
+            _note_failure(exc)
+    # Redis khong chay / khong co du lieu -> dung cache trong tien trinh.
+    return _local_get(key)
 
 
 async def cache_set_json(key: str, value: Any, ttl: int = 60) -> None:
     """Ghi gia tri JSON vao cache voi TTL (giay). Loi se bi nuot bo."""
+    _local_set(key, value, ttl)
     client = get_redis()
     if client is None:
         return
@@ -95,6 +132,7 @@ async def cache_set_json(key: str, value: Any, ttl: int = 60) -> None:
 
 
 async def cache_delete(key: str) -> None:
+    _LOCAL_CACHE.pop(key, None)
     client = get_redis()
     if client is None:
         return
@@ -108,6 +146,7 @@ async def cache_delete(key: str) -> None:
 
 async def cache_delete_prefix(prefix: str) -> None:
     """Xoa tat ca key bat dau bang *prefix* bang SCAN (khong dung KEYS)."""
+    _local_delete_prefix(prefix)
     client = get_redis()
     if client is None:
         return
@@ -127,4 +166,5 @@ async def invalidate_course_caches() -> None:
     de tranh tra ve du lieu cu.
     """
     await cache_delete_prefix("courses:list:")
+    await cache_delete_prefix("courses:categories")
     await cache_delete("public:stats")

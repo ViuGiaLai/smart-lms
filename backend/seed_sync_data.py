@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import sys
 import os
 from decimal import Decimal
@@ -9,17 +10,32 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 # ── KIỂM TRA BẢO MẬT: CHỈ CHỦ HỆ THỐNG / ADMIN CÓ KEY MỚI ĐƯỢC PHÉP SEED ──
-EXPECTED_SECRET = "smartlms_super_admin_seed_secure_987654321"
-passed_secret = os.getenv("SEED_SECRET_KEY", "")
+# Không lưu secret/mật khẩu trong mã nguồn: bắt buộc đọc từ biến môi trường.
+EXPECTED_SECRET = os.getenv("SEED_SECRET_KEY", "").strip()
+MASTER_PWD = os.getenv("SEED_MASTER_PASSWORD", "").strip()
+passed_secret = os.getenv("SEED_SECRET_KEY", "").strip()
 for arg in sys.argv:
     if arg.startswith("--secret="):
-        passed_secret = arg.split("=", 1)[1]
+        passed_secret = arg.split("=", 1)[1].strip()
 
-if passed_secret != EXPECTED_SECRET:
+
+def _refuse(reason: str) -> None:
     print("\n[BẢO MẬT] ⛔ TRUY CẬP BỊ TỪ CHỐI!")
-    print("Bạn không có quyền thực thi thao tác seed dữ liệu vào Database của Smart LMS.")
+    print(reason)
     print("Chỉ quản trị viên sở hữu SEED_SECRET_KEY hợp lệ mới có thể thao tác.")
     sys.exit(1)
+
+
+# Kiểm tra TRƯỚC khi import app/database để không mở kết nối DB khi bị từ chối.
+if not EXPECTED_SECRET:
+    _refuse("Chưa cấu hình SEED_SECRET_KEY trong biến môi trường.")
+if not MASTER_PWD:
+    _refuse(
+        "Chưa cấu hình SEED_MASTER_PASSWORD trong biến môi trường "
+        "(mật khẩu khởi tạo cho các tài khoản seed)."
+    )
+if not hmac.compare_digest(passed_secret, EXPECTED_SECRET):
+    _refuse("SEED_SECRET_KEY không khớp.")
 
 from sqlalchemy import select, text
 from app.core.database import engine, Base, AsyncSessionLocal
@@ -481,8 +497,8 @@ async def sync_all_data():
             print(f"[LƯU Ý VECTOR TABLE] {e}")
 
     async with AsyncSessionLocal() as db:
-        # 1. Khởi tạo các Tài khoản chuẩn hóa với mật khẩu bảo mật của chủ hệ thống
-        MASTER_PWD = "rmahviu@852005"
+        # 1. Khởi tạo các Tài khoản chuẩn hóa với mật khẩu lấy từ biến môi trường
+        #    (không hardcode trong mã nguồn).
         users_preset = [
             {
                 "email": "admin@smartlms.edu.vn",
@@ -540,9 +556,10 @@ async def sync_all_data():
             else:
                 user.name = u_data["name"]
                 user.role = u_data["role"]
-                user.hashed_password = hash_password(u_data["password"])
                 user.is_active = True
-                print(f"[OK] Cập nhật tài khoản: {u_data['email']} ({u_data['role'].value})")
+                # KHÔNG ghi đè mật khẩu của tài khoản đã tồn tại: tránh việc chạy
+                # lại seed làm reset mật khẩu người dùng thật về một giá trị chung.
+                print(f"[OK] Cập nhật tài khoản (giữ nguyên mật khẩu): {u_data['email']} ({u_data['role'].value})")
 
             if u_data["role"] == UserRole.instructor:
                 instructor_user = user
@@ -668,11 +685,14 @@ async def sync_all_data():
         # 4.5. Khởi tạo Tiến độ học tập thực tế (Progress) & Bài nộp Quiz (QuizSubmission) vào PostgreSQL
         try:
             from app.models.quiz import QuizSubmission
+            from app.services.enrollment_service import ensure_enrollment
             st_res = await db.execute(select(User).where(User.role == UserRole.student))
             students = st_res.scalars().all()
             for st in students:
                 await db.execute(text(f"DELETE FROM progress WHERE user_id = {st.id}"))
                 await db.execute(text(f"DELETE FROM quiz_submissions WHERE user_id = {st.id}"))
+                # Tiến độ mẫu đi kèm bản ghi ghi danh để enrollments là nguồn duy nhất.
+                await ensure_enrollment(db, st.id, 1)
                 p1 = Progress(
                     user_id=st.id,
                     lesson_id=1,

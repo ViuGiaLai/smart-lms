@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
     hash_password,
@@ -129,7 +130,15 @@ async def demo_login(payload: DemoLoginRequest, db: AsyncSession = Depends(get_d
     """Đăng nhập nhanh cho các vai trò thuyết minh/demo.
 
     Không hardcode tài khoản: chọn tài khoản thật đầu tiên theo vai trò từ cơ sở dữ liệu.
+    Endpoint này KHÔNG yêu cầu mật khẩu nên mặc định bị tắt; chỉ bật tạm thời ở
+    môi trường demo nội bộ bằng ALLOW_DEMO_LOGIN=true (production luôn là false).
     """
+    if not settings.ALLOW_DEMO_LOGIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Đăng nhập demo đã bị tắt trên môi trường này. Vui lòng đăng nhập bằng email và mật khẩu.",
+        )
+
     role_map = {
         "admin": UserRole.admin,
         "instructor": UserRole.instructor,
