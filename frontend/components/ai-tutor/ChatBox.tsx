@@ -230,37 +230,36 @@ export default function ChatBox({
           </div>
         ) : (
           messages.map((msg) => (
-            <React.Fragment key={msg.id}>
-              <ChatMessage
-                message={msg}
-                onSeek={onSeek}
-                currentLessonId={lessonId}
-              />
-              {msg.id === latestCompletedAssistantMessageId && !isStreaming && (
-                <div className="ml-11 mr-2 mb-4 rounded-lg border border-brand-100 bg-brand-50/50 p-2.5">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-700">
-                    Bạn có thể hỏi tiếp
-                  </p>
-                  <div className="space-y-1.5">
-                    {followUpPromptsByMode[tutorMode].map((prompt) => (
-                      <button
-                        key={prompt}
-                        type="button"
-                        onClick={() => handleQuickPrompt(prompt)}
-                        className="flex w-full items-start gap-1.5 rounded-md border border-brand-100 bg-card px-2.5 py-2 text-left text-[11px] leading-snug text-foreground transition hover:border-brand-300 hover:bg-brand-50"
-                      >
-                        <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-brand-600" />
-                        <span>{prompt}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </React.Fragment>
+            <ChatMessage
+              key={msg.id}
+              message={msg}
+              onSeek={onSeek}
+              currentLessonId={lessonId}
+            />
           ))
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {latestCompletedAssistantMessageId && !isStreaming && (
+        <div className="shrink-0 border-t border-brand-100 bg-brand-50/50 px-3 py-2">
+          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-700">
+            <Sparkles className="h-3 w-3" /> Hỏi tiếp
+          </div>
+          <div className="scrollbar-slim flex gap-1.5 overflow-x-auto pb-0.5">
+            {followUpPromptsByMode[tutorMode].map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => handleQuickPrompt(prompt)}
+                className="shrink-0 rounded-md border border-brand-100 bg-card px-2.5 py-1.5 text-left text-[11px] text-foreground transition hover:border-brand-300 hover:bg-brand-50"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Input Form ── */}
       <form onSubmit={handleSubmit} className="p-3 bg-white border-t border-stone-200 shrink-0">

@@ -60,9 +60,9 @@ export default function ChatMessage({ message, onSeek, currentLessonId }: ChatMe
         {!isUser && sources.length > 0 && (
           <div className="mt-2.5 border-t border-border pt-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {sourceLessonTitle ? `Nguồn: ${sourceLessonTitle}` : 'Nguồn trong bài giảng'}
+              {sourceLessonTitle ? `Nguồn tham khảo · ${sources.length}` : `Nguồn trong bài giảng · ${sources.length}`}
             </p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <div className="scrollbar-slim mt-1.5 flex gap-1.5 overflow-x-auto pb-1">
               {sources.map((item, idx) => {
                 const source = asSource(item);
                 if (!source) {
@@ -105,22 +105,19 @@ export default function ChatMessage({ message, onSeek, currentLessonId }: ChatMe
                     ) : source.page ? (
                       <FileText className="h-3 w-3 shrink-0" aria-hidden />
                     ) : null}
-                    <span className="max-w-[190px] truncate" title={label}>
-                      {label}
-                    </span>
                     {timestamp ? (
-                      <span className="inline-flex items-center gap-0.5 font-medium text-brand-700">
+                      <span className="inline-flex items-center gap-0.5 whitespace-nowrap font-medium text-brand-700">
                         <Clock3 className="h-3 w-3" aria-hidden />
-                        {timeLabel}
+                        Video · {timeLabel}
                       </span>
                     ) : source.page ? (
-                      <span className="text-muted-foreground">trang {source.page}</span>
-                    ) : null}
+                      <span className="whitespace-nowrap text-muted-foreground">{label} · trang {source.page}</span>
+                    ) : <span className="max-w-[150px] truncate" title={label}>{label}</span>}
                   </>
                 );
 
                 const className =
-                  'inline-flex items-center gap-1.5 rounded border border-border bg-muted/60 px-2 py-0.5 text-[11px] text-muted-foreground';
+                  'inline-flex shrink-0 items-center gap-1.5 rounded border border-border bg-muted/60 px-2 py-1 text-[11px] text-muted-foreground';
                 const interactiveClass = `${className} transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-800`;
                 const title = snippet ? `${label}${snippet ? ` — ${snippet}` : ''}` : label;
 
