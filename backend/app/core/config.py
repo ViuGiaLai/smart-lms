@@ -34,6 +34,7 @@ class Settings(BaseSettings):
 
     # ── API ──
     API_V1_PREFIX: str = "/api/v1"
+    API_PUBLIC_URL: str = "http://localhost:8000"
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     @property
@@ -88,6 +89,15 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "ap-southeast-1"
     S3_BUCKET_NAME: str = "smart-lms-media"
+    MEDIA_ROOT: str = "media"
+    # Cloudflare R2 (S3-compatible). Chỉ bật khi đủ cả 5 biến; không đưa khóa
+    # vào Git hay NEXT_PUBLIC_* vì trình duyệt không được phép biết secret.
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_ENDPOINT: str = ""
+    R2_BUCKET: str = ""
+    # Custom domain hoặc r2.dev đã bật public access, ví dụ https://media.example.edu
+    R2_PUBLIC_BASE_URL: str = ""
 
     # ── AI Service ─────
     # Cloudinary: luu anh bia khoa hoc / thumbnail

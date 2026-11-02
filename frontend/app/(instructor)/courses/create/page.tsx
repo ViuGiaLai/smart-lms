@@ -49,7 +49,8 @@ interface LessonDraft {
   videoUrl: string;
   resourcesUrl: string;
   transcript: string;
-  documentFile?: File;
+  documentFiles?: File[];
+  videoFile?: File;
 }
 
 interface QuizOptionDraft {
@@ -154,7 +155,10 @@ export default function CreateCoursePage() {
   const [newLessonVideoUrl, setNewLessonVideoUrl] = useState('');
   const [newLessonResourcesUrl, setNewLessonResourcesUrl] = useState('');
   const [newLessonTranscript, setNewLessonTranscript] = useState('');
-  const [newLessonDocumentFile, setNewLessonDocumentFile] = useState<File | undefined>();
+  const [newLessonDocumentFiles, setNewLessonDocumentFiles] = useState<File[]>([]);
+  const [newLessonVideoFile, setNewLessonVideoFile] = useState<File | undefined>();
+  const [editingDraftLessonIndex, setEditingDraftLessonIndex] = useState<number | null>(null);
+  const [processUploadsInBackground, setProcessUploadsInBackground] = useState(true);
 
   // ── Step 3: AI Quiz Studio ──
   const [quizzes, setQuizzes] = useState<QuizDraft[]>([]);
@@ -322,18 +326,39 @@ export default function CreateCoursePage() {
       videoUrl: newLessonVideoUrl.trim(),
       resourcesUrl: newLessonResourcesUrl.trim(),
       transcript: newLessonTranscript.trim(),
-      documentFile: newLessonDocumentFile,
+      documentFiles: newLessonDocumentFiles,
+      videoFile: newLessonVideoFile,
     };
 
-    setLessons([...lessons, newLesson]);
+    if (editingDraftLessonIndex !== null) {
+      setLessons((items) => items.map((item, index) => index === editingDraftLessonIndex ? { ...newLesson, id: item.id } : item));
+    } else {
+      setLessons([...lessons, newLesson]);
+    }
     setNewLessonTitle('');
     setNewLessonVideoUrl('');
     setNewLessonDuration('45');
     setNewLessonResourcesUrl('');
     setNewLessonTranscript('');
-    setNewLessonDocumentFile(undefined);
+    setNewLessonDocumentFiles([]);
+    setNewLessonVideoFile(undefined);
+    setEditingDraftLessonIndex(null);
     setShowAddLessonForm(false);
-    setActiveLessonIndex(lessons.length);
+    setActiveLessonIndex(editingDraftLessonIndex ?? lessons.length);
+  };
+
+  const handleEditDraftLesson = (index: number) => {
+    const lesson = lessons[index];
+    if (!lesson) return;
+    setNewLessonTitle(lesson.title);
+    setNewLessonDuration(String(lesson.duration));
+    setNewLessonVideoUrl(lesson.videoUrl);
+    setNewLessonResourcesUrl(lesson.resourcesUrl);
+    setNewLessonTranscript(lesson.transcript);
+    setNewLessonDocumentFiles(lesson.documentFiles || []);
+    setNewLessonVideoFile(lesson.videoFile);
+    setEditingDraftLessonIndex(index);
+    setShowAddLessonForm(true);
   };
 
   const handleRemoveLesson = (idx: number) => {
@@ -521,7 +546,8 @@ export default function CreateCoursePage() {
       videoUrl: newLessonVideoUrl.trim(),
       resourcesUrl: newLessonResourcesUrl.trim(),
       transcript: newLessonTranscript.trim(),
-      documentFile: newLessonDocumentFile,
+      documentFiles: newLessonDocumentFiles,
+      videoFile: newLessonVideoFile,
     };
   };
 
@@ -590,6 +616,28 @@ export default function CreateCoursePage() {
     setSuccessMsg('Đang khởi tạo khóa học và đồng bộ vào cơ sở dữ liệu PostgreSQL...');
 
     let createdCourseId: number | null = null;
+    let queuedUploads = 0;
+
+    // fetch không báo được tiến độ multipart. XHR chỉ dùng cho tệp học liệu để
+    // giảng viên biết trình duyệt còn đang gửi bao nhiêu phần trăm lên backend/R2.
+    const uploadWithProgress = (url: string, formData: FormData, label: string, token: string | null) =>
+      new Promise<any>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open('POST', url);
+        if (token) request.setRequestHeader('Authorization', `Bearer ${token}`);
+        request.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          setSuccessMsg(`${label} · đã gửi ${Math.round((event.loaded / event.total) * 100)}%`);
+        };
+        request.onerror = () => reject(new Error('Mất kết nối trong khi tải tệp.'));
+        request.onload = () => {
+          let data: any = null;
+          try { data = request.responseText ? JSON.parse(request.responseText) : null; } catch { /* phản hồi không phải JSON */ }
+          if (request.status >= 200 && request.status < 300) resolve(data);
+          else reject(new Error(data?.detail || `Tải tệp thất bại (${request.status})`));
+        };
+        request.send(formData);
+      });
 
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
@@ -624,11 +672,13 @@ export default function CreateCoursePage() {
         throw new Error('Không nhận được mã ID khóa học từ máy chủ');
       }
       createdCourseId = newCourseId;
+      setSuccessMsg(`Đã tạo khóa học #${newCourseId}. Đang lưu ${lessonsToSave.length} bài học...`);
 
       // 2. Lưu danh sách Bài học (Lessons) kèm Video & Slide
       const createdLessonIds: number[] = [];
       for (let i = 0; i < lessonsToSave.length; i++) {
         const les = lessonsToSave[i];
+        setSuccessMsg(`Đã tạo khóa học #${newCourseId}. Đang lưu bài ${i + 1}/${lessonsToSave.length}: ${les.title}`);
         const lessonResponse = await fetch(`${apiUrl}/api/v1/courses/${newCourseId}/lessons`, {
           method: 'POST',
           headers: {
@@ -652,29 +702,43 @@ export default function CreateCoursePage() {
         if (lessonId) {
           createdLessonIds[i] = Number(lessonId);
         }
-        if (les.documentFile && lessonId) {
+        if (les.videoFile && lessonId) {
+          setSuccessMsg(`Đang tải video cho bài ${i + 1}/${lessonsToSave.length}: ${les.videoFile.name}`);
           const formData = new FormData();
-          formData.append('file', les.documentFile);
-          const uploadResponse = await fetch(
-            `${apiUrl}/api/v1/courses/${newCourseId}/lessons/${lessonId}/documents/upload`,
-            {
-              method: 'POST',
-              headers: token ? { Authorization: 'Bearer ' + token } : {},
-              body: formData,
-            },
+          formData.append('file', les.videoFile);
+          formData.append('run_in_background', String(processUploadsInBackground));
+          const uploadResult = await uploadWithProgress(
+            `${apiUrl}/api/v1/courses/${newCourseId}/lessons/${lessonId}/documents/video`,
+            formData,
+            `Đang tải video “${les.videoFile.name}” lên Cloud`,
+            token,
           );
-          const uploadData = await uploadResponse.json().catch(() => null);
-          if (!uploadResponse.ok) {
-            throw new Error(
-              uploadData?.detail || `Không thể import tài liệu cho bài học "${les.title}"`,
-            );
-          }
+          if (uploadResult?.queued) queuedUploads += 1;
+        }
+        const documents = les.documentFiles || [];
+        for (let documentIndex = 0; documentIndex < documents.length; documentIndex++) {
+          const documentFile = documents[documentIndex];
+          if (!lessonId) break;
+          setSuccessMsg(
+            `Đang nạp học liệu AI cho bài ${i + 1}/${lessonsToSave.length} · tệp ${documentIndex + 1}/${documents.length}: ${documentFile.name}`,
+          );
+          const formData = new FormData();
+          formData.append('file', documentFile);
+          formData.append('run_in_background', String(processUploadsInBackground));
+          const uploadResult = await uploadWithProgress(
+            `${apiUrl}/api/v1/courses/${newCourseId}/lessons/${lessonId}/documents/upload`,
+            formData,
+            `Đang gửi tài liệu “${documentFile.name}” để nạp AI`,
+            token,
+          );
+          if (uploadResult?.queued) queuedUploads += 1;
         }
       }
 
       // 3. Lưu danh sách Quizzes đã được Giảng viên duyệt
       for (const quiz of quizzes) {
         if (quiz.questions && quiz.questions.length > 0) {
+          setSuccessMsg(`Đang lưu bộ đề: ${quiz.title}`);
           const quizResponse = await fetch(`${apiUrl}/api/v1/courses/${newCourseId}/quizzes`, {
             method: 'POST',
             headers: {
@@ -708,7 +772,11 @@ export default function CreateCoursePage() {
         }
       }
 
-      setSuccessMsg('Lưu khóa học, toàn bộ bài giảng và các bộ đề trắc nghiệm AI thành công vào PostgreSQL!');
+      setSuccessMsg(
+        queuedUploads > 0
+          ? `Khóa học đã lưu. ${queuedUploads} tệp đang được máy chủ xử lý; vào Quản lý khóa học để theo dõi khi hoàn tất.`
+          : 'Lưu khóa học, toàn bộ bài giảng và các bộ đề trắc nghiệm AI thành công vào PostgreSQL!',
+      );
       setTimeout(() => {
         router.push(`/courses/${newCourseId}/manage`);
       }, 1200);
@@ -1425,13 +1493,16 @@ export default function CreateCoursePage() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold uppercase tracking-wider text-emerald-900">
-                            Soạn bài học #{lessons.length + 1}
+                            {editingDraftLessonIndex === null ? `Soạn bài học #${lessons.length + 1}` : `Sửa bài học #${editingDraftLessonIndex + 1}`}
                           </span>
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => setShowAddLessonForm(false)}
+                            onClick={() => {
+                              setShowAddLessonForm(false);
+                              setEditingDraftLessonIndex(null);
+                            }}
                             className="text-muted-foreground"
                           >
                             Hủy
@@ -1464,11 +1535,12 @@ export default function CreateCoursePage() {
                           </div>
                         </div>
 
-                        {/* Video URL YouTube / MP4 */}
-                        <div className="space-y-1.5">
+                        {/* Video: một nguồn chính, hoặc URL hoặc tệp tải lên. */}
+                        <div className="grid gap-3 rounded-md border border-border bg-card p-3 sm:grid-cols-2">
+                          <div className="space-y-1.5">
                           <Label htmlFor="lesson-video" className="flex items-center gap-1.5">
                             <Video className="h-3.5 w-3.5 text-primary" />
-                            Liên kết Video (YouTube URL hoặc MP4)
+                            Liên kết video (YouTube hoặc MP4 có URL)
                           </Label>
                           <Input
                             id="lesson-video"
@@ -1478,36 +1550,59 @@ export default function CreateCoursePage() {
                             placeholder="https://www.youtube.com/watch?v=..."
                             className="font-mono text-xs"
                           />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="lesson-video-file" className="flex items-center gap-1.5">
+                              <UploadCloud className="h-3.5 w-3.5 text-primary" /> Tải video MP4
+                            </Label>
+                            <Input
+                              id="lesson-video-file"
+                              type="file"
+                              accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                              onChange={(e) => setNewLessonVideoFile(e.target.files?.[0])}
+                              className="cursor-pointer text-xs file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-2 file:py-1.5 file:text-xs file:font-semibold"
+                            />
+                            <p className="text-[11px] text-muted-foreground">Chọn một nguồn chính. Video tải lên sẽ thay thế liên kết phía trên.</p>
+                            {newLessonVideoFile && <p className="text-[11px] font-medium text-primary">Đã chọn: {newLessonVideoFile.name}</p>}
+                          </div>
                         </div>
 
                         {/* Tài liệu Slide đính kèm */}
                         <div className="space-y-1.5">
                           <Label htmlFor="lesson-resources" className="flex items-center gap-1.5">
                             <FileText className="h-3.5 w-3.5 text-emerald-600" />
-                            Tài liệu Slide bài giảng (PDF / PPTX)
+                            Học liệu đính kèm (có thể chọn nhiều PDF / DOCX / PPTX)
                           </Label>
                           <Input
                             id="lesson-resources"
                             value={newLessonResourcesUrl}
                             onChange={(e) => setNewLessonResourcesUrl(e.target.value)}
-                            placeholder="Slide_03_LangChain_pgvector_Architecture.pdf"
+                            placeholder="Liên kết học liệu ngoài (tùy chọn)"
                             className="font-mono text-xs"
                           />
                           <Input
                             type="file"
+                            multiple
                             accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                            onChange={(e) => setNewLessonDocumentFile(e.target.files?.[0])}
+                            onChange={(e) => setNewLessonDocumentFiles(Array.from(e.target.files || []))}
                             className="cursor-pointer file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-emerald-800"
                           />
-                          {newLessonDocumentFile && (
+                          {newLessonDocumentFiles.length > 0 && (
                             <p className="text-[11px] font-medium text-emerald-700">
-                              Đã chọn: {newLessonDocumentFile.name}
+                              Đã chọn {newLessonDocumentFiles.length} tệp: {newLessonDocumentFiles.map((file) => file.name).join(', ')}
                             </p>
                           )}
                           <p className="text-[11px] text-muted-foreground">
-                            File sẽ được upload và xử lý sau khi khóa học được tạo. Hỗ trợ PDF, DOCX và PPTX.
+                            Mỗi tệp được lưu riêng và nạp vào tri thức AI của bài học; không ghi đè các tài liệu đã chọn trước đó.
                           </p>
                         </div>
+
+                        {(newLessonVideoFile || newLessonDocumentFiles.length > 0) && (
+                          <label className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
+                            <input type="checkbox" checked={processUploadsInBackground} onChange={(e) => setProcessUploadsInBackground(e.target.checked)} className="mt-0.5 accent-[hsl(var(--primary))]" />
+                            <span><strong>Xử lý tệp dài ở máy chủ nền</strong><br /><span className="text-muted-foreground">Nên bật cho video/tài liệu lớn. Bạn được chuyển sang quản lý khóa học ngay; trạng thái từng tệp sẽ tự cập nhật.</span></span>
+                          </label>
+                        )}
 
                         {/* Transcript */}
                         <div className="space-y-1.5">
@@ -1528,7 +1623,7 @@ export default function CreateCoursePage() {
                             soạn sẽ được tự động thêm.
                           </p>
                           <Button type="submit" variant="success" size="sm" disabled={!newLessonTitle.trim()}>
-                            Lưu bài học
+                            {editingDraftLessonIndex === null ? 'Thêm bài học' : 'Cập nhật bài học'}
                           </Button>
                         </div>
                       </form>
@@ -1576,18 +1671,26 @@ export default function CreateCoursePage() {
                                   <span>•</span>
                                   <span className="flex items-center gap-1 truncate font-medium text-primary">
                                     <Video className="h-3 w-3" />
-                                    {les.videoUrl ? 'YouTube Video OK' : 'Chưa có video'}
+                                    {les.videoFile ? 'Video MP4 đã chọn' : les.videoUrl ? 'Video liên kết' : 'Chưa có video'}
                                   </span>
                                   <span>•</span>
                                   <span className="flex items-center gap-1 truncate font-medium text-emerald-600">
                                     <FileText className="h-3 w-3" />
-                                    {les.resourcesUrl || 'Chưa đính kèm slide'}
+                                    {les.documentFiles?.length ? `${les.documentFiles.length} tài liệu đã chọn` : les.resourcesUrl || 'Chưa đính kèm tài liệu'}
                                   </span>
                                 </div>
                               </div>
                             </div>
 
                             <div className="flex items-center gap-2 self-end sm:self-center">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditDraftLesson(idx)}
+                              >
+                                Sửa
+                              </Button>
                               <Button
                                 type="button"
                                 variant="secondary"

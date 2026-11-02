@@ -39,6 +39,18 @@ interface LessonItem {
   youtubeVideoId?: string | null;
   subtitleStatus?: string;
   subtitleLanguage?: string | null;
+  materials?: LessonMaterial[];
+}
+
+interface LessonMaterial {
+  id: number;
+  kind: 'document' | 'video';
+  title: string;
+  file_url: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  status?: 'queued' | 'processing' | 'ready' | 'failed';
+  error_message?: string | null;
 }
 
 type DocumentUploadState = 'idle' | 'uploading' | 'processing' | 'ready' | 'error';
@@ -79,9 +91,11 @@ export default function CourseManagePage() {
   const [newDuration, setNewDuration] = useState('45');
   const [newTranscript, setNewTranscript] = useState('');
   const [newResourcesUrl, setNewResourcesUrl] = useState('');
+  const [newVideoFile, setNewVideoFile] = useState<File | undefined>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [documentFiles, setDocumentFiles] = useState<Record<string, File | undefined>>({});
+  const [editingVideoFile, setEditingVideoFile] = useState<File | undefined>();
   const [documentStates, setDocumentStates] = useState<Record<string, DocumentUploadState>>({});
   const [documentMessages, setDocumentMessages] = useState<Record<string, string>>({});
 
@@ -115,7 +129,7 @@ export default function CourseManagePage() {
           }
           setCourseTitle(c.title || courseTitle);
           setCourseDraft({ title: c.title || '', description: c.description || '', category: c.category || '', level: c.level || '' });
-          setLessons((c.lessons || []).map((lesson: any) => ({
+          const mappedLessons = (c.lessons || []).map((lesson: any) => ({
             ...lesson,
             video_url: lesson.video_url ?? lesson.videoUrl ?? '',
             resources_url: lesson.resources_url ?? '',
@@ -123,7 +137,17 @@ export default function CourseManagePage() {
             youtubeVideoId: lesson.youtubeVideoId ?? null,
             subtitleStatus: lesson.subtitleStatus ?? 'none',
             subtitleLanguage: lesson.subtitleLanguage ?? null,
-          })));
+          }));
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+          const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+          const lessonsWithMaterials = await Promise.all(mappedLessons.map(async (lesson: LessonItem) => {
+            try {
+              const materialResponse = await fetch(`${apiUrl}/api/v1/courses/${courseId}/lessons/${lesson.id}/documents`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+              const materials = materialResponse.ok ? await materialResponse.json() : [];
+              return { ...lesson, materials: Array.isArray(materials) ? materials : [] };
+            } catch { return { ...lesson, materials: [] }; }
+          }));
+          setLessons(lessonsWithMaterials);
           setCourseQuizzes(c.quizzes || []);
           setCourseStatus(c.status || 'draft');
         }
@@ -136,6 +160,30 @@ export default function CourseManagePage() {
       isMounted = false;
     };
   }, [courseId, router]);
+
+  // Tệp lớn chạy nền vẫn được theo dõi sau khi rời màn tạo khóa học.
+  useEffect(() => {
+    const pending = lessons.filter((lesson) =>
+      (lesson.materials || []).some((material) => material.status === 'queued' || material.status === 'processing'),
+    );
+    if (pending.length === 0) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const token = localStorage.getItem('accessToken');
+    const refreshStatuses = async () => {
+      const updates = await Promise.all(pending.map(async (lesson) => {
+        try {
+          const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/lessons/${lesson.id}/documents`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+          return response.ok ? { id: String(lesson.id), materials: await response.json() } : null;
+        } catch { return null; }
+      }));
+      setLessons((items) => items.map((lesson) => {
+        const update = updates.find((item) => item?.id === String(lesson.id));
+        return update ? { ...lesson, materials: update.materials } : lesson;
+      }));
+    };
+    const timer = window.setInterval(() => void refreshStatuses(), 2500);
+    return () => window.clearInterval(timer);
+  }, [courseId, lessons]);
 
   // AI Sinh bộ trắc nghiệm từ nội dung bài giảng (Xem trước trực tiếp từ Gemini mà không lưu đè DB)
   const handleAiGenerateQuiz = async () => {
@@ -224,6 +272,7 @@ export default function CourseManagePage() {
     const orderIndex = lessons.length + 1;
     const durationSeconds = parseInt(newDuration, 10) * 60 || 2700;
     const selectedDocumentFile = documentFiles.new;
+    const selectedVideoFile = newVideoFile;
 
     const newLessonData: LessonItem = {
       id: Date.now(),
@@ -261,6 +310,9 @@ export default function CourseManagePage() {
         setLessons((prev) => [...prev, created]);
         if (selectedDocumentFile) {
           await uploadDocument(created.id, selectedDocumentFile);
+        }
+        if (selectedVideoFile) {
+          await uploadVideo(created.id, selectedVideoFile);
         }
       } else {
         const errData = await res.json().catch(() => null);
@@ -306,6 +358,7 @@ export default function CourseManagePage() {
       setNewTranscript('');
       setNewResourcesUrl('');
       setDocumentFiles({});
+      setNewVideoFile(undefined);
       setQuizQuestions([]);
       setSuccessMessage('🎉 Đã thêm bài học & bộ Quiz thành công vào hệ thống!');
       setTimeout(() => setSuccessMessage(''), 4000);
@@ -336,6 +389,11 @@ export default function CourseManagePage() {
       }
 
       setDocumentStates((prev) => ({ ...prev, [key]: 'ready' }));
+      if (data?.material) {
+        setLessons((items) => items.map((lesson) => String(lesson.id) === key
+          ? { ...lesson, materials: [...(lesson.materials || []), data.material] }
+          : lesson));
+      }
       setDocumentMessages((prev) => ({
         ...prev,
         [key]: `${file.name} đã được parse, tạo embedding và liên kết với bài học.`,
@@ -345,6 +403,43 @@ export default function CourseManagePage() {
       setDocumentStates((prev) => ({ ...prev, [key]: 'error' }));
       setDocumentMessages((prev) => ({ ...prev, [key]: message }));
     }
+  };
+
+  const uploadVideo = async (lessonId: string | number, file: File) => {
+    const key = String(lessonId);
+    setDocumentStates((prev) => ({ ...prev, [key]: 'uploading' }));
+    setDocumentMessages((prev) => ({ ...prev, [key]: `Đang tải video ${file.name}...` }));
+    try {
+      const token = localStorage.getItem('accessToken');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/lessons/${lessonId}/documents/video`, {
+        method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: formData,
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.detail || 'Không thể tải video');
+      setLessons((items) => items.map((lesson) => String(lesson.id) === key
+        ? { ...lesson, video_url: data.video_url || lesson.video_url, youtubeVideoId: null, subtitleStatus: 'none', materials: [...(lesson.materials || []), data.material].filter(Boolean) }
+        : lesson));
+      setDocumentStates((prev) => ({ ...prev, [key]: 'ready' }));
+      setDocumentMessages((prev) => ({ ...prev, [key]: `Đã tải video ${file.name}.` }));
+    } catch (error) {
+      setDocumentStates((prev) => ({ ...prev, [key]: 'error' }));
+      setDocumentMessages((prev) => ({ ...prev, [key]: error instanceof Error ? error.message : 'Không thể tải video' }));
+    }
+  };
+
+  const deleteMaterial = async (lessonId: string | number, materialId: number) => {
+    const token = localStorage.getItem('accessToken');
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/lessons/${lessonId}/documents/${materialId}`, {
+      method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error('Không thể xóa học liệu');
+    setLessons((items) => items.map((lesson) => String(lesson.id) === String(lessonId)
+      ? { ...lesson, materials: (lesson.materials || []).filter((material) => material.id !== materialId) }
+      : lesson));
   };
 
   const handlePublishCourse = async () => {
@@ -403,6 +498,10 @@ export default function CourseManagePage() {
       if (!response.ok) throw new Error(updated?.detail || 'Không thể lưu thay đổi bài học');
       const videoId = updated.youtube_video_id ?? editingLesson.video_url?.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/)?.[1] ?? null;
       setLessons((items) => items.map((lesson) => String(lesson.id) === String(updated.id) ? { ...lesson, ...updated, video_url: updated.video_url || '', resources_url: updated.resources_url || '', transcript: updated.transcript || '', youtubeVideoId: videoId, subtitleStatus: updated.subtitle_status || 'none' } : lesson));
+      if (editingVideoFile) {
+        await uploadVideo(updated.id, editingVideoFile);
+      }
+      setEditingVideoFile(undefined);
       setEditingLesson(null);
       setSuccessMessage('Đã cập nhật bài học. Nếu đổi video YouTube, hãy lấy transcript mới.');
     } catch (error) { alert(error instanceof Error ? error.message : 'Không thể lưu thay đổi bài học'); }
@@ -621,12 +720,12 @@ export default function CourseManagePage() {
                 </div>
               </div>
 
-              {/* 2. Khối Video YouTube với Live Preview */}
+              {/* 2. Video chính: liên kết hoặc tệp tải lên */}
               <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200 space-y-3">
                 <div className="flex flex-col items-start justify-between gap-1 sm:flex-row sm:items-center">
                   <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <Video className="w-4 h-4 text-rose-600" />
-                    Đường dẫn Video YouTube bài giảng
+                    Liên kết video YouTube hoặc MP4 có URL
                   </label>
                   <span className="text-[11px] text-slate-500 font-medium">
                     Hỗ trợ link: https://www.youtube.com/watch?v=... hoặc https://youtu.be/...
@@ -641,6 +740,12 @@ export default function CourseManagePage() {
                     placeholder="Dán đường dẫn video YouTube (ví dụ: https://www.youtube.com/watch?v=...)"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                   />
+                </div>
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-foreground"><Upload className="h-4 w-4 text-primary" /> Hoặc tải video MP4 / WEBM / MOV</label>
+                  <input type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" onChange={(e) => setNewVideoFile(e.target.files?.[0])} className="mt-2 block w-full text-xs" />
+                  <p className="mt-1 text-[11px] text-muted-foreground">Video tải lên sẽ là video chính của bài học và ưu tiên hơn liên kết URL.</p>
+                  {newVideoFile && <p className="mt-1 text-[11px] font-semibold text-primary">Đã chọn: {newVideoFile.name}</p>}
                 </div>
 
                 {/* Trình phát Video Preview thu nhỏ */}
@@ -662,22 +767,22 @@ export default function CourseManagePage() {
                 )}
               </div>
 
-              {/* 3. Khối Tài liệu Slide PDF & Transcript */}
+              {/* 3. Học liệu và transcript */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                     <FileText className="w-4 h-4 text-indigo-600" />
-                    Tài liệu Slide bài giảng (PDF / DOCX / PPTX)
+                    Liên kết học liệu ngoài (tùy chọn)
                   </label>
                   <input
                     type="text"
                     value={newResourcesUrl}
                     onChange={(e) => setNewResourcesUrl(e.target.value)}
-                    placeholder="Tên file hoặc link tài liệu (Ví dụ: Slide_BaiGiang.pdf)"
+                    placeholder="https://... hoặc tên tài liệu tham khảo"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                   />
                   <p className="text-[11px] text-emerald-600 font-medium mt-1">
-                    ✓ Slide này sẽ hiển thị ở tab &ldquo;Tài liệu Slide&rdquo; và được nạp vào pgvector cho AI Tutor.
+                    Tệp PDF/DOCX/PPTX tải lên ở phía trên được nạp vào AI. Có thể thêm nhiều tệp sau khi tạo bài học.
                   </p>
                 </div>
 
@@ -876,7 +981,13 @@ export default function CourseManagePage() {
                       {lesson.video_url && (
                         <span className="flex items-center gap-1 text-rose-600 font-semibold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
                           <Video className="w-3 h-3" />
-                          Video YouTube HD
+                          {lesson.youtubeVideoId ? 'Video YouTube' : 'Video bài học'}
+                        </span>
+                      )}
+
+                      {(lesson.materials || []).filter((material) => material.kind === 'document').length > 0 && (
+                        <span className="flex items-center gap-1 font-medium text-primary">
+                          <FileText className="w-3 h-3" /> {(lesson.materials || []).filter((material) => material.kind === 'document').length} tài liệu đính kèm
                         </span>
                       )}
 
@@ -897,6 +1008,20 @@ export default function CourseManagePage() {
                         </span>
                       )}
                     </div>
+                    {(lesson.materials || []).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {(lesson.materials || []).map((material) => (
+                          <span key={material.id} className="inline-flex max-w-full items-center gap-1 rounded border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground">
+                            {material.kind === 'video' ? <Video className="h-3 w-3 shrink-0" /> : <FileText className="h-3 w-3 shrink-0" />}
+                            <span className="max-w-[180px] truncate" title={material.title}>{material.title}</span>
+                            {material.status === 'queued' || material.status === 'processing' ? <span className="animate-pulse whitespace-nowrap text-primary">Đang xử lý…</span> : null}
+                            {material.status === 'failed' ? <span className="max-w-[120px] truncate whitespace-nowrap text-destructive" title={material.error_message || ''}>Lỗi xử lý</span> : null}
+                            {material.status === 'ready' ? <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-600" /> : null}
+                            <button type="button" onClick={() => void deleteMaterial(lesson.id, material.id).catch((error) => alert(error.message))} className="ml-1 text-muted-foreground hover:text-destructive" title="Xóa tệp này"><Trash2 className="h-3 w-3" /></button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {documentMessages[String(lesson.id)] && (
                       <p className={`mt-2 text-[11px] ${
                         documentStates[String(lesson.id)] === 'error' ? 'text-red-600' : 'text-slate-500'
@@ -912,7 +1037,7 @@ export default function CourseManagePage() {
                     <Edit3 className="w-3.5 h-3.5" /> Sửa bài học
                   </button>
                   <label className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition cursor-pointer">
-                    <Upload className="w-3.5 h-3.5" /> Tải PDF/DOCX/PPTX
+                    <Upload className="w-3.5 h-3.5" /> Thêm tài liệu
                     <input
                       type="file"
                       accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -923,6 +1048,10 @@ export default function CourseManagePage() {
                         e.currentTarget.value = '';
                       }}
                     />
+                  </label>
+                  <label className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition cursor-pointer">
+                    <Video className="w-3.5 h-3.5" /> Tải video MP4
+                    <input type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadVideo(lesson.id, file); e.currentTarget.value = ''; }} />
                   </label>
                   {lesson.youtubeVideoId && (
                     <button onClick={() => void fetchYoutubeTranscript(lesson)} disabled={documentStates[String(lesson.id)] === 'processing'} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition disabled:opacity-60" title="Lấy phụ đề YouTube, lưu transcript và nhúng AI">
@@ -956,7 +1085,8 @@ export default function CourseManagePage() {
               <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase text-primary">Quản lý học liệu</p><h2 className="mt-1 text-lg font-semibold text-foreground">Sửa bài học</h2><p className="mt-1 text-xs text-muted-foreground">Giảng viên phụ trách và Quản trị viên có thể lưu thay đổi.</p></div><button type="button" onClick={() => setEditingLesson(null)} className="text-xs font-bold text-muted-foreground hover:text-foreground">Đóng</button></div>
               <label className="block text-xs font-bold text-foreground">Tiêu đề<input required value={editingLesson.title} onChange={(e) => setEditingLesson({ ...editingLesson, title: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
               <div className="grid gap-3 sm:grid-cols-2"><label className="block text-xs font-bold text-foreground">Thời lượng (giây)<input type="number" min="0" value={editingLesson.duration || 0} onChange={(e) => setEditingLesson({ ...editingLesson, duration: Number(e.target.value) })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label><label className="block text-xs font-bold text-foreground">Liên kết tài liệu<input type="url" value={editingLesson.resources_url || ''} onChange={(e) => setEditingLesson({ ...editingLesson, resources_url: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label></div>
-              <label className="block text-xs font-bold text-foreground">URL YouTube hoặc MP4<input type="url" value={editingLesson.video_url || ''} onChange={(e) => setEditingLesson({ ...editingLesson, video_url: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /><span className="mt-1 block font-normal text-muted-foreground">Đổi video sẽ xóa transcript cũ; sau khi lưu, bấm “Lấy transcript”.</span></label>
+              <label className="block text-xs font-bold text-foreground">URL YouTube hoặc video có URL<input type="url" value={editingLesson.video_url || ''} onChange={(e) => setEditingLesson({ ...editingLesson, video_url: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /><span className="mt-1 block font-normal text-muted-foreground">Đổi video sẽ xóa transcript cũ; sau khi lưu, bấm “Lấy transcript” nếu đó là YouTube.</span></label>
+              <label className="block text-xs font-bold text-foreground">Thay video bằng tệp MP4 / WEBM / MOV<input type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" onChange={(e) => setEditingVideoFile(e.target.files?.[0])} className="mt-1 block w-full text-xs" /><span className="mt-1 block font-normal text-muted-foreground">Video tải lên sẽ thay thế video chính sau khi bấm Lưu thay đổi.</span></label>
               <label className="block text-xs font-bold text-foreground">Mô tả<textarea value={editingLesson.description || ''} onChange={(e) => setEditingLesson({ ...editingLesson, description: e.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
               <label className="block text-xs font-bold text-foreground">Transcript thủ công<textarea value={editingLesson.transcript || ''} onChange={(e) => setEditingLesson({ ...editingLesson, transcript: e.target.value })} className="mt-1 min-h-36 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Dán transcript khi video không có phụ đề công khai." /></label>
               <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={() => setEditingLesson(null)} className="w-full rounded-md border border-border px-4 py-2.5 text-xs font-bold text-foreground sm:w-auto">Hủy</button><button type="submit" disabled={isSavingLesson} className="inline-flex w-full items-center justify-center gap-1 rounded-md bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-60 sm:w-auto"><Save className="w-3.5 h-3.5" />{isSavingLesson ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>

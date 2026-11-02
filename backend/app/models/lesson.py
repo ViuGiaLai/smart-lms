@@ -54,6 +54,9 @@ class Lesson(Base):
     progress_records: Mapped[list["Progress"]] = relationship(  # noqa: F821
         "Progress", back_populates="lesson", cascade="all, delete-orphan"
     )
+    materials: Mapped[list["LessonMaterial"]] = relationship(  # noqa: F821
+        "LessonMaterial", back_populates="lesson", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Lesson id={self.id} title={self.title!r} order={self.order_index}>"

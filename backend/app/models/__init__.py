@@ -9,6 +9,7 @@ from app.models.category import LearningCategory
 from app.models.education_level import EducationLevel
 from app.models.discovery import DiscoveryJob, DiscoveryItem, DiscoveryStatus
 from app.models.mastery import StudentTopicMastery
+from app.models.lesson_material import LessonMaterial
 
 __all__ = [
     "User",
@@ -27,4 +28,5 @@ __all__ = [
     "DiscoveryItem",
     "DiscoveryStatus",
     "StudentTopicMastery",
+    "LessonMaterial",
 ]

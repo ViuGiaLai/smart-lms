@@ -59,6 +59,7 @@ async def _require_lesson_owner(
 async def upload_and_ingest_document(
     lesson_id: int = Form(..., description="ID bài học sở hữu tài liệu"),
     file: UploadFile = File(..., description="Tệp tài liệu PDF, DOCX hoặc PPTX"),
+    document_id: Optional[str] = Form(default=None, max_length=255),
     x_user_id: str | None = Header(default=None),
     x_user_role: str | None = Header(default=None),
 ):
@@ -116,13 +117,16 @@ async def upload_and_ingest_document(
         # 5. Lưu trữ vào pgvector theo lesson_id
         async with AsyncSessionLocal() as db:
             store = PgVectorStore(db)
-            await store.delete_by_lesson(lesson_id)
+            # Một bài học có thể có nhiều tài liệu. Chỉ thay chính tệp đang
+            # tải lại, không xóa tri thức của những slide/tài liệu khác.
+            resolved_document_id = document_id or file.filename
+            await store.delete_by_document(resolved_document_id)
             metadata_list = [c.metadata for c in chunks]
             await store.add_chunks(
                 lesson_id=lesson_id,
                 contents=chunk_texts,
                 embeddings=embeddings,
-                document_id=file.filename,
+                document_id=resolved_document_id,
                 metadata_list=metadata_list,
             )
 
@@ -235,3 +239,20 @@ async def delete_lesson_vectors(
         return {"message": f"Đã xóa {deleted_count} chunks của bài học {lesson_id}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi xóa vector: {str(e)}")
+
+
+@router.delete("/document/{document_id}", summary="Xóa tri thức vector của một tài liệu")
+async def delete_document_vectors(
+    document_id: str,
+    lesson_id: int,
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
+):
+    await _require_lesson_owner(lesson_id, x_user_id, x_user_role)
+    try:
+        async with AsyncSessionLocal() as db:
+            store = PgVectorStore(db)
+            deleted_count = await store.delete_by_document(document_id)
+        return {"message": f"Đã xóa {deleted_count} đoạn tri thức", "deleted_count": deleted_count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi xóa tri thức tài liệu: {str(e)}")

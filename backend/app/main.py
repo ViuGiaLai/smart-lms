@@ -6,6 +6,8 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 from sqlalchemy import text
 
@@ -54,6 +56,12 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_PREFIX}/redoc",
     lifespan=lifespan,
 )
+
+# Tệp video/tài liệu giảng viên tải lên trong môi trường cục bộ. Production có
+# thể thay mount này bằng S3/CDN nhưng URL học liệu vẫn giữ cùng định dạng.
+media_root = Path(settings.MEDIA_ROOT).resolve()
+media_root.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
 # ── CORS ───────
 app.add_middleware(
