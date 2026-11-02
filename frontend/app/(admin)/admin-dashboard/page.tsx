@@ -129,7 +129,7 @@ export default function AdminDashboardPage() {
   };
 
   const heading: Record<Section, [string, string]> = {
-    overview: ['Bảng điều khiển Quản trị viên', 'Tổng quan vận hành hệ thống đa lĩnh vực Smart Tutor LMS.'],
+    overview: ['Bảng điều khiển Quản trị viên', 'Tổng quan vận hành hệ thống Smart LMS.'],
     users: ['Quản lý tài khoản & phân quyền', 'Quản lý trạng thái truy cập và vai trò người dùng.'],
     courses: ['Kiểm duyệt khóa học', 'Xuất bản, đưa về bản nháp hoặc lưu trữ từng khóa học.'],
     ai: ['Giám sát AI & dữ liệu', 'Trạng thái được kiểm tra từ backend, PostgreSQL/pgvector và AI Service.'],

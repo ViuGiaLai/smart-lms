@@ -131,7 +131,7 @@ export default function CreateCoursePage() {
   const [educationLevels, setEducationLevels] = useState<any[]>([]);
   const [gradeLabel, setGradeLabel] = useState('');
   const [proficiencyLevel, setProficiencyLevel] = useState('Trung cấp');
-  const [targetAudience, setTargetAudience] = useState('Học sinh');
+  const [targetAudience, setTargetAudience] = useState('Học viên');
   const [language, setLanguage] = useState('vi');
 
   // ── AI Course Builder Assistant State ──
@@ -139,7 +139,7 @@ export default function CreateCoursePage() {
   const [aiTopic, setAiTopic] = useState('');
   const [aiLevel, setAiLevel] = useState('Chuyên ngành (Năm 3 - 4)');
   const [aiDomain, setAiDomain] = useState('Khoa Công nghệ Thông tin');
-  const [aiAudience, setAiAudience] = useState('Sinh viên');
+  const [aiAudience, setAiAudience] = useState('Học viên');
   const [isAiBuilding, setIsAiBuilding] = useState(false);
   const [aiBlueprintResult, setAiBlueprintResult] = useState<any | null>(null);
 
@@ -1294,7 +1294,7 @@ export default function CreateCoursePage() {
                   <CardContent className="space-y-6 p-6 sm:p-7">
                     <div>
                       <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-foreground">
-                        Sinh viên sẽ học được gì? (Learning Outcomes)
+                        Học viên sẽ đạt được gì?
                       </h3>
                       <div className="space-y-2">
                         {outcomes.length === 0 ? (

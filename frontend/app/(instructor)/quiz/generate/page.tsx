@@ -129,7 +129,7 @@ export default function AIQuizGeneratePage() {
   /**
    * Tải tài liệu bài giảng (PDF/DOCX/PPTX) lên AI Service: bóc tách văn bản,
    * nhúng vào pgvector của bài học và điền sẵn nội dung cho bước sinh đề.
-   * Đúng đặc tả: "Giáo viên upload PDF/DOCX → AI tạo câu hỏi".
+   * Đúng đặc tả: "Giảng viên tải PDF/DOCX lên → AI tạo câu hỏi".
    */
   const handleDocumentUpload = async (file: File) => {
     setUploadError(null);

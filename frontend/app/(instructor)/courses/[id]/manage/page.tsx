@@ -480,7 +480,7 @@ export default function CourseManagePage() {
 
             <Link
               href={`/courses/${courseId}/learn?preview=true`}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 px-3.5 py-1.5 rounded-xl shadow-2xs transition"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3.5 py-1.5 text-xs font-bold text-primary transition hover:bg-accent"
             >
               <Eye className="w-3.5 h-3.5" /> Xem trước bài giảng (Focus Player)
             </Link>
@@ -488,7 +488,7 @@ export default function CourseManagePage() {
         </div>
 
         {/* Course Header Banner */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="rounded-lg border border-border bg-card p-6 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full border border-indigo-200">
@@ -502,20 +502,20 @@ export default function CourseManagePage() {
                 {courseStatus === 'published' ? '✓ Đã xuất bản' : '✏️ Bản nháp'}
               </span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
               {courseTitle}
             </h1>
-            <p className="text-xs text-slate-500">
-              Quản lý học liệu đa phương tiện (Video YouTube, Slide PDF), trích xuất Transcript cho pgvector và duyệt Bộ đề trắc nghiệm AI
+            <p className="text-xs text-muted-foreground">
+              Quản lý video, tài liệu, transcript và câu hỏi ôn tập được AI hỗ trợ.
             </p>
           </div>
 
-          <button onClick={() => setShowCourseEdit(true)} className="inline-flex items-center justify-center gap-2 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold px-4 py-2.5 rounded-xl transition shrink-0">
+          <button onClick={() => setShowCourseEdit(true)} className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-xs font-bold text-primary transition hover:bg-accent shrink-0">
             <Edit3 className="w-4 h-4" /> Sửa thông tin khóa học
           </button>
           <button
             onClick={() => setShowAddForm(true)}
-            className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md shadow-indigo-100 transition shrink-0"
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground transition hover:bg-primary/90 shrink-0"
           >
             <PlusCircle className="w-4 h-4" /> Soạn thảo bài học mới
           </button>
@@ -530,13 +530,13 @@ export default function CourseManagePage() {
         </div>
 
         {showCourseEdit && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-            <form onSubmit={saveCourseEdit} className="w-full max-w-xl space-y-4 rounded-2xl bg-white p-6 shadow-2xl">
-              <div><p className="text-xs font-bold uppercase text-indigo-700">Quản lý khóa học</p><h2 className="mt-1 text-lg font-bold text-slate-900">Sửa thông tin khóa học</h2><p className="mt-1 text-xs text-slate-500">Chỉ giảng viên phụ trách và Admin có quyền lưu.</p></div>
-              <label className="block text-xs font-bold text-slate-700">Tên khóa học<input required value={courseDraft.title} onChange={(e) => setCourseDraft({ ...courseDraft, title: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /></label>
-              <label className="block text-xs font-bold text-slate-700">Mô tả<textarea value={courseDraft.description} onChange={(e) => setCourseDraft({ ...courseDraft, description: e.target.value })} className="mt-1 min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /></label>
-              <div className="grid gap-3 sm:grid-cols-2"><label className="block text-xs font-bold text-slate-700">Lĩnh vực<input value={courseDraft.category} onChange={(e) => setCourseDraft({ ...courseDraft, category: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /></label><label className="block text-xs font-bold text-slate-700">Cấp độ<input value={courseDraft.level} onChange={(e) => setCourseDraft({ ...courseDraft, level: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /></label></div>
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" onClick={() => setShowCourseEdit(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold">Hủy</button><button type="submit" disabled={isSavingCourse} className="inline-flex items-center gap-1 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"><Save className="w-3.5 h-3.5" />{isSavingCourse ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/60 p-4">
+            <form onSubmit={saveCourseEdit} className="w-full max-w-xl space-y-4 rounded-lg border border-border bg-card p-6 shadow-2xl">
+              <div><p className="text-xs font-bold uppercase text-primary">Quản lý khóa học</p><h2 className="mt-1 text-lg font-semibold text-foreground">Sửa thông tin khóa học</h2><p className="mt-1 text-xs text-muted-foreground">Chỉ giảng viên phụ trách và Quản trị viên có quyền lưu.</p></div>
+              <label className="block text-xs font-bold text-foreground">Tên khóa học<input required value={courseDraft.title} onChange={(e) => setCourseDraft({ ...courseDraft, title: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
+              <label className="block text-xs font-bold text-foreground">Mô tả<textarea value={courseDraft.description} onChange={(e) => setCourseDraft({ ...courseDraft, description: e.target.value })} className="mt-1 min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
+              <div className="grid gap-3 sm:grid-cols-2"><label className="block text-xs font-bold text-foreground">Lĩnh vực<input value={courseDraft.category} onChange={(e) => setCourseDraft({ ...courseDraft, category: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label><label className="block text-xs font-bold text-foreground">Cấp độ<input value={courseDraft.level} onChange={(e) => setCourseDraft({ ...courseDraft, level: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label></div>
+              <div className="flex justify-end gap-2 border-t border-border pt-4"><button type="button" onClick={() => setShowCourseEdit(false)} className="rounded-md border border-border px-4 py-2 text-xs font-bold text-foreground">Hủy</button><button type="submit" disabled={isSavingCourse} className="inline-flex items-center gap-1 rounded-md bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-60"><Save className="w-3.5 h-3.5" />{isSavingCourse ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
             </form>
           </div>
         )}
@@ -647,7 +647,7 @@ export default function CourseManagePage() {
                 {embedUrl && (
                   <div className="pt-2">
                     <p className="text-[11px] font-bold text-slate-600 mb-1.5 flex items-center gap-1">
-                      <Eye className="w-3.5 h-3.5 text-indigo-600" /> Xem trước Video sẽ phát cho sinh viên:
+                      <Eye className="w-3.5 h-3.5 text-primary" /> Xem trước video sẽ phát cho học viên:
                     </p>
                     <div className="w-full max-w-md aspect-video rounded-xl overflow-hidden border border-slate-300 shadow-sm bg-black">
                       <iframe
@@ -703,7 +703,7 @@ export default function CourseManagePage() {
                   <div>
                     <h3 className="text-xs sm:text-sm font-bold text-indigo-950 flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-amber-500" />
-                      AI Quiz Generator & Kiểm duyệt Câu hỏi (Teacher Studio)
+                      AI tạo câu hỏi & Kiểm duyệt câu hỏi
                     </h3>
                     <p className="text-[11px] text-slate-500">
                       AI sẽ tự động đọc nội dung bài học và sinh câu hỏi trắc nghiệm chuẩn Bloom. Bạn có thể duyệt và chỉnh sửa trực tiếp.
@@ -850,7 +850,7 @@ export default function CourseManagePage() {
             <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
               Danh sách bài giảng khóa học ({lessons.length} bài)
             </h2>
-            <span className="text-xs text-slate-400">Đồng bộ 100% với Focus Player của Sinh viên</span>
+            <span className="text-xs text-muted-foreground">Đồng bộ với không gian học của Học viên</span>
           </div>
 
           <div className="space-y-3">
@@ -932,7 +932,7 @@ export default function CourseManagePage() {
                   <Link
                     href={`/courses/${courseId}/learn?lessonId=${lesson.id}`}
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition shadow-2xs"
-                    title="Mở phòng học trực tuyến của Sinh viên"
+                    title="Mở không gian học của Học viên"
                   >
                     <Eye className="w-3.5 h-3.5" /> Xem bài học
                   </Link>
@@ -951,15 +951,15 @@ export default function CourseManagePage() {
         </div>
 
         {editingLesson && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-            <form onSubmit={saveLessonEdit} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-4">
-              <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase text-indigo-700">Quản lý học liệu</p><h2 className="mt-1 text-lg font-bold text-slate-900">Sửa bài học</h2><p className="mt-1 text-xs text-slate-500">Giảng viên phụ trách và Admin có thể lưu thay đổi.</p></div><button type="button" onClick={() => setEditingLesson(null)} className="text-xs font-bold text-slate-500">Đóng</button></div>
-              <label className="block text-xs font-bold text-slate-700">Tiêu đề<input required value={editingLesson.title} onChange={(e) => setEditingLesson({ ...editingLesson, title: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /></label>
-              <div className="grid gap-3 sm:grid-cols-2"><label className="block text-xs font-bold text-slate-700">Thời lượng (giây)<input type="number" min="0" value={editingLesson.duration || 0} onChange={(e) => setEditingLesson({ ...editingLesson, duration: Number(e.target.value) })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /></label><label className="block text-xs font-bold text-slate-700">Liên kết tài liệu<input type="url" value={editingLesson.resources_url || ''} onChange={(e) => setEditingLesson({ ...editingLesson, resources_url: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /></label></div>
-              <label className="block text-xs font-bold text-slate-700">URL YouTube hoặc MP4<input type="url" value={editingLesson.video_url || ''} onChange={(e) => setEditingLesson({ ...editingLesson, video_url: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /><span className="mt-1 block font-normal text-slate-500">Đổi video sẽ xóa transcript cũ; sau khi lưu, bấm “Lấy transcript”.</span></label>
-              <label className="block text-xs font-bold text-slate-700">Mô tả<textarea value={editingLesson.description || ''} onChange={(e) => setEditingLesson({ ...editingLesson, description: e.target.value })} className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" /></label>
-              <label className="block text-xs font-bold text-slate-700">Transcript thủ công<textarea value={editingLesson.transcript || ''} onChange={(e) => setEditingLesson({ ...editingLesson, transcript: e.target.value })} className="mt-1 min-h-36 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Dán transcript khi video không có phụ đề công khai." /></label>
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" onClick={() => setEditingLesson(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold">Hủy</button><button type="submit" disabled={isSavingLesson} className="inline-flex items-center gap-1 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"><Save className="w-3.5 h-3.5" />{isSavingLesson ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/60 p-4">
+            <form onSubmit={saveLessonEdit} className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-2xl">
+              <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase text-primary">Quản lý học liệu</p><h2 className="mt-1 text-lg font-semibold text-foreground">Sửa bài học</h2><p className="mt-1 text-xs text-muted-foreground">Giảng viên phụ trách và Quản trị viên có thể lưu thay đổi.</p></div><button type="button" onClick={() => setEditingLesson(null)} className="text-xs font-bold text-muted-foreground hover:text-foreground">Đóng</button></div>
+              <label className="block text-xs font-bold text-foreground">Tiêu đề<input required value={editingLesson.title} onChange={(e) => setEditingLesson({ ...editingLesson, title: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
+              <div className="grid gap-3 sm:grid-cols-2"><label className="block text-xs font-bold text-foreground">Thời lượng (giây)<input type="number" min="0" value={editingLesson.duration || 0} onChange={(e) => setEditingLesson({ ...editingLesson, duration: Number(e.target.value) })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label><label className="block text-xs font-bold text-foreground">Liên kết tài liệu<input type="url" value={editingLesson.resources_url || ''} onChange={(e) => setEditingLesson({ ...editingLesson, resources_url: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label></div>
+              <label className="block text-xs font-bold text-foreground">URL YouTube hoặc MP4<input type="url" value={editingLesson.video_url || ''} onChange={(e) => setEditingLesson({ ...editingLesson, video_url: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /><span className="mt-1 block font-normal text-muted-foreground">Đổi video sẽ xóa transcript cũ; sau khi lưu, bấm “Lấy transcript”.</span></label>
+              <label className="block text-xs font-bold text-foreground">Mô tả<textarea value={editingLesson.description || ''} onChange={(e) => setEditingLesson({ ...editingLesson, description: e.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
+              <label className="block text-xs font-bold text-foreground">Transcript thủ công<textarea value={editingLesson.transcript || ''} onChange={(e) => setEditingLesson({ ...editingLesson, transcript: e.target.value })} className="mt-1 min-h-36 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Dán transcript khi video không có phụ đề công khai." /></label>
+              <div className="flex justify-end gap-2 border-t border-border pt-4"><button type="button" onClick={() => setEditingLesson(null)} className="rounded-md border border-border px-4 py-2 text-xs font-bold text-foreground">Hủy</button><button type="submit" disabled={isSavingLesson} className="inline-flex items-center gap-1 rounded-md bg-primary px-4 py-2 text-xs font-bold text-primary-foreground disabled:opacity-60"><Save className="w-3.5 h-3.5" />{isSavingLesson ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
             </form>
           </div>
         )}

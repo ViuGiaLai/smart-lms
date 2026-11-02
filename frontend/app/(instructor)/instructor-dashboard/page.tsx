@@ -92,7 +92,7 @@ export default function InstructorDashboardPage() {
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <Badge variant="info" className="mb-1 text-[11px]">
-              Phân hệ Giảng viên (Instructor Panel)
+              Phân hệ Giảng viên
             </Badge>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
               Bảng điều khiển Giảng viên
