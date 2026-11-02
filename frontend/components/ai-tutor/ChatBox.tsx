@@ -60,6 +60,36 @@ export default function ChatBox({
     ],
   };
 
+  // Sau mỗi lượt trả lời, học viên luôn có đường đi tiếp theo thay vì phải
+  // tự nghĩ một câu hỏi mới. Các câu này vẫn đi qua RAG của chính bài học.
+  const followUpPromptsByMode: Record<TutorMode, string[]> = {
+    socratic: [
+      'Hãy cho mình một gợi ý tiếp theo, chưa cần đáp án.',
+      'Bạn hãy kiểm tra cách mình hiểu phần này bằng một câu hỏi ngắn.',
+      'Mình nên xem lại khái niệm nào trước khi làm tiếp?',
+    ],
+    direct: [
+      'Tóm tắt phần vừa giải thích thành 3 ý dễ nhớ.',
+      'Cho mình một ví dụ khác đơn giản hơn từ bài học.',
+      'Điểm nào trong phần này dễ nhầm nhất?',
+    ],
+    practice: [
+      'Cho mình một bài tập tương tự với độ khó vừa phải.',
+      'Hỏi mình một câu kiểm tra nhanh về phần này.',
+      'Gợi ý bước đầu tiên để mình tự làm bài tiếp theo.',
+    ],
+  };
+
+  const latestCompletedAssistantMessageId = [...messages]
+    .reverse()
+    .find(
+      (message) =>
+        message.role === 'assistant' &&
+        !message.isStreaming &&
+        Boolean(message.content.trim()) &&
+        !message.content.trim().startsWith('⚠️'),
+    )?.id;
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -200,12 +230,33 @@ export default function ChatBox({
           </div>
         ) : (
           messages.map((msg) => (
-            <ChatMessage
-              key={msg.id}
-              message={msg}
-              onSeek={onSeek}
-              currentLessonId={lessonId}
-            />
+            <React.Fragment key={msg.id}>
+              <ChatMessage
+                message={msg}
+                onSeek={onSeek}
+                currentLessonId={lessonId}
+              />
+              {msg.id === latestCompletedAssistantMessageId && !isStreaming && (
+                <div className="ml-11 mr-2 mb-4 rounded-lg border border-brand-100 bg-brand-50/50 p-2.5">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-700">
+                    Bạn có thể hỏi tiếp
+                  </p>
+                  <div className="space-y-1.5">
+                    {followUpPromptsByMode[tutorMode].map((prompt) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        onClick={() => handleQuickPrompt(prompt)}
+                        className="flex w-full items-start gap-1.5 rounded-md border border-brand-100 bg-card px-2.5 py-2 text-left text-[11px] leading-snug text-foreground transition hover:border-brand-300 hover:bg-brand-50"
+                      >
+                        <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-brand-600" />
+                        <span>{prompt}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
           ))
         )}
         <div ref={messagesEndRef} />
