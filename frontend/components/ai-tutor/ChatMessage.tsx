@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Bot, Clock3, FileText, Play, User } from 'lucide-react';
+import { Clock3, FileText, Play, User } from 'lucide-react';
 import StreamingText from './StreamingText';
 import { ChatMessage as ChatMessageType, ChatSourceRef } from '@/types';
 
@@ -33,20 +33,18 @@ export default function ChatMessage({ message, onSeek, currentLessonId }: ChatMe
     .find((title): title is string => Boolean(title));
 
   return (
-    <div className={`my-3 flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-      <div
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-          isUser ? 'bg-primary text-primary-foreground' : 'border border-border bg-card text-brand-700'
-        }`}
-      >
-        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-      </div>
+    <div className={`my-3 flex ${isUser ? 'flex-row-reverse gap-3' : 'flex-row'}`}>
+      {isUser && (
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <User className="h-4 w-4" />
+        </div>
+      )}
 
       <div
-        className={`max-w-[85%] rounded-lg px-4 py-3 text-sm ${
+        className={`rounded-lg py-3 text-sm ${
           isUser
-            ? 'rounded-tr-none bg-primary text-primary-foreground'
-            : 'rounded-tl-none border border-border bg-card text-foreground'
+            ? 'max-w-[85%] rounded-tr-none bg-primary px-4 text-primary-foreground'
+            : 'w-full max-w-none rounded-tl-none border border-border bg-card px-3 text-foreground sm:px-4'
         }`}
       >
         <StreamingText
