@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ChatMessage, ChatSourceRef } from '@/types';
 
 interface UseAIChatOptions {
@@ -18,6 +18,46 @@ interface UseAIChatReturn {
   sendMessage: (content: string) => Promise<void>;
   clearMessages: () => void;
   currentSessionId: string | null;
+}
+
+const MAX_SAVED_MESSAGES = 40;
+
+/**
+ * Phiên trò chuyện thuộc về đúng người dùng, khóa học và bài học. Không dùng
+ * session id ngẫu nhiên để việc đóng/mở panel vẫn khôi phục được hội thoại.
+ */
+function getHistoryStorageKey(courseId: string, lessonId?: string): string | null {
+  if (typeof window === 'undefined' || !lessonId) return null;
+  try {
+    const storedUser = window.localStorage.getItem('currentUser');
+    const user = storedUser ? JSON.parse(storedUser) : null;
+    const userScope = user?.id || user?.email;
+    if (!userScope) return null;
+    return `smart-lms:ai-tutor:${encodeURIComponent(String(userScope))}:${courseId}:${lessonId}`;
+  } catch {
+    return null;
+  }
+}
+
+function readSavedMessages(storageKey: string | null): ChatMessage[] {
+  if (!storageKey || typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (message): message is ChatMessage =>
+          message &&
+          (message.role === 'user' || message.role === 'assistant') &&
+          typeof message.content === 'string' &&
+          typeof message.id === 'string',
+      )
+      .slice(-MAX_SAVED_MESSAGES)
+      .map((message) => ({ ...message, isStreaming: false }));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -52,11 +92,54 @@ export function useAIChat({
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyReady, setHistoryReady] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const storageKeyRef = useRef<string | null>(null);
+
+  // Khôi phục sau hydration để không tạo khác biệt HTML giữa server và client.
+  useEffect(() => {
+    const storageKey = getHistoryStorageKey(courseId, lessonId);
+    storageKeyRef.current = storageKey;
+    setHistoryReady(false);
+    setMessages(readSavedMessages(storageKey));
+    setHistoryReady(true);
+  }, [courseId, lessonId]);
+
+  // Lưu tối đa 40 tin nhắn, chỉ sau khi AI hoàn thành. Không ghi token đang
+  // stream hoặc một câu hỏi đơn lẻ chưa nhận được phản hồi.
+  useEffect(() => {
+    const storageKey = storageKeyRef.current;
+    if (!historyReady || !storageKey || typeof window === 'undefined') return;
+
+    const completed = messages.filter((message) => !message.isStreaming);
+    const lastCompleted = completed[completed.length - 1];
+    const finishedConversation =
+      lastCompleted?.role === 'user' ? completed.slice(0, -1) : completed;
+
+    try {
+      if (finishedConversation.length === 0) {
+        window.localStorage.removeItem(storageKey);
+        return;
+      }
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify(finishedConversation.slice(-MAX_SAVED_MESSAGES)),
+      );
+    } catch {
+      // Không làm gián đoạn việc học nếu trình duyệt chặn localStorage.
+    }
+  }, [historyReady, messages]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
     setError(null);
+    try {
+      if (storageKeyRef.current && typeof window !== 'undefined') {
+        window.localStorage.removeItem(storageKeyRef.current);
+      }
+    } catch {
+      // Trạng thái trên màn hình vẫn được xóa kể cả khi storage bị chặn.
+    }
   }, []);
 
   const sendMessage = useCallback(
