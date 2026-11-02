@@ -155,6 +155,22 @@
     --tw-ring-color: hsl(var(--ring)) !important;
     border-color: hsl(var(--ring)) !important;
   }
+  /* Slate là màu xanh xám còn sót lại từ giao diện cũ; quy về màu chữ/nền chung. */
+  .text-slate-900, .text-slate-800, .text-slate-700, .text-slate-600 {
+    color: hsl(var(--foreground)) !important;
+  }
+  .text-slate-500, .text-slate-400 {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+  .bg-slate-50, .bg-slate-50\/40, .bg-slate-50\/80 {
+    background-color: hsl(var(--muted)) !important;
+  }
+  .bg-slate-100 {
+    background-color: hsl(var(--secondary)) !important;
+  }
+  .border-slate-100, .border-slate-200, .border-slate-300 {
+    border-color: hsl(var(--border)) !important;
+  }
   /* Giao diện hiện hành chủ đích không sử dụng dải màu neon. */
   .bg-gradient-to-r {
     background-image: none !important;
