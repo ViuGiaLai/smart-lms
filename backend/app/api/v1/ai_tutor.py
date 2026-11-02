@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,11 +21,19 @@ from sqlalchemy import select
 router = APIRouter(prefix="/ai-tutor")
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=4000)
+
+
 class TutorRequest(BaseModel):
     question: str = Field(..., min_length=2, max_length=4000)
     course_id: int | None = None
     lesson_id: int | None = None
     context: str | None = None  # optional extra context
+    tutor_mode: Literal["socratic", "direct", "practice"] = "socratic"
+    # Chỉ là ngữ cảnh hội thoại của chính người dùng; không dùng để phân quyền.
+    chat_history: list[ChatTurn] | None = Field(default=None, max_length=10)
 
 
 async def _stream_from_ai_service(
@@ -82,12 +90,27 @@ async def ai_tutor_chat(
         raise HTTPException(status_code=404, detail="Bài học không tồn tại")
     if payload.course_id is not None and payload.course_id != lesson.course_id:
         raise HTTPException(status_code=400, detail="Bài học không thuộc khóa học đã chọn")
-    await require_course_access(db, current_user, lesson.course_id)
+    course = await require_course_access(db, current_user, lesson.course_id)
 
+    # Giữ tối đa 6 lượt gần nhất; nội dung đã được Pydantic giới hạn kích thước.
+    history = (
+        [turn.model_dump() for turn in payload.chat_history[-6:]]
+        if payload.chat_history
+        else None
+    )
     ai_payload = {
         "question": payload.question,
         "lesson_id": lesson.id,
         "context": None,
+        # Tên bài và trình độ lấy từ DB, không tin dữ liệu client gửi.
+        "lesson_title": lesson.title,
+        "course_level": course.level,
+        "course_category": course.category,
+        "grade_label": course.grade_label,
+        "target_audience": course.target_audience,
+        "language": course.language or "vi",
+        "tutor_mode": payload.tutor_mode or "socratic",
+        "chat_history": history,
     }
 
     return StreamingResponse(

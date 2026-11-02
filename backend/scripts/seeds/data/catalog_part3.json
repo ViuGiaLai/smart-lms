@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "note": "Catalog phần 3: lấp nhóm Kinh tế & Quản lý (tài chính, marketing, quản trị dự án).",
+  "courses": [
+    {
+      "slug": "tai-chinh-doanh-nghiep-nhap-mon",
+      "title": "Tài chính doanh nghiệp nhập môn",
+      "category_slug": "tai-chinh",
+      "level_code": "UNIVERSITY",
+      "grade_label": "Năm 2",
+      "proficiency_level": "Trung cấp",
+      "target_audience": "Sinh viên",
+      "level": "intermediate",
+      "description": "Hiểu dòng tiền, chi phí vốn và quyết định đầu tư: từ khái niệm giá trị thời gian của tiền đến NPV và IRR.",
+      "outcomes": [
+        "Tính giá trị hiện tại và tương lai của dòng tiền",
+        "Đánh giá dự án bằng NPV, IRR",
+        "Phân biệt lợi nhuận kế toán và dòng tiền"
+      ],
+      "prerequisites": ["Nguyên lý kế toán"],
+      "source": "https://openstax.org/subjects",
+      "lessons": [
+        {
+          "title": "Giá trị thời gian của tiền",
+          "summary": "Một đồng hôm nay khác một đồng ngày mai vì lãi suất và rủi ro. Học sinh chiết khấu dòng tiền nhiều kỳ.",
+          "concepts": ["giá trị hiện tại", "lãi kép", "chiết khấu"],
+          "duration": 1800
+        },
+        {
+          "title": "Chi phí vốn và cấu trúc vốn",
+          "summary": "Vay hay phát hành cổ phần đều có chi phí; WACC là mức sinh lời tối thiểu phải đạt.",
+          "concepts": ["chi phí nợ", "chi phí vốn chủ", "WACC"],
+          "duration": 1500
+        },
+        {
+          "title": "Quyết định đầu tư: NPV và IRR",
+          "summary": "NPV dương thì nên đầu tư; IRR so với chi phí vốn. Giới hạn của IRR khi dòng tiền đổi dấu.",
+          "concepts": ["NPV", "IRR", "thời gian hoàn vốn"],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "marketing-can-ban-nghien-cuu-thi-truong",
+      "title": "Marketing căn bản và nghiên cứu thị trường",
+      "category_slug": "marketing",
+      "level_code": "UNIVERSITY",
+      "grade_label": "Năm 1–2",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Sinh viên",
+      "level": "beginner",
+      "description": "Nền tảng marketing: phân khúc – định vị, 4P và cách thu thập dữ liệu khách hàng đúng phương pháp.",
+      "outcomes": [
+        "Phân khúc và định vị sản phẩm",
+        "Xây chiến lược 4P nhất quán",
+        "Thiết kế bảng hỏi khảo sát cơ bản"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://openstax.org/subjects",
+      "lessons": [
+        {
+          "title": "Phân khúc, nhắm mục tiêu, định vị",
+          "summary": "STP: chia thị trường theo tiêu chí có ý nghĩa, chọn nhóm phù hợp nguồn lực, định vị bằng lợi ích khác biệt.",
+          "concepts": ["segmentation", "targeting", "positioning"],
+          "duration": 1500
+        },
+        {
+          "title": "Marketing mix 4P",
+          "summary": "Sản phẩm, giá, phân phối, xúc tiến phải nhất quán với định vị; lỗi thường gặp là giảm giá phá định vị.",
+          "concepts": ["product", "price", "place và promotion"],
+          "duration": 1500
+        },
+        {
+          "title": "Nghiên cứu thị trường thực hành",
+          "summary": "Chọn mẫu, viết câu hỏi không dẫn dắt, đọc kết quả và phân biệt tương quan với nhân quả.",
+          "concepts": ["câu hỏi không dẫn dắt", "chọn mẫu", "đọc kết quả"],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "quan-tri-du-an-cong-nghe",
+      "title": "Quản trị dự án công nghệ",
+      "category_slug": "quan-ly",
+      "level_code": "PROFESSIONAL",
+      "grade_label": "Chứng chỉ nghề",
+      "proficiency_level": "Trung cấp",
+      "target_audience": "Người đi làm",
+      "level": "intermediate",
+      "description": "Lập kế hoạch, ước lượng và kiểm soát rủi ro cho dự án phần mềm; cân bằng phạm vi – thời gian – chất lượng.",
+      "outcomes": [
+        "Lập WBS và ước lượng thời gian",
+        "Quản lý rủi ro theo xác suất và tác động",
+        "Theo dõi tiến độ bằng dữ liệu"
+      ],
+      "prerequisites": ["Kinh nghiệm tham gia dự án"],
+      "source": "https://www.atlassian.com/agile",
+      "lessons": [
+        {
+          "title": "Phạm vi và WBS",
+          "summary": "Không chốt phạm vi thì không thể ước lượng. Học sinh tách dự án thành gói công việc nhỏ nhất kiểm soát được.",
+          "concepts": ["scope statement", "WBS", "milestone"],
+          "duration": 1500
+        },
+        {
+          "title": "Ước lượng và lập tiến độ",
+          "summary": "Ba điểm (lạc quan – khả dĩ – bi quan) và đường găng; vì sao ước lượng luôn lệch.",
+          "concepts": ["PERT", "critical path", "buffer"],
+          "duration": 1800
+        },
+        {
+          "title": "Quản lý rủi ro và báo cáo",
+          "summary": "Sổ rủi ro với xác suất × tác động; báo cáo tiến độ bằng số liệu thay vì cảm nhận.",
+          "concepts": ["risk register", "mitigation", "báo cáo dựa trên dữ liệu"],
+          "duration": 1500
+        }
+      ]
+    }
+  ]
+}

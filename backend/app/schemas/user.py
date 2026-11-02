@@ -14,7 +14,8 @@ class UserBase(BaseModel):
 # ── Create ───────
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=6, max_length=128)
+    # Đồng bộ với yêu cầu của form đăng ký ở frontend (tối thiểu 8 ký tự).
+    password: str = Field(..., min_length=8, max_length=128)
     name: str | None = None
     fullName: str | None = None
     role: str = "student"

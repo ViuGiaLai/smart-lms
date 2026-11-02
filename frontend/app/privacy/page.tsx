@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react'
+import { ArrowLeft, ShieldCheck } from 'lucide-react'
 
 export const metadata = {
   title: 'Chính sách bảo mật',
@@ -35,41 +35,37 @@ const POLICIES = [
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-4 py-12">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-200">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-            Smart LMS
-          </span>
-        </div>
+        <Link href="/" className="mb-10 inline-flex items-baseline gap-2.5" aria-label="Trang chủ Smart LMS">
+          <span className="font-serif text-xl font-semibold tracking-tight text-foreground">Smart LMS</span>
+          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Đại học Đông Á</span>
+        </Link>
 
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8">
+        <div className="bg-white rounded-lg border border-border bg-card p-8">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-md border border-brand-200 bg-brand-50 text-brand-700 flex items-center justify-center">
               <ShieldCheck className="w-5 h-5" />
             </div>
-            <h1 className="text-2xl font-extrabold text-slate-900">Chính sách bảo mật</h1>
+            <h1 className="text-[26px] leading-tight text-foreground">Chính sách bảo mật</h1>
           </div>
-          <p className="text-xs text-slate-500 mb-8">
+          <p className="text-xs text-stone-500 mb-8">
             Cập nhật lần cuối: 13/10/2026 • Nền tảng học tập trực tuyến Smart LMS
           </p>
 
           <div className="space-y-6">
             {POLICIES.map((item) => (
               <section key={item.title}>
-                <h2 className="text-sm font-bold text-slate-900 mb-1.5">{item.title}</h2>
-                <p className="text-sm text-slate-600 leading-relaxed">{item.body}</p>
+                <h2 className="text-sm font-bold text-stone-900 mb-1.5">{item.title}</h2>
+                <p className="text-sm text-stone-600 leading-relaxed">{item.body}</p>
               </section>
             ))}
           </div>
 
-          <div className="mt-10 pt-6 border-t border-slate-100">
+          <div className="mt-10 pt-6 border-t border-stone-100">
             <Link
               href="/login"
-              className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-xl transition-colors text-sm"
+              className="inline-flex items-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium py-2.5 px-4 rounded-lg transition-colors text-sm"
             >
               <ArrowLeft className="w-4 h-4" />
               Quay lại trang Đăng nhập

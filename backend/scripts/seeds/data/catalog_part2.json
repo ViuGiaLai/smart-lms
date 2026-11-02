@@ -1,0 +1,890 @@
+{
+  "version": 1,
+  "note": "Catalog phần 2: đại học, công nghệ, kỹ năng nghề nghiệp, kỹ năng sống, khoa học, nghệ thuật.",
+  "courses": [
+    {
+      "slug": "python-co-ban-cho-nguoi-moi",
+      "title": "Python cơ bản cho người mới",
+      "category_slug": "lap-trinh",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "Nhập môn",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người tự học",
+      "level": "beginner",
+      "description": "Học Python từ biến, kiểu dữ liệu, vòng lặp đến hàm và xử lý lỗi — mỗi bài đều có bài tập nhỏ chạy được ngay.",
+      "outcomes": [
+        "Viết được script Python xử lý dữ liệu đơn giản",
+        "Hiểu kiểu dữ liệu, vòng lặp, hàm",
+        "Đọc và sửa thông báo lỗi"
+      ],
+      "prerequisites": ["Không cần kiến thức lập trình"],
+      "source": "https://www.freecodecamp.org/learn",
+      "lessons": [
+        {
+          "title": "Biến, kiểu dữ liệu và biểu thức",
+          "summary": "Biến là tên gắn với giá trị; Python suy luận kiểu tự động. Học sinh phân biệt int, float, str, bool và ép kiểu.",
+          "concepts": ["gán biến", "int/float/str/bool", "ép kiểu"],
+          "duration": 1500
+        },
+        {
+          "title": "Điều kiện và vòng lặp",
+          "summary": "if/elif/else để rẽ nhánh, for/while để lặp. Trọng tâm là chọn vòng lặp đúng và tránh lặp vô hạn.",
+          "concepts": ["if-elif-else", "for/while", "break và continue"],
+          "duration": 1800
+        },
+        {
+          "title": "Hàm và tái sử dụng code",
+          "summary": "Hàm gói một việc và nhận tham số. Học sinh tách script dài thành các hàm nhỏ, đặt tên rõ nghĩa.",
+          "concepts": ["def", "tham số và giá trị trả về", "phạm vi biến"],
+          "duration": 1800
+        },
+        {
+          "title": "Đọc lỗi và gỡ lỗi",
+          "summary": "Đọc traceback từ dưới lên, xác định dòng gây lỗi; xử lý ngoại lệ bằng try/except hợp lý.",
+          "concepts": ["traceback", "try/except", "in giá trị để kiểm tra"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "web-frontend-html-css-javascript",
+      "title": "Web Frontend – HTML, CSS và JavaScript",
+      "category_slug": "lap-trinh",
+      "level_code": "UNIVERSITY",
+      "grade_label": "Năm 1–2",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Sinh viên",
+      "level": "beginner",
+      "description": "Xây trang web đầu tiên theo chuẩn web hiện đại: cấu trúc HTML ngữ nghĩa, layout CSS và tương tác JavaScript.",
+      "outcomes": [
+        "Dựng trang responsive bằng Flexbox/Grid",
+        "Thao tác DOM và xử lý sự kiện",
+        "Gọi API và hiển thị dữ liệu"
+      ],
+      "prerequisites": ["Sử dụng máy tính cơ bản"],
+      "source": "https://developer.mozilla.org/en-US/docs/Learn_web_development",
+      "lessons": [
+        {
+          "title": "HTML ngữ nghĩa",
+          "summary": "Dùng header, nav, main, article đúng mục đích giúp SEO và trợ năng. Học sinh chuyển layout div lạm dụng sang ngữ nghĩa.",
+          "concepts": ["thẻ ngữ nghĩa", "cấu trúc tài liệu", "trợ năng cơ bản"],
+          "duration": 1500
+        },
+        {
+          "title": "CSS layout với Flexbox và Grid",
+          "summary": "Flexbox cho một chiều, Grid cho hai chiều. Học sinh dựng lại một trang mẫu bằng cả hai để hiểu khi nào dùng cái nào.",
+          "concepts": ["flex-direction", "grid-template", "responsive breakpoint"],
+          "duration": 1800
+        },
+        {
+          "title": "JavaScript và DOM",
+          "summary": "Chọn phần tử, lắng nghe sự kiện, cập nhật nội dung. Bài học sửa lỗi phổ biến: chạy script trước khi DOM sẵn sàng.",
+          "concepts": ["querySelector", "addEventListener", "DOMContentLoaded"],
+          "duration": 1800
+        },
+        {
+          "title": "Gọi API và hiển thị dữ liệu",
+          "summary": "fetch, xử lý bất đồng bộ, trạng thái loading/error. Học sinh hiển thị danh sách dữ liệu từ API công khai.",
+          "concepts": ["fetch", "async/await", "trạng thái loading và lỗi"],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "sql-va-co-so-du-lieu-quan-he",
+      "title": "SQL và cơ sở dữ liệu quan hệ",
+      "category_slug": "cloud-db",
+      "level_code": "UNIVERSITY",
+      "grade_label": "Năm 2",
+      "proficiency_level": "Trung cấp",
+      "target_audience": "Sinh viên",
+      "level": "intermediate",
+      "description": "Truy vấn dữ liệu thật bằng SQL: lọc, nhóm, join và tối ưu bằng index; hiểu vì sao thiết kế bảng quyết định hiệu năng.",
+      "outcomes": [
+        "Viết SELECT với JOIN nhiều bảng",
+        "Dùng GROUP BY và hàm tổng hợp",
+        "Giải thích khi nào index có tác dụng"
+      ],
+      "prerequisites": ["Khái niệm bảng và khoá"],
+      "source": "https://www.postgresql.org/docs/",
+      "lessons": [
+        {
+          "title": "Truy vấn nền tảng",
+          "summary": "SELECT, WHERE, ORDER BY, LIMIT. Học sinh lọc dữ liệu theo điều kiện và sắp xếp theo nhiều khoá.",
+          "concepts": ["SELECT/WHERE", "ORDER BY", "NULL và so sánh"],
+          "duration": 1500
+        },
+        {
+          "title": "JOIN và quan hệ giữa bảng",
+          "summary": "INNER, LEFT JOIN khác nhau ở việc giữ hay bỏ dòng không khớp. Học sinh viết truy vấn báo cáo từ 3 bảng.",
+          "concepts": ["INNER JOIN", "LEFT JOIN", "khoá ngoại"],
+          "duration": 1800
+        },
+        {
+          "title": "Nhóm dữ liệu và tổng hợp",
+          "summary": "GROUP BY kết hợp COUNT, SUM, AVG; HAVING lọc sau khi nhóm. Phân biệt WHERE và HAVING.",
+          "concepts": ["GROUP BY", "hàm tổng hợp", "HAVING"],
+          "duration": 1500
+        },
+        {
+          "title": "Index và hiệu năng truy vấn",
+          "summary": "Index tăng tốc tìm kiếm nhưng làm chậm ghi. Đọc EXPLAIN để biết truy vấn có dùng index hay quét toàn bảng.",
+          "concepts": ["B-tree index", "EXPLAIN", "đánh đổi đọc/ghi"],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "nhap-mon-ai-va-machine-learning",
+      "title": "Nhập môn AI và Machine Learning",
+      "category_slug": "ai-data",
+      "level_code": "UNIVERSITY",
+      "grade_label": "Năm 3",
+      "proficiency_level": "Trung cấp",
+      "target_audience": "Sinh viên",
+      "level": "intermediate",
+      "description": "Hiểu học máy làm gì và không làm được gì: dữ liệu, đặc trưng, huấn luyện, đánh giá và các lỗi phổ biến khi triển khai.",
+      "outcomes": [
+        "Phân biệt học có giám sát và không giám sát",
+        "Chọn độ đo đánh giá phù hợp",
+        "Nhận diện overfitting và rò rỉ dữ liệu"
+      ],
+      "prerequisites": ["Đại số cơ bản", "Python"],
+      "source": "https://developers.google.com/machine-learning/crash-course",
+      "lessons": [
+        {
+          "title": "Bài toán học máy và dữ liệu",
+          "summary": "Học máy tìm quy luật từ dữ liệu để dự đoán. Bài học nhấn mạnh: chất lượng dữ liệu quyết định hơn mô hình phức tạp.",
+          "concepts": ["dữ liệu huấn luyện", "nhãn", "đặc trưng"],
+          "duration": 1500
+        },
+        {
+          "title": "Học có giám sát và không giám sát",
+          "summary": "Hồi quy, phân loại cần nhãn; phân cụm không cần. Học sinh chọn loại bài toán theo dữ liệu thực tế.",
+          "concepts": ["hồi quy", "phân loại", "phân cụm"],
+          "duration": 1500
+        },
+        {
+          "title": "Đánh giá mô hình",
+          "summary": "Chia train/validation/test, đọc confusion matrix, chọn metric theo cái giá của sai sót.",
+          "concepts": ["train/test split", "precision và recall", "confusion matrix"],
+          "duration": 1800
+        },
+        {
+          "title": "Overfitting và rò rỉ dữ liệu",
+          "summary": "Mô hình quá khớp tập huấn luyện sẽ tệ khi gặp dữ liệu mới. Nhận diện rò rỉ khi chuẩn hoá trước khi chia dữ liệu.",
+          "concepts": ["overfitting", "regularization", "data leakage"],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "giai-tich-1-gioi-han-va-dao-ham",
+      "title": "Giải tích 1 – Giới hạn và đạo hàm",
+      "category_slug": "khoa-hoc-dh",
+      "level_code": "UNIVERSITY",
+      "grade_label": "Năm 1",
+      "proficiency_level": "Trung cấp",
+      "target_audience": "Sinh viên",
+      "level": "intermediate",
+      "description": "Xây nền giải tích từ giới hạn, liên tục đến đạo hàm và ứng dụng tìm cực trị, tốc độ thay đổi.",
+      "outcomes": [
+        "Tính giới hạn dạng vô định",
+        "Áp dụng quy tắc đạo hàm",
+        "Giải bài toán tối ưu bằng đạo hàm"
+      ],
+      "prerequisites": ["Hàm số bậc hai, lượng giác"],
+      "source": "https://openstax.org/subjects",
+      "lessons": [
+        {
+          "title": "Giới hạn và dạng vô định",
+          "summary": "Giới hạn mô tả xu hướng giá trị. Học sinh xử lý 0/0 bằng phân tích nhân tử và quy tắc L'Hôpital.",
+          "concepts": ["giới hạn một bên", "dạng 0/0", "L'Hôpital"],
+          "duration": 1800
+        },
+        {
+          "title": "Đạo hàm và ý nghĩa hình học",
+          "summary": "Đạo hàm là độ dốc tiếp tuyến, đo tốc độ thay đổi. Bài học nối công thức với hình ảnh đồ thị.",
+          "concepts": ["định nghĩa đạo hàm", "tiếp tuyến", "tốc độ thay đổi"],
+          "duration": 1800
+        },
+        {
+          "title": "Quy tắc tính đạo hàm",
+          "summary": "Tích, thương, hàm hợp. Học sinh luyện chọn đúng quy tắc và kiểm tra bằng cách viết lại biểu thức.",
+          "concepts": ["quy tắc tích", "quy tắc thương", "chain rule"],
+          "duration": 1800
+        },
+        {
+          "title": "Ứng dụng: tối ưu hoá",
+          "summary": "Tìm cực trị trong bài toán thực tế: chi phí nhỏ nhất, diện tích lớn nhất. Quy trình đặt biến và miền xác định.",
+          "concepts": ["điểm tới hạn", "miền xác định", "kiểm tra biên"],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "kinh-te-vi-mo-cung-cau-va-thi-truong",
+      "title": "Kinh tế vi mô – Cung cầu và thị trường",
+      "category_slug": "kinh-te-dh",
+      "level_code": "UNIVERSITY",
+      "grade_label": "Năm 1–2",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Sinh viên",
+      "level": "beginner",
+      "description": "Hiểu cách thị trường hình thành giá: cung cầu, độ co giãn, can thiệp của chính phủ và thất bại thị trường.",
+      "outcomes": [
+        "Phân tích dịch chuyển cung – cầu",
+        "Tính và diễn giải độ co giãn",
+        "Đánh giá tác động của thuế, giá trần"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://openstax.org/subjects",
+      "lessons": [
+        {
+          "title": "Cung, cầu và điểm cân bằng",
+          "summary": "Giá cân bằng hình thành khi lượng cung bằng lượng cầu. Phân biệt dịch chuyển đường với di chuyển dọc đường.",
+          "concepts": ["đường cung", "đường cầu", "cân bằng thị trường"],
+          "duration": 1500
+        },
+        {
+          "title": "Độ co giãn của cầu",
+          "summary": "Co giãn đo mức phản ứng của lượng cầu với giá. Liên hệ với quyết định giá của doanh nghiệp.",
+          "concepts": ["co giãn theo giá", "hàng thiết yếu vs xa xỉ", "doanh thu"],
+          "duration": 1500
+        },
+        {
+          "title": "Can thiệp của chính phủ",
+          "summary": "Giá trần, giá sàn, thuế tạo ra thay đổi lượng và tổn thất vô ích. Đọc đồ thị để xác định ai chịu thuế.",
+          "concepts": ["giá trần", "giá sàn", "deadweight loss"],
+          "duration": 1800
+        },
+        {
+          "title": "Thất bại thị trường và ngoại ứng",
+          "summary": "Ngoại ứng âm như ô nhiễm khiến thị trường sản xuất quá mức. Các công cụ sửa: thuế Pigou, quy định.",
+          "concepts": ["ngoại ứng", "hàng hoá công", "thuế Pigou"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "nhap-mon-luat-hoc-he-thong-phap-luat",
+      "title": "Nhập môn Luật học – Hệ thống pháp luật Việt Nam",
+      "category_slug": "luat",
+      "level_code": "UNIVERSITY",
+      "grade_label": "Năm 1",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Sinh viên",
+      "level": "beginner",
+      "description": "Làm quen cấu trúc hệ thống pháp luật, thứ bậc văn bản và phương pháp đọc – áp dụng quy phạm pháp luật.",
+      "outcomes": [
+        "Xác định thứ bậc hiệu lực văn bản",
+        "Đọc một quy phạm và tách giả định – quy định – chế tài",
+        "Lập luận áp dụng luật cho tình huống đơn giản"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://moet.gov.vn",
+      "lessons": [
+        {
+          "title": "Hệ thống văn bản quy phạm pháp luật",
+          "summary": "Hiến pháp, luật, nghị định, thông tư theo thứ bậc hiệu lực. Văn bản trái cấp trên không có hiệu lực.",
+          "concepts": ["thứ bậc hiệu lực", "hiệu lực thời gian", "hiệu lực không gian"],
+          "duration": 1500
+        },
+        {
+          "title": "Cấu trúc quy phạm pháp luật",
+          "summary": "Mỗi quy phạm gồm giả định, quy định, chế tài. Học sinh tách ba phần trong một điều luật cụ thể.",
+          "concepts": ["giả định", "quy định", "chế tài"],
+          "duration": 1200
+        },
+        {
+          "title": "Áp dụng pháp luật và lập luận",
+          "summary": "Từ sự kiện thực tế đến quy phạm áp dụng và kết luận. Luyện tập với tình huống tranh chấp hợp đồng đơn giản.",
+          "concepts": ["xác định sự kiện", "chọn quy phạm", "kết luận pháp lý"],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "ke-toan-tai-chinh-bao-cao-tai-chinh",
+      "title": "Kế toán tài chính – Đọc báo cáo tài chính",
+      "category_slug": "ke-toan",
+      "level_code": "UNIVERSITY",
+      "grade_label": "Năm 2",
+      "proficiency_level": "Trung cấp",
+      "target_audience": "Sinh viên",
+      "level": "intermediate",
+      "description": "Học cách ghi nhận ban đầu và đọc ba báo cáo tài chính cốt lõi để đánh giá tình hình doanh nghiệp.",
+      "outcomes": [
+        "Ghi nhận nghiệp vụ cơ bản theo nguyên tắc kế toán",
+        "Đọc bảng cân đối, báo cáo kết quả kinh doanh",
+        "Tính các chỉ số thanh khoản, sinh lời"
+      ],
+      "prerequisites": ["Nguyên lý kế toán nhập môn"],
+      "source": "https://openstax.org/subjects",
+      "lessons": [
+        {
+          "title": "Nguyên tắc ghi nhận kế toán",
+          "summary": "Cơ sở dồn tích và nguyên tắc phù hợp quyết định thời điểm ghi doanh thu, chi phí.",
+          "concepts": ["cơ sở dồn tích", "nguyên tắc phù hợp", "kỳ kế toán"],
+          "duration": 1500
+        },
+        {
+          "title": "Bảng cân đối kế toán",
+          "summary": "Tài sản = Nợ phải trả + Vốn chủ sở hữu. Học sinh đọc cấu trúc và phát hiện thay đổi bất thường.",
+          "concepts": ["tài sản", "nợ phải trả", "vốn chủ sở hữu"],
+          "duration": 1500
+        },
+        {
+          "title": "Báo cáo kết quả kinh doanh",
+          "summary": "Doanh thu – chi phí = lợi nhuận; phân biệt chi phí hoạt động và giá vốn.",
+          "concepts": ["doanh thu", "giá vốn", "lợi nhuận gộp"],
+          "duration": 1500
+        },
+        {
+          "title": "Chỉ số tài chính cơ bản",
+          "summary": "Thanh khoản, đòn bẩy, sinh lời và cách đọc xu hướng qua vài kỳ.",
+          "concepts": ["current ratio", "ROE", "phân tích xu hướng"],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "excel-tu-co-ban-den-phan-tich-du-lieu",
+      "title": "Excel từ cơ bản đến phân tích dữ liệu",
+      "category_slug": "tin-hoc-van-phong",
+      "level_code": "PROFESSIONAL",
+      "grade_label": "Chứng chỉ nghề",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người đi làm",
+      "level": "beginner",
+      "description": "Làm việc thật với Excel: công thức, hàm tra cứu, bảng tổng hợp và biểu đồ để ra quyết định.",
+      "outcomes": [
+        "Dùng VLOOKUP/XLOOKUP, IF, SUMIFS thành thạo",
+        "Tạo PivotTable và biểu đồ",
+        "Làm sạch dữ liệu trước khi phân tích"
+      ],
+      "prerequisites": ["Sử dụng máy tính cơ bản"],
+      "source": "https://learnfree.org/series/excel-foundations",
+      "lessons": [
+        {
+          "title": "Cấu trúc bảng và công thức nền tảng",
+          "summary": "Tham chiếu tương đối và tuyệt đối là gốc của mọi lỗi công thức. Học sinh sửa các lỗi thường gặp.",
+          "concepts": ["tham chiếu tương đối", "tham chiếu tuyệt đối", "lỗi #REF"],
+          "duration": 1500
+        },
+        {
+          "title": "Hàm điều kiện và tra cứu",
+          "summary": "IF lồng nhau, SUMIFS theo nhiều điều kiện, XLOOKUP thay VLOOKUP khi cần tra hai chiều.",
+          "concepts": ["IF", "SUMIFS", "XLOOKUP"],
+          "duration": 1800
+        },
+        {
+          "title": "PivotTable và biểu đồ",
+          "summary": "Tổng hợp nhanh theo nhóm, kéo thả trường và chọn loại biểu đồ phù hợp câu hỏi.",
+          "concepts": ["PivotTable", "group dữ liệu", "chọn loại biểu đồ"],
+          "duration": 1800
+        },
+        {
+          "title": "Làm sạch dữ liệu",
+          "summary": "Loại trùng, tách cột, chuẩn hoá định dạng ngày và số trước khi phân tích.",
+          "concepts": ["remove duplicates", "text to columns", "chuẩn hoá định dạng"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "digital-marketing-nen-tang",
+      "title": "Digital Marketing nền tảng",
+      "category_slug": "marketing-nghe",
+      "level_code": "PROFESSIONAL",
+      "grade_label": "Chứng chỉ nghề",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người đi làm",
+      "level": "beginner",
+      "description": "Bức tranh tổng thể digital marketing: phễu khách hàng, kênh, nội dung và đo lường hiệu quả.",
+      "outcomes": [
+        "Vẽ phễu từ nhận biết đến chuyển đổi",
+        "Chọn kênh theo mục tiêu và ngân sách",
+        "Đọc chỉ số cơ bản của chiến dịch"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://learndigital.withgoogle.com/digitalgarage",
+      "lessons": [
+        {
+          "title": "Phễu khách hàng và mục tiêu",
+          "summary": "Nhận biết – quan tâm – chuyển đổi – giữ chân. Mỗi tầng cần nội dung và kênh khác nhau.",
+          "concepts": ["phễu marketing", "chân dung khách hàng", "mục tiêu SMART"],
+          "duration": 1500
+        },
+        {
+          "title": "Chọn kênh và nội dung",
+          "summary": "SEO, quảng cáo trả phí, mạng xã hội, email; ưu tiên theo nơi khách hàng đang ở.",
+          "concepts": ["SEO", "paid ads", "content pillar"],
+          "duration": 1800
+        },
+        {
+          "title": "Đo lường hiệu quả",
+          "summary": "CTR, CVR, CPA, ROI. Học sinh đọc bảng số liệu chiến dịch và đề xuất điều chỉnh.",
+          "concepts": ["CTR", "conversion rate", "ROI"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "quan-ly-du-an-agile-scrum",
+      "title": "Quản lý dự án Agile và Scrum",
+      "category_slug": "quan-ly-du-an",
+      "level_code": "PROFESSIONAL",
+      "grade_label": "Chứng chỉ nghề",
+      "proficiency_level": "Trung cấp",
+      "target_audience": "Người đi làm",
+      "level": "intermediate",
+      "description": "Vận hành dự án theo Scrum: vai trò, sự kiện, backlog và cách đo tiến độ thực thay vì báo cáo cảm tính.",
+      "outcomes": [
+        "Viết user story và tiêu chí hoàn thành",
+        "Điều hành sprint planning, daily, retro",
+        "Đo velocity và nhận diện nút thắt"
+      ],
+      "prerequisites": ["Kinh nghiệm làm việc nhóm"],
+      "source": "https://www.atlassian.com/agile",
+      "lessons": [
+        {
+          "title": "Tư duy Agile và ba vai trò",
+          "summary": "Agile ưu tiên thích nghi hơn kế hoạch cứng; Scrum có Product Owner, Scrum Master, Development Team.",
+          "concepts": ["Agile manifesto", "ba vai trò Scrum", "vòng lặp ngắn"],
+          "duration": 1500
+        },
+        {
+          "title": "User story và tiêu chí hoàn thành",
+          "summary": "Viết story theo dạng As a… I want… so that…, kèm điều kiện kiểm thử rõ ràng.",
+          "concepts": ["user story", "acceptance criteria", "INVEST"],
+          "duration": 1500
+        },
+        {
+          "title": "Sự kiện Scrum và đo tiến độ",
+          "summary": "Planning, daily, review, retro; burndown và velocity cho biết dự án có về đích đúng hạn không.",
+          "concepts": ["sprint events", "burn-down chart", "velocity"],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "quan-ly-tai-chinh-ca-nhan",
+      "title": "Quản lý tài chính cá nhân",
+      "category_slug": "tai-chinh-ca-nhan",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "Mọi độ tuổi",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người tự học",
+      "level": "beginner",
+      "description": "Lập ngân sách, xử lý nợ và xây quỹ dự phòng bằng phương pháp đơn giản, không cần kiến thức tài chính phức tạp.",
+      "outcomes": [
+        "Lập ngân sách theo mô hình 50/30/20 đã điều chỉnh",
+        "Tính và xử lý nợ tiêu dùng",
+        "Lập quỹ dự phòng 3–6 tháng"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://www.khanacademy.org/college-careers-more/financial-literacy",
+      "lessons": [
+        {
+          "title": "Ghi chép thu chi và lập ngân sách",
+          "summary": "Biết tiền đi đâu là bước đầu. Học sinh phân loại chi tiêu và đặt giới hạn theo nhóm.",
+          "concepts": ["thu nhập ròng", "chi phí cố định/biến đổi", "ngân sách 50/30/20"],
+          "duration": 1200
+        },
+        {
+          "title": "Quản lý nợ và lãi suất",
+          "summary": "Phân biệt lãi đơn, lãi kép; chiến lược trả nợ theo lãi cao trước hoặc số dư nhỏ trước.",
+          "concepts": ["lãi kép", "dư nợ", "thứ tự ưu tiên trả nợ"],
+          "duration": 1500
+        },
+        {
+          "title": "Quỹ dự phòng và bảo hiểm",
+          "summary": "Quỹ dự phòng là lớp đệm trước rủi ro. Cách xây dần và khi nào nên dùng.",
+          "concepts": ["quỹ khẩn cấp", "rủi ro thu nhập", "bảo hiểm cơ bản"],
+          "duration": 1200
+        }
+      ]
+    },
+    {
+      "slug": "tu-duy-phan-bien-va-giai-quyet-van-de",
+      "title": "Tư duy phản biện và giải quyết vấn đề",
+      "category_slug": "tu-duy-phan-bien",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "Mọi độ tuổi",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người tự học",
+      "level": "beginner",
+      "description": "Nhận diện lập luận sai, đặt câu hỏi đúng và giải quyết vấn đề theo cấu trúc thay vì phản ứng cảm tính.",
+      "outcomes": [
+        "Nhận diện ngụy biện thường gặp",
+        "Phân rã vấn đề thành phần nhỏ",
+        "Đưa ra quyết định dựa trên bằng chứng"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://www.open.edu/openlearn/history-the-arts/free-courses",
+      "lessons": [
+        {
+          "title": "Phân biệt sự kiện và diễn giải",
+          "summary": "Sự kiện có thể kiểm chứng, diễn giải là cách gán nghĩa. Học sinh tách hai lớp trong một bài báo.",
+          "concepts": ["fact và opinion", "nguồn tin", "kiểm chứng chéo"],
+          "duration": 1200
+        },
+        {
+          "title": "Ngụy biện logic thường gặp",
+          "summary": "Công kích cá nhân, người rơm, lập luận vòng tròn. Cách nhận diện và phản hồi.",
+          "concepts": ["ad hominem", "straw man", "circular reasoning"],
+          "duration": 1500
+        },
+        {
+          "title": "Khung giải quyết vấn đề",
+          "summary": "Xác định vấn đề thật, tìm nguyên nhân gốc bằng 5 Whys, đề xuất và kiểm chứng giải pháp.",
+          "concepts": ["5 Whys", "nguyên nhân gốc", "kiểm chứng giải pháp"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "thien-van-hoc-nhap-mon",
+      "title": "Thiên văn học nhập môn",
+      "category_slug": "thien-van",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "Mọi độ tuổi",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người tự học",
+      "level": "beginner",
+      "description": "Hiểu hệ Mặt Trời, ngôi sao và vũ trụ qua dữ liệu quan sát thật, kèm cách tự quan sát bầu trời.",
+      "outcomes": [
+        "Giải thích chu kỳ ngày đêm và mùa",
+        "Phân biệt sao, hành tinh, thiên hà",
+        "Đọc ảnh thiên văn có chú thích"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://science.nasa.gov",
+      "lessons": [
+        {
+          "title": "Trái Đất, Mặt Trăng và mùa",
+          "summary": "Mùa do độ nghiêng trục Trái Đất, không phải khoảng cách tới Mặt Trời. Học sinh kiểm chứng bằng mô hình.",
+          "concepts": ["độ nghiêng trục", "chu kỳ ngày đêm", "pha Mặt Trăng"],
+          "duration": 1500
+        },
+        {
+          "title": "Hệ Mặt Trời",
+          "summary": "Tám hành tinh, vành đai tiểu hành tinh và sao chổi; sự khác nhau giữa hành tinh đá và khí.",
+          "concepts": ["hành tinh đá", "hành tinh khí", "vành đai tiểu hành tinh"],
+          "duration": 1500
+        },
+        {
+          "title": "Ngôi sao và vòng đời",
+          "summary": "Sao sinh ra từ tinh vân, cháy bằng phản ứng tổng hợp hạt nhân và kết thúc tùy khối lượng.",
+          "concepts": ["tinh vân", "phản ứng tổng hợp", "sao lùn trắng, sao neutron"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "moi-truong-va-bien-doi-khi-hau",
+      "title": "Môi trường và biến đổi khí hậu",
+      "category_slug": "moi-truong",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "Mọi độ tuổi",
+      "proficiency_level": "Trung cấp",
+      "target_audience": "Người tự học",
+      "level": "intermediate",
+      "description": "Đọc dữ liệu khí hậu, hiểu hiệu ứng nhà kính và đánh giá các giải pháp thích ứng tại Việt Nam.",
+      "outcomes": [
+        "Giải thích cơ chế hiệu ứng nhà kính",
+        "Đọc biểu đồ nhiệt độ, lượng mưa",
+        "Đề xuất hành động thích ứng theo địa phương"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://science.nasa.gov",
+      "lessons": [
+        {
+          "title": "Hiệu ứng nhà kính và cân bằng năng lượng",
+          "summary": "Khí nhà kính giữ nhiệt, nhưng nồng độ tăng làm cân bằng lệch. Phân biệt thời tiết và khí hậu.",
+          "concepts": ["khí nhà kính", "cân bằng năng lượng", "thời tiết vs khí hậu"],
+          "duration": 1500
+        },
+        {
+          "title": "Đọc dữ liệu khí hậu",
+          "summary": "Xu hướng nhiệt độ toàn cầu và mực nước biển; cách đọc biểu đồ có trục và đơn vị đúng.",
+          "concepts": ["chuỗi thời gian", "dị thường nhiệt độ", "mực nước biển"],
+          "duration": 1500
+        },
+        {
+          "title": "Thích ứng tại Việt Nam",
+          "summary": "Xâm nhập mặn, ngập lụt đô thị và nắng nóng cực đoan; các giải pháp hạ tầng và cộng đồng.",
+          "concepts": ["xâm nhập mặn", "ngập đô thị", "hạ tầng xanh"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "nhac-ly-co-ban",
+      "title": "Nhạc lý cơ bản",
+      "category_slug": "am-nhac",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "Nhập môn",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người tự học",
+      "level": "beginner",
+      "description": "Đọc khuông nhạc, hiểu quãng, hợp âm và tiết tấu để chơi hoặc sáng tác đơn giản.",
+      "outcomes": [
+        "Đọc nốt nhạc trên khuông",
+        "Xác định quãng và hợp âm cơ bản",
+        "Hiểu nhịp và trường độ"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://www.open.edu/openlearn/history-the-arts/music/an-introduction-music-theory/content-section-0",
+      "lessons": [
+        {
+          "title": "Khuông nhạc, khoá nhạc và nốt",
+          "summary": "Năm dòng kẻ, khoá Sol và vị trí nốt. Học sinh đọc nhanh nốt trong quãng tám đầu tiên.",
+          "concepts": ["khuông nhạc", "khoá Sol", "cao độ"],
+          "duration": 1200
+        },
+        {
+          "title": "Trường độ, nhịp và tiết tấu",
+          "summary": "Nốt tròn, trắng, đen, móc; số chỉ nhịp cho biết mỗi ô nhịp có bao nhiêu phách.",
+          "concepts": ["trường độ", "số chỉ nhịp", "phách mạnh"],
+          "duration": 1200
+        },
+        {
+          "title": "Quãng và hợp âm",
+          "summary": "Quãng đo khoảng cách cao độ; hợp âm ba nốt tạo màu sắc trưởng/thứ. Học sinh nghe và nhận biết.",
+          "concepts": ["quãng", "hợp âm trưởng", "hợp âm thứ"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "lich-su-my-thuat-nhap-mon",
+      "title": "Lịch sử mỹ thuật nhập môn",
+      "category_slug": "my-thuat",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "Nhập môn",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người tự học",
+      "level": "beginner",
+      "description": "Đọc tác phẩm nghệ thuật theo bối cảnh: từ nghệ thuật cổ đại đến hiện đại, học cách quan sát và mô tả.",
+      "outcomes": [
+        "Mô tả tác phẩm theo bố cục, màu, chất liệu",
+        "Nhận diện vài trào lưu lớn",
+        "Liên hệ tác phẩm với bối cảnh lịch sử"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://smarthistory.org",
+      "lessons": [
+        {
+          "title": "Cách quan sát một tác phẩm",
+          "summary": "Từ mô tả khách quan đến phân tích và diễn giải; tránh suy diễn khi chưa có bằng chứng thị giác.",
+          "concepts": ["mô tả", "phân tích", "diễn giải có căn cứ"],
+          "duration": 1200
+        },
+        {
+          "title": "Nghệ thuật cổ đại và trung đại",
+          "summary": "Chức năng tôn giáo và quyền lực của hình ảnh; cách đọc biểu tượng trong tranh.",
+          "concepts": ["biểu tượng", "nghệ thuật tôn giáo", "kỹ thuật cổ"],
+          "duration": 1500
+        },
+        {
+          "title": "Hiện đại và đương đại",
+          "summary": "Sự chuyển từ mô phỏng hiện thực sang biểu đạt; trừu tượng và khái niệm.",
+          "concepts": ["ấn tượng", "lập thể", "nghệ thuật khái niệm"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "nhiep-anh-co-ban",
+      "title": "Nhiếp ảnh cơ bản",
+      "category_slug": "nhiep-anh",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "Nhập môn",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người tự học",
+      "level": "beginner",
+      "description": "Nắm bộ ba phơi sáng, bố cục và ánh sáng để chụp ảnh có chủ đích thay vì chụp ngẫu nhiên.",
+      "outcomes": [
+        "Điều chỉnh khẩu độ, tốc độ, ISO theo tình huống",
+        "Áp dụng quy tắc bố cục",
+        "Chỉnh ảnh ở mức cơ bản"
+      ],
+      "prerequisites": ["Có điện thoại hoặc máy ảnh"],
+      "source": "https://www.open.edu/openlearn/history-the-arts/free-courses",
+      "lessons": [
+        {
+          "title": "Bộ ba phơi sáng",
+          "summary": "Khẩu độ, tốc độ màn trập, ISO cùng quyết định độ sáng và độ nét. Học sinh thử từng thông số riêng.",
+          "concepts": ["khẩu độ", "tốc độ màn trập", "ISO"],
+          "duration": 1500
+        },
+        {
+          "title": "Bố cục và điểm nhìn",
+          "summary": "Đường dẫn, khung hình, tiền cảnh – hậu cảnh; khi nào phá quy tắc một phần ba.",
+          "concepts": ["một phần ba", "đường dẫn", "tiền cảnh"],
+          "duration": 1200
+        },
+        {
+          "title": "Ánh sáng và hậu kỳ cơ bản",
+          "summary": "Giờ vàng, ánh sáng ngược, và ba bước chỉnh ảnh: phơi sáng, cân bằng trắng, tương phản.",
+          "concepts": ["giờ vàng", "ánh sáng ngược", "cân bằng trắng"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "tieng-trung-hsk1-nhap-mon",
+      "title": "Tiếng Trung HSK 1 – Nhập môn",
+      "category_slug": "tieng-trung",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "HSK 1",
+      "proficiency_level": "HSK 1",
+      "target_audience": "Người mới bắt đầu",
+      "level": "beginner",
+      "description": "Pinyin, thanh điệu và 150 từ HSK 1 với mẫu câu giao tiếp hằng ngày.",
+      "outcomes": [
+        "Phát âm đúng bốn thanh điệu",
+        "Đọc pinyin và gõ chữ Hán bằng bàn phím",
+        "Giới thiệu bản thân, hỏi tên, tuổi"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://www.open.edu/openlearn/languages/free-courses",
+      "lessons": [
+        {
+          "title": "Pinyin và thanh điệu",
+          "summary": "Bốn thanh và thanh nhẹ; lỗi thường gặp khiến người nghe hiểu sai từ.",
+          "concepts": ["thanh 1–4", "thanh nhẹ", "cặp dễ lẫn"],
+          "duration": 1200
+        },
+        {
+          "title": "Chào hỏi và giới thiệu",
+          "summary": "你叫什么名字？ 我叫…, 我是…; cách dùng 吗 để hỏi.",
+          "concepts": ["你/我", "叫", "吗"],
+          "duration": 1200
+        },
+        {
+          "title": "Số đếm và thời gian",
+          "summary": "Số 1–100, tuần, tháng, giờ; trật tự từ khi nói thời gian.",
+          "concepts": ["số đếm", "星期/月/点", "trật tự từ"],
+          "duration": 1200
+        }
+      ]
+    },
+    {
+      "slug": "tieng-han-topik1-hangul",
+      "title": "Tiếng Hàn TOPIK 1 – Hangul và mẫu câu đầu tiên",
+      "category_slug": "tieng-han",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "TOPIK 1",
+      "proficiency_level": "TOPIK 1",
+      "target_audience": "Người mới bắt đầu",
+      "level": "beginner",
+      "description": "Học Hangul theo nguyên lý cấu tạo, sau đó ghép âm và dùng mẫu câu chia đuôi -아요/어요.",
+      "outcomes": [
+        "Đọc và viết Hangul",
+        "Hiểu nguyên lý ghép âm tiết",
+        "Chia đuôi câu lịch sự cơ bản"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://www.open.edu/openlearn/languages/free-courses",
+      "lessons": [
+        {
+          "title": "Nguyên âm và phụ âm Hangul",
+          "summary": "Hangul được thiết kế theo hình dáng phát âm; học theo nhóm âm dễ nhớ hơn học thuộc bảng.",
+          "concepts": ["nguyên âm cơ bản", "phụ âm", "âm cuối batchim"],
+          "duration": 1500
+        },
+        {
+          "title": "Ghép âm tiết và đọc",
+          "summary": "Mỗi ô chữ là một âm tiết ghép phụ âm – nguyên âm – batchim; luyện đọc từ thông dụng.",
+          "concepts": ["cấu trúc âm tiết", "biến âm cơ bản", "luyện đọc"],
+          "duration": 1500
+        },
+        {
+          "title": "Mẫu câu chào hỏi và tự giới thiệu",
+          "summary": "안녕하세요, 저는 …예요/이에요; phân biệt văn nói và văn viết.",
+          "concepts": ["-예요/이에요", "저/나", "kính ngữ cơ bản"],
+          "duration": 1200
+        }
+      ]
+    },
+    {
+      "slug": "tieng-phap-a1-nhap-mon",
+      "title": "Tiếng Pháp A1 – Nhập môn",
+      "category_slug": "tieng-phap",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "A1",
+      "proficiency_level": "A1",
+      "target_audience": "Người mới bắt đầu",
+      "level": "beginner",
+      "description": "Phát âm, giống của danh từ và mẫu câu A1: chào hỏi, giới thiệu, mô tả đơn giản.",
+      "outcomes": [
+        "Nắm quy tắc phát âm cơ bản",
+        "Phân biệt giống đực/cái của danh từ",
+        "Chia động từ nhóm 1 ở hiện tại"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://apprendre.tv5monde.com",
+      "lessons": [
+        {
+          "title": "Âm tiếng Pháp và nối âm",
+          "summary": "Mũi, âm câm và liaison. Học sinh nghe – nhắc lại theo cặp từ tối giản.",
+          "concepts": ["nguyên âm mũi", "âm câm cuối từ", "liaison"],
+          "duration": 1500
+        },
+        {
+          "title": "Danh từ, mạo từ và giống",
+          "summary": "le/la/les và un/une; quy tắc đoán giống theo đuôi từ và ngoại lệ cần nhớ.",
+          "concepts": ["le/la", "un/une", "đuôi từ gợi ý giống"],
+          "duration": 1500
+        },
+        {
+          "title": "Động từ nhóm 1 ở hiện tại",
+          "summary": "parler, aimer, habiter: bỏ -er và thêm đuôi theo ngôi; áp dụng vào câu giới thiệu.",
+          "concepts": ["-er verbs", "đuôi ngôi", "câu phủ định ne…pas"],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "thiet-ke-do-hoa-nen-tang",
+      "title": "Thiết kế đồ hoạ nền tảng",
+      "category_slug": "thiet-ke",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "Nhập môn",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Người tự học",
+      "level": "beginner",
+      "description": "Bốn trụ cột thiết kế: hệ thống lưới, chữ, màu và khoảng trắng; thực hành trên bố cục thật.",
+      "outcomes": [
+        "Dùng lưới và khoảng trắng hợp lý",
+        "Chọn và ghép font an toàn",
+        "Xây bảng màu có độ tương phản đạt chuẩn"
+      ],
+      "prerequisites": ["Không cần"],
+      "source": "https://www.open.edu/openlearn/history-the-arts/free-courses",
+      "lessons": [
+        {
+          "title": "Lưới, căn chỉnh và khoảng trắng",
+          "summary": "Lưới tạo trật tự; khoảng trắng tạo nhịp đọc. Học sinh dựng lại một poster bằng lưới 12 cột.",
+          "concepts": ["grid 12 cột", "căn chỉnh", "khoảng trắng"],
+          "duration": 1500
+        },
+        {
+          "title": "Typography căn bản",
+          "summary": "Phân loại font, cặp font, cỡ chữ và giãn dòng; lỗi thường gặp khiến thiết kế rối.",
+          "concepts": ["serif/sans-serif", "tương phản cỡ chữ", "line-height"],
+          "duration": 1500
+        },
+        {
+          "title": "Màu sắc và tương phản",
+          "summary": "Bảng màu, sắc độ và ngưỡng tương phản cho khả năng đọc; kiểm tra bằng công cụ contrast.",
+          "concepts": ["bảng màu", "sắc độ", "contrast ratio"],
+          "duration": 1500
+        }
+      ]
+    }
+  ]
+}

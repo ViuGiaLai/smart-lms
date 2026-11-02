@@ -55,6 +55,7 @@ class QuizGenerator:
         content: str,
         num_questions: int = 10,
         difficulty: DifficultyLevel = DifficultyLevel.MIXED,
+        bloom_level: Optional[str] = None,
         lesson_id: Optional[int] = None,
         language: str = "vi",
     ) -> QuizSet:
@@ -75,12 +76,14 @@ class QuizGenerator:
             num_questions=num_questions,
             difficulty=str(difficulty.value if hasattr(difficulty, "value") else difficulty),
             language=language,
+            bloom_level=bloom_level,
         )
 
         logger.info(
             "Generating quiz",
             num_questions=num_questions,
             difficulty=difficulty,
+            bloom_level=bloom_level,
             lesson_id=lesson_id,
             content_length=len(content),
         )

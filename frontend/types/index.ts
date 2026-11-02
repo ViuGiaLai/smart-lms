@@ -29,12 +29,72 @@ export interface RegisterData {
   role?: 'student' | 'instructor'
 }
 
-// ===== Course =====
+// ===== Course & Multi-Domain Master Specification =====
 export interface Category {
   id: string
   name: string
   slug: string
   icon?: string
+}
+
+export interface LearningCategoryItem {
+  id: number
+  name: string
+  slug: string
+  description?: string | null
+  icon?: string | null
+  parentId?: number | null
+  orderIndex: number
+  isActive: boolean
+  children?: LearningCategoryItem[]
+}
+
+export interface EducationLevelItem {
+  id: number
+  name: string
+  code: string
+  description?: string | null
+  orderIndex: number
+  isActive: boolean
+}
+
+export type TutorMode = 'socratic' | 'direct' | 'practice'
+
+export interface DiscoveryJobItem {
+  id: number
+  topic: string
+  targetLevel?: string | null
+  domainCategory?: string | null
+  status: 'pending' | 'approved' | 'rejected' | 'converted'
+  summary?: string | null
+  itemCount?: number
+  blueprint?: Record<string, any> | null
+  createdAt: string
+}
+
+export interface TopicMasteryItem {
+  topicName: string
+  masteryScore: number
+  attemptsCount: number
+  strongPoints: string[]
+  weakPoints: string[]
+  recommendedNextStep?: string | null
+}
+
+export interface CourseMasteryItem {
+  courseId: number
+  courseTitle: string
+  category: string
+  gradeLabel?: string | null
+  overallMastery: number
+  topics: TopicMasteryItem[]
+  strongAreas: string[]
+  needsReviewAreas: string[]
+}
+
+export interface StudentTopicMasteryOverview {
+  overallMastery: number
+  courses: CourseMasteryItem[]
 }
 
 export interface Instructor {
@@ -85,6 +145,13 @@ export interface Course {
   discountPrice?: number
   currency: string
   level: 'beginner' | 'intermediate' | 'advanced'
+  categoryId?: number | null
+  categoryName?: string | null
+  educationLevelId?: number | null
+  educationLevelName?: string | null
+  gradeLabel?: string | null
+  proficiencyLevel?: string | null
+  targetAudience?: string | null
   language: string
   duration: number // total seconds
   totalLessons: number
@@ -115,6 +182,13 @@ export interface CourseListItem {
   discountPrice?: number
   currency?: string
   level: 'beginner' | 'intermediate' | 'advanced'
+  categoryId?: number | null
+  categoryName?: string | null
+  educationLevelId?: number | null
+  educationLevelName?: string | null
+  gradeLabel?: string | null
+  proficiencyLevel?: string | null
+  targetAudience?: string | null
   duration: number
   totalLessons: number
   totalStudents?: number
@@ -160,6 +234,27 @@ export interface CourseProgress {
 // ===== AI Chat =====
 export type MessageRole = 'user' | 'assistant' | 'system'
 
+export interface ChatSourceRef {
+  content?: string
+  similarity?: number | null
+  document_id?: string | null
+  page?: number | string | null
+  filename?: string | null
+  chunk_index?: number
+  lesson_id?: number | string | null
+  course_id?: number | string | null
+  youtube_video_id?: string | null
+  /** Tên video/bài giảng để hiển thị nguồn trích dẫn dễ hiểu. */
+  video_title?: string | null
+  /** Tên bài học chứa đoạn trích (Backend lấy từ DB, không do client gửi). */
+  lesson_title?: string | null
+  source_type?: string | null
+  start_seconds?: number | null
+  end_seconds?: number | null
+  start_timestamp?: string | null
+  end_timestamp?: string | null
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
@@ -169,7 +264,7 @@ export interface ChatMessage {
   metadata?: {
     lessonId?: string
     courseId?: string
-    sources?: string[]
+    sources?: Array<string | ChatSourceRef>
   }
 }
 
@@ -293,7 +388,12 @@ export type SortOrder = 'asc' | 'desc'
 export interface CourseFilters {
   search?: string
   category?: string
-  categoryId?: string
+  categoryId?: number | string
+  category_id?: number | string
+  educationLevelId?: number | string
+  education_level_id?: number | string
+  targetAudience?: string
+  target_audience?: string
   level?: Course['level']
   minPrice?: number
   maxPrice?: number

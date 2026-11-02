@@ -41,7 +41,10 @@ def test_no_retrieved_evidence_does_not_call_model(monkeypatch):
 
     assert result["chunks_used"] == 0
     assert result["sources"] == []
-    assert "Không tìm thấy nội dung liên quan" in result["answer"]
+    # Phải nói rõ bài giảng chưa có nội dung này và nêu đúng bài, không suy đoán.
+    assert "chưa có nội dung trả lời câu hỏi này" in result["answer"]
+    assert "bài học #123" in result["answer"]
+    assert "không suy đoán" in result["answer"]
 
 
 def test_provider_failure_is_not_returned_as_success(monkeypatch):

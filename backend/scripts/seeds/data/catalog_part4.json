@@ -1,0 +1,267 @@
+{
+  "version": 1,
+  "note": "Giáo trình học phần chuẩn Trường Đại học Đông Á (UDA)",
+  "courses": [
+    {
+      "slug": "giao-tiep-va-thuyet-trinh",
+      "title": "Giao tiếp và Thuyết trình hiệu quả",
+      "category_slug": "giao-tiep",
+      "level_code": "GENERAL",
+      "grade_label": "Tự học",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "level": "beginner",
+      "description": "Kỹ năng nói và trình bày có cấu trúc: lắng nghe thật, sắp xếp ý theo kim tự tháp, thiết kế slide phục vụ người nghe và xử lý câu hỏi khó.",
+      "outcomes": [
+        "Sắp xếp nội dung theo kết luận trước – luận cứ sau",
+        "Thiết kế slide ít chữ, một ý mỗi slide",
+        "Trả lời câu hỏi khó mà không né tránh"
+      ],
+      "prerequisites": [
+        "Không cần"
+      ],
+      "source": "https://edu.gcfglobal.org/en/topics/",
+      "lessons": [
+        {
+          "title": "Lắng nghe chủ động",
+          "summary": "Nghe để hiểu khác nghe để đáp. Sinh viên luyện phản hồi bằng cách nói lại ý người khác (paraphrase) và đặt câu hỏi làm rõ thay vì vội phản bác.",
+          "concepts": [
+            "paraphrase",
+            "câu hỏi làm rõ",
+            "độ trễ phản hồi"
+          ],
+          "duration": 1200
+        },
+        {
+          "title": "Cấu trúc bài nói: kim tự tháp ngược",
+          "summary": "Người nghe chịu được vài giây đầu để biết bạn muốn gì. Sinh viên xây dàn ý kết luận trước, ba luận cứ, mỗi luận cứ một bằng chứng; cắt bỏ phần trình bày quá trình làm việc không phục vụ người nghe.",
+          "concepts": [
+            "kết luận trước",
+            "luận cứ MECE",
+            "bằng chứng"
+          ],
+          "duration": 1500
+        },
+        {
+          "title": "Slide, giọng nói và xử lý câu hỏi khó",
+          "summary": "Slide là giá đỡ, không phải kịch bản: tối đa một ý và một hình mỗi slide. Khi bị hỏi khó, cấu trúc ba bước: ghi nhận câu hỏi – trả lời trong phần mình biết – nêu rõ phần chưa chắc và cách kiểm chứng.",
+          "concepts": [
+            "một ý mỗi slide",
+            "tốc độ nói",
+            "quy tắc 3 bước khi bị hỏi khó"
+          ],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "cntt-nhap-mon-he-thong-thong-tin",
+      "title": "CNTT nhập môn: hệ thống thông tin",
+      "category_slug": "cntt",
+      "level_code": "FOUNDATION",
+      "grade_label": "Năm 1",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "level": "beginner",
+      "description": "Nền tảng CNTT ở bậc đại học: máy tính biểu diễn dữ liệu thế nào, hệ điều hành và mạng làm gì, và phần mềm được xây theo lớp ra sao.",
+      "outcomes": [
+        "Giải thích cách máy tính mã hoá và xử lý dữ liệu",
+        "Phân biệt phần cứng, hệ điều hành, ứng dụng",
+        "Mô tả một yêu cầu phần mềm thành đặc tả kiểm thử được"
+      ],
+      "prerequisites": [
+        "Tin học đại cương"
+      ],
+      "source": "https://developer.mozilla.org/en-US/docs/Learn",
+      "lessons": [
+        {
+          "title": "Biểu diễn dữ liệu số",
+          "summary": "Máy tính chỉ có hai mức tín hiệu, mọi thứ khác là quy ước: nhị phân cho số, bảng mã cho ký tự, định dạng cho ảnh và âm thanh. Sinh viên hiểu vì sao 0.1 + 0.2 không bằng 0.3 trong số thực dấu phẩy động.",
+          "concepts": [
+            "nhị phân",
+            "bảng mã ký tự",
+            "dấu phẩy động"
+          ],
+          "duration": 1500
+        },
+        {
+          "title": "Phần cứng, hệ điều hành và mạng",
+          "summary": "Hệ điều hành quản lí tài nguyên và che giấu phần cứng; mạng truyền gói tin theo lớp. Sinh viên phân biệt CPU, RAM, lưu trữ và hiểu vì sao cùng một chương trình chạy nhanh chậm khác nhau.",
+          "concepts": [
+            "quản lí tiến trình",
+            "bộ nhớ và lưu trữ",
+            "mô hình phân lớp mạng"
+          ],
+          "duration": 1500
+        },
+        {
+          "title": "Từ yêu cầu đến phần mềm chạy được",
+          "summary": "Yêu cầu mơ hồ là nguồn lỗi lớn nhất. Sinh viên viết lại yêu cầu thành tiêu chí kiểm thử được, tách giao diện khỏi xử lý, và hiểu vì sao kiểm thử phải viết cùng lúc với mã nguồn.",
+          "concepts": [
+            "đặc tả kiểm thử được",
+            "tách lớp",
+            "kiểm thử đơn vị"
+          ],
+          "duration": 1800
+        }
+      ]
+    },
+    {
+      "slug": "ky-thuat-co-so-va-vat-lieu",
+      "title": "Kỹ thuật cơ sở và vật liệu",
+      "category_slug": "ky-thuat",
+      "level_code": "FOUNDATION",
+      "grade_label": "Năm 2",
+      "proficiency_level": "Trung cấp",
+      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "level": "intermediate",
+      "description": "Tư duy kỹ thuật: cân bằng lực, chọn vật liệu theo ứng suất, và đọc bản vẽ kỹ thuật để biến ý tưởng thành thứ chế tạo được.",
+      "outcomes": [
+        "Phân tích cân bằng lực trên kết cấu đơn giản",
+        "Chọn vật liệu dựa trên ứng suất và biến dạng",
+        "Đọc bản vẽ kỹ thuật có dung sai"
+      ],
+      "prerequisites": [
+        "Vật lí đại cương",
+        "Giải tích 1"
+      ],
+      "source": "https://ocw.mit.edu/collections/",
+      "lessons": [
+        {
+          "title": "Cân bằng lực và sơ đồ vật thể tự do",
+          "summary": "Mọi bài toán kết cấu bắt đầu bằng việc tách vật thể và vẽ đủ lực tác dụng. Sinh viên lập phương trình cân bằng, nhận ra phản lực chưa biết và kiểm tra kết quả bằng đơn vị.",
+          "concepts": [
+            "sơ đồ vật thể tự do",
+            "phản lực",
+            "kiểm tra thứ nguyên"
+          ],
+          "duration": 1800
+        },
+        {
+          "title": "Ứng suất, biến dạng và chọn vật liệu",
+          "summary": "Cùng một lực gây ứng suất khác nhau tuỳ diện tích chịu lực. Sinh viên so sánh độ bền, độ cứng và khối lượng riêng để chọn vật liệu, hiểu vì sao thép và nhôm phù hợp với hai bài toán khác nhau.",
+          "concepts": [
+            "ứng suất",
+            "biến dạng",
+            "modulus đàn hồi"
+          ],
+          "duration": 1500
+        },
+        {
+          "title": "Đọc bản vẽ kỹ thuật và dung sai",
+          "summary": "Bản vẽ là ngôn ngữ hợp đồng giữa thiết kế và chế tạo: hình chiếu, kích thước, dung sai. Sinh viên đọc một bản vẽ đơn giản và hiểu vì sao dung sai quá chặt làm chi phí tăng vọt.",
+          "concepts": [
+            "hình chiếu",
+            "dung sai",
+            "chi phí gia công"
+          ],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "khoa-hoc-ung-dung-thuc-nghiem",
+      "title": "Khoa học ứng dụng: từ thí nghiệm đến sản phẩm",
+      "category_slug": "khoa-hoc-ung-dung",
+      "level_code": "GENERAL",
+      "grade_label": "Tự học",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "level": "beginner",
+      "description": "Biến kiến thức khoa học thành thứ dùng được: đặt câu hỏi thực tế, thí nghiệm an toàn tại nhà, đọc số liệu và viết báo cáo trung thực.",
+      "outcomes": [
+        "Thiết kế thí nghiệm an toàn với vật liệu dễ kiếm",
+        "Ghi chép và xử lí số liệu thực nghiệm",
+        "Viết báo cáo nêu rõ giới hạn của kết quả"
+      ],
+      "prerequisites": [
+        "Khoa học đại cương"
+      ],
+      "source": "https://www.sciencebuddies.org/science-fair-projects",
+      "lessons": [
+        {
+          "title": "Chọn câu hỏi thực tế kiểm chứng được",
+          "summary": "Câu hỏi tốt vừa hẹp vừa đo được: 'nước nào làm gỉ sét nhanh hơn' kiểm chứng được, 'cây có cảm xúc không' thì chưa. Sinh viên thu hẹp câu hỏi và dự đoán có căn cứ trước khi làm.",
+          "concepts": [
+            "câu hỏi đo được",
+            "giả thuyết có căn cứ",
+            "biến"
+          ],
+          "duration": 1200
+        },
+        {
+          "title": "An toàn và kiểm soát trong thí nghiệm tại nhà",
+          "summary": "Thí nghiệm tự làm cần liều lượng nhỏ, thông gió, và biết chất nào không được trộn. Sinh viên lập danh sách rủi ro trước khi tiến hành và luôn có nhóm đối chứng.",
+          "concepts": [
+            "đánh giá rủi ro",
+            "nhóm đối chứng",
+            "liều lượng an toàn"
+          ],
+          "duration": 1500
+        },
+        {
+          "title": "Viết báo cáo trung thực",
+          "summary": "Báo cáo khoa học phải nêu cả kết quả không như dự đoán. Sinh viên viết theo cấu trúc: câu hỏi – cách làm – dữ liệu – kết luận – giới hạn, và tách rõ quan sát khỏi suy diễn.",
+          "concepts": [
+            "cấu trúc báo cáo",
+            "quan sát và suy diễn",
+            "giới hạn nghiên cứu"
+          ],
+          "duration": 1500
+        }
+      ]
+    },
+    {
+      "slug": "kinh-doanh-khoi-nghiep-can-ban",
+      "title": "Kinh doanh và khởi nghiệp căn bản",
+      "category_slug": "kinh-doanh",
+      "level_code": "CERTIFICATION",
+      "grade_label": "Chứng chỉ nghề",
+      "proficiency_level": "Cơ bản",
+      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "level": "beginner",
+      "description": "Từ ý tưởng đến mô hình kinh doanh có số: xác định khách hàng, kiểm chứng nhu cầu với chi phí thấp, tính điểm hoà vốn và quản lí dòng tiền.",
+      "outcomes": [
+        "Viết giả thuyết giá trị và kiểm chứng với khách hàng thật",
+        "Tính điểm hoà vốn và biên lợi nhuận gộp",
+        "Lập kế hoạch dòng tiền 12 tháng"
+      ],
+      "prerequisites": [
+        "Không cần"
+      ],
+      "source": "https://www.sba.gov/business-guide",
+      "lessons": [
+        {
+          "title": "Khách hàng và giả thuyết giá trị",
+          "summary": "Ý tưởng không phải bằng chứng. Sinh viên viết rõ ai có vấn đề gì, họ đang giải quyết bằng cách nào, và phỏng vấn 10 người thật trước khi viết một dòng mã nguồn hay nhập lô hàng đầu tiên.",
+          "concepts": [
+            "chân dung khách hàng",
+            "vấn đề hiện tại",
+            "kiểm chứng chi phí thấp"
+          ],
+          "duration": 1500
+        },
+        {
+          "title": "Mô hình kinh doanh và điểm hoà vốn",
+          "summary": "Doanh thu không phải lợi nhuận. Sinh viên tách chi phí cố định và biến đổi, tính số đơn vị phải bán để hoà vốn, và hiểu vì sao biên lợi nhuận gộp quyết định khả năng sống sót.",
+          "concepts": [
+            "chi phí cố định",
+            "điểm hoà vốn",
+            "biên lợi nhuận gộp"
+          ],
+          "duration": 1800
+        },
+        {
+          "title": "Dòng tiền và rủi ro thường gặp",
+          "summary": "Doanh nghiệp chết vì hết tiền, không vì hết ý tưởng. Sinh viên lập lịch thu – chi, hiểu chu kì thu tiền, và dự phòng ba rủi ro hay gặp: khách trả chậm, tồn kho, chi phí ẩn.",
+          "concepts": [
+            "chu kì thu tiền",
+            "dự phòng",
+            "chi phí ẩn"
+          ],
+          "duration": 1500
+        }
+      ]
+    }
+  ]
+}

@@ -23,7 +23,7 @@ export default function ResultCard({
   const isPassed = percentage >= 70;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm text-center max-w-md mx-auto space-y-6">
+    <div className="bg-white border border-stone-200 rounded-lg p-6 sm:p-8 shadow-sm text-center max-w-md mx-auto space-y-6">
       <div
         className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center shadow-lg ${
           isPassed
@@ -35,25 +35,25 @@ export default function ResultCard({
       </div>
 
       <div className="space-y-1">
-        <h3 className="text-2xl font-bold text-slate-800">
+        <h3 className="text-2xl font-bold text-stone-800">
           {isPassed ? 'Chúc mừng bạn đã đạt!' : 'Cần cố gắng thêm nhé!'}
         </h3>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-stone-500">
           Kết quả bài trắc nghiệm củng cố kiến thức bài học
         </p>
       </div>
 
-      <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex justify-around items-center">
+      <div className="bg-stone-50 rounded-lg p-4 border border-stone-100 flex justify-around items-center">
         <div>
-          <p className="text-xs text-slate-500 font-medium">Đúng</p>
+          <p className="text-xs text-stone-500 font-medium">Đúng</p>
           <p className="text-xl font-bold text-emerald-600">
             {score} / {totalQuestions}
           </p>
         </div>
-        <div className="h-8 w-px bg-slate-200" />
+        <div className="h-8 w-px bg-stone-200" />
         <div>
-          <p className="text-xs text-slate-500 font-medium">Tỷ lệ</p>
-          <p className={`text-xl font-bold ${isPassed ? 'text-indigo-600' : 'text-amber-600'}`}>
+          <p className="text-xs text-stone-500 font-medium">Tỷ lệ</p>
+          <p className={`text-xl font-bold ${isPassed ? 'text-brand-600' : 'text-amber-600'}`}>
             {percentage}%
           </p>
         </div>
@@ -64,7 +64,7 @@ export default function ResultCard({
         {/* Nút chính: Quay lại bài học để tiếp tục xem bài giảng */}
         <Link
           href={`/courses/${courseId}/learn?lessonId=${lessonId}`}
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm bg-indigo-600 hover:bg-indigo-700 text-white transition shadow-md shadow-indigo-100"
+          className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold text-xs sm:text-sm bg-brand-600 hover:bg-brand-700 text-white transition shadow-md shadow-brand-100"
         >
           <PlayCircle className="w-4 h-4" />
           <span>Tiếp tục bài giảng (Quay lại bài học)</span>
@@ -74,7 +74,7 @@ export default function ResultCard({
         {onRetry && (
           <button
             onClick={onRetry}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-xs sm:text-sm bg-stone-100 hover:bg-stone-200 text-stone-700 transition"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Làm lại bài kiểm tra</span>
@@ -84,7 +84,7 @@ export default function ResultCard({
         {/* Lối tắt về Bàn học */}
         <Link
           href="/dashboard"
-          className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-xs text-slate-400 hover:text-slate-600 transition"
+          className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-xs text-stone-400 hover:text-stone-600 transition"
         >
           <LayoutDashboard className="w-3.5 h-3.5" />
           <span>Về Bàn học (Dashboard)</span>

@@ -48,7 +48,7 @@ async def groq_generate(prompt: str, system_prompt: str = "") -> str:
     messages.append({"role": "user", "content": prompt})
 
     try:
-        logger.info("Gọi Groq API (non-streaming)", model=settings.GROQ_MODEL)
+        logger.info("Calling Groq API (non-streaming)", model=settings.GROQ_MODEL)
         response = await client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=messages,
@@ -57,7 +57,7 @@ async def groq_generate(prompt: str, system_prompt: str = "") -> str:
         )
         return response.choices[0].message.content or ""
     except Exception as e:
-        logger.error("Groq API lỗi", error=str(e))
+        logger.error("Groq API error", error=str(e))
         raise
 
 
@@ -77,7 +77,7 @@ async def groq_stream(prompt: str, system_prompt: str = "") -> AsyncGenerator[st
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    logger.info("Gọi Groq API (streaming)", model=settings.GROQ_MODEL)
+    logger.info("Calling Groq API (streaming)", model=settings.GROQ_MODEL)
     stream = await client.chat.completions.create(
         model=settings.GROQ_MODEL,
         messages=messages,

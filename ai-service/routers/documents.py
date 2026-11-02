@@ -1,7 +1,7 @@
 import os
 from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.database import AsyncSessionLocal
 from core.config import settings
@@ -18,6 +18,9 @@ class IngestResponse(BaseModel):
     filename: str
     total_pages: int
     total_chunks: int
+    # Trích đoạn văn bản đã bóc tách, dùng để giảng viên xem lại / sinh đề ngay
+    # trên giao diện mà không phải tải tệp về.
+    text_preview: Optional[str] = None
 
 
 async def _require_lesson_owner(
@@ -129,6 +132,7 @@ async def upload_and_ingest_document(
             filename=file.filename,
             total_pages=total_pages,
             total_chunks=len(chunks),
+            text_preview=text[:12000],
         )
 
     except HTTPException:
@@ -141,6 +145,9 @@ class IngestTextRequest(BaseModel):
     chunks: List[str]
     document_id: Optional[str] = None
     replace_existing: bool = True
+    # Thay thế đúng một tài liệu (ví dụ phụ đề của bài học) mà không xóa các
+    # nguồn khác đã nhúng cho cùng lesson_id (slide, PDF...).
+    replace_document_id: Optional[str] = Field(default=None, max_length=255)
     metadata: Optional[List[dict]] = None
 
 
@@ -191,7 +198,12 @@ async def ingest_text_chunks(
 
     async with AsyncSessionLocal() as db:
         store = PgVectorStore(db)
-        deleted = await store.delete_by_lesson(req.lesson_id) if req.replace_existing else 0
+        if req.replace_existing:
+            deleted = await store.delete_by_lesson(req.lesson_id)
+        elif req.replace_document_id:
+            deleted = await store.delete_by_document(req.replace_document_id)
+        else:
+            deleted = 0
         await store.add_chunks(
             lesson_id=req.lesson_id,
             contents=chunks,

@@ -11,7 +11,6 @@ import {
   Users,
   ShieldCheck,
   GraduationCap,
-  Sparkles,
   Layers,
   Activity,
   Home,
@@ -23,6 +22,7 @@ import {
   UserCheck,
   Award,
   FileText,
+  Youtube,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -69,7 +69,7 @@ export function DashboardSidebar({
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const currentUser = user as AuthUser | null;
   const [currentHash, setCurrentHash] = useState('');
   const [currentSearch, setCurrentSearch] = useState('');
@@ -90,15 +90,28 @@ export function DashboardSidebar({
     };
   }, [pathname]);
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      if (!window.confirm('Bạn có chắc muốn đăng xuất khỏi hệ thống?')) return;
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('currentUser');
-      window.dispatchEvent(new Event('auth-change'));
-      router.push('/login');
-    }
+  // Đóng drawer bằng Esc và khóa cuộn nền khi mở menu trên mobile.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onMobileClose?.();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen, onMobileClose]);
+
+  const handleLogout = async () => {
+    if (typeof window === 'undefined') return;
+    if (!window.confirm('Bạn có chắc muốn đăng xuất khỏi hệ thống?')) return;
+    // Gọi logout của AuthProvider để backend thu hồi token (tăng token_version),
+    // không chỉ xóa phiên cục bộ — tránh token cũ dùng được đến khi hết hạn.
+    await logout();
+    router.push('/login');
   };
 
   const role = currentUser?.role || 'student';
@@ -107,18 +120,22 @@ export function DashboardSidebar({
   const roleLabel = isAdmin ? 'Quản trị viên' : isStudent ? 'Học viên' : 'Giảng viên';
   const badgeVariant = isAdmin ? 'purple' : isStudent ? 'info' : 'success';
   const roleStyles = isAdmin
-    ? 'bg-purple-500/15 border-purple-400/40 text-purple-200'
+    ? 'bg-clay-500/15 border-clay-400/40 text-clay-200'
     : isStudent
-      ? 'bg-indigo-500/15 border-indigo-400/40 text-indigo-200'
-      : 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200';
+      ? 'bg-brand-400/15 border-brand-300/40 text-brand-100'
+      : 'bg-brand-500/20 border-brand-300/40 text-brand-100';
   const displayName = currentUser?.fullName || currentUser?.name || 'Tài khoản người dùng';
-  const initials = displayName
-    .trim()
-    .split(/\s+/)
-    .slice(-2)
-    .map((part) => part.charAt(0))
-    .join('')
-    .toUpperCase() || (isAdmin ? 'AD' : isStudent ? 'HV' : 'GV');
+  // Bỏ phần trong ngoặc (vd. "(Sinh viên)") để không sinh ra initials kiểu "(V".
+  const initials =
+    displayName
+      .replace(/\([^)]*\)/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter((part) => /[A-Za-zÀ-ỹ0-9]/.test(part))
+      .slice(-2)
+      .map((part) => part.charAt(0))
+      .join('')
+      .toUpperCase() || (isAdmin ? 'AD' : isStudent ? 'HV' : 'GV');
 
   // Navigation is role-specific; every workspace uses this single left sidebar.
   const getNavSections = (): NavSection[] => {
@@ -144,9 +161,28 @@ export function DashboardSidebar({
               badge: 'Bảo mật',
             },
             {
+              label: 'Danh mục & Trình độ',
+              href: '/admin-dashboard?tab=categories',
+              icon: Layers,
+              badge: 'Động',
+            },
+            {
               label: 'Kiểm duyệt Khóa học',
               href: '/admin-dashboard?tab=courses',
               icon: BookOpen,
+            },
+            {
+              label: 'AI Discovery (Khám phá)',
+              href: '/admin-dashboard?tab=discovery',
+              icon: Wand2,
+              badge: 'AI',
+              isAI: true,
+            },
+            {
+              label: 'Nhập học liệu YouTube',
+              href: '/youtube-import',
+              icon: Youtube,
+              badge: 'Mới',
             },
           ],
         },
@@ -237,6 +273,18 @@ export function DashboardSidebar({
             href: '/courses/create',
             icon: PlusCircle,
           },
+          {
+            label: 'AI Course Builder',
+            href: '/courses/create?mode=ai',
+            icon: Wand2,
+            badge: 'AI',
+            isAI: true,
+          },
+          {
+            label: 'Nhập học liệu YouTube',
+            href: '/youtube-import',
+            icon: Youtube,
+          },
         ],
       },
       {
@@ -300,29 +348,36 @@ export function DashboardSidebar({
         variant={isActive ? 'default' : 'ghost'}
         size="default"
         className={cn(
-          'h-9 w-full justify-start gap-3 rounded-xl px-3 text-xs font-semibold',
-          !isActive && 'text-slate-400 hover:bg-slate-800/80 hover:text-white',
+          'relative h-9 w-full justify-start gap-3 rounded-md px-3 text-[13px] font-medium',
+          isActive && 'bg-brand-800 text-brand-50',
+          !isActive && 'text-brand-100/65 hover:bg-brand-900 hover:text-brand-50',
           collapsed && 'justify-center px-0',
         )}
       >
         <Link href={item.href}>
+          {isActive && !collapsed && (
+            <span
+              aria-hidden
+              className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 bg-clay-400"
+            />
+          )}
           <Icon
             className={cn(
-              'h-4 w-4 shrink-0 transition-transform group-hover:scale-110',
-              item.isAI && !isActive && 'text-indigo-400',
+              'h-4 w-4 shrink-0',
+              isActive ? 'text-clay-300' : 'text-brand-200/60',
             )}
           />
           {!collapsed && (
             <>
-              <span className="truncate text-left text-xs font-bold">{item.label}</span>
+              <span className="truncate text-left text-[13px] font-medium">{item.label}</span>
               {item.badge && (
                 <Badge
                   variant={isActive ? 'default' : 'secondary'}
                   className={cn(
-                    'shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase',
+                    'shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide',
                     item.isAI &&
                       !isActive &&
-                      'border-indigo-500/30 bg-indigo-500/20 text-indigo-300',
+                      'border-clay-500/30 bg-clay-500/15 text-clay-300',
                   )}
                 >
                   {item.badge}
@@ -355,34 +410,30 @@ export function DashboardSidebar({
       {/* Mobile Backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden transition-opacity"
+          className="fixed inset-0 z-40 bg-brand-950/60 backdrop-blur-sm transition-opacity lg:hidden"
           onClick={onMobileClose}
+          aria-hidden="true"
         />
       )}
 
       {/* Sidebar Container */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-slate-900 text-slate-100 transition-all duration-300 ease-in-out border-slate-800',
+          'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-brand-900 bg-brand-950 text-brand-50 transition-all duration-300 ease-in-out',
           collapsed ? 'w-20' : 'w-64',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
       >
         {/* Header: Logo & Role badge */}
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-800 px-4">
-          <Link href="/" className="flex min-w-0 items-center gap-2.5 overflow-hidden">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-indigo-400 text-white shadow-md shadow-indigo-500/20">
-              <Sparkles className="h-5 w-5" />
-            </div>
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-brand-900 px-4">
+          <Link href="/" className="flex min-w-0 items-baseline gap-2 overflow-hidden">
             {!collapsed && (
-              <div className="flex min-w-0 flex-col">
-                <span className="text-lg font-black leading-none tracking-tight text-white">
-                  Smart LMS
-                </span>
-                <span className="mt-0.5 truncate text-[9px] font-bold uppercase tracking-widest text-primary">
-                  {isAdmin ? 'Quản trị hệ thống' : isStudent ? 'Cổng học viên' : 'Cổng Giảng viên'}
-                </span>
-              </div>
+              <span className="font-serif text-[21px] font-semibold leading-none tracking-tight text-brand-50">
+                Smart LMS
+              </span>
+            )}
+            {collapsed && (
+              <span className="font-serif text-lg font-semibold text-brand-50">SL</span>
             )}
           </Link>
 
@@ -391,7 +442,8 @@ export function DashboardSidebar({
             variant="ghost"
             size="icon"
             onClick={onMobileClose}
-            className="rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden"
+            className="rounded-md text-brand-200/70 hover:bg-brand-900 hover:text-brand-50 lg:hidden"
+            aria-label="Đóng menu điều hướng"
           >
             <X className="h-5 w-5" />
           </Button>
@@ -401,7 +453,7 @@ export function DashboardSidebar({
             variant="ghost"
             size="icon"
             onClick={onToggleCollapse}
-            className="hidden rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white lg:inline-flex"
+            className="hidden rounded-md text-brand-200/70 hover:bg-brand-900 hover:text-brand-50 lg:inline-flex"
             title={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -411,7 +463,7 @@ export function DashboardSidebar({
         {/* Role Banner */}
         {!collapsed && (
           <div className="px-3 pb-1 pt-3">
-            <Badge variant={badgeVariant} className="w-full justify-center border-border/50 py-1.5 text-[11px] font-bold">
+            <Badge variant={badgeVariant} className="w-full justify-center border-brand-800 bg-brand-900 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-100">
               {isAdmin ? (
                 <ShieldCheck className="h-3.5 w-3.5" />
               ) : (
@@ -429,7 +481,7 @@ export function DashboardSidebar({
               {navSections.map((section, idx) => (
                 <div key={idx} className="space-y-1">
                   {!collapsed && (
-                    <p className="px-3 pb-0.5 pt-2 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    <p className="px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-200/45">
                       {section.title}
                     </p>
                   )}
@@ -441,30 +493,30 @@ export function DashboardSidebar({
         </TooltipProvider>
 
         {/* Footer: User profile & quick role switch */}
-        <div className="shrink-0 space-y-2 border-t border-slate-800 bg-slate-950/80 p-3">
+        <div className="shrink-0 space-y-2 border-t border-brand-900 p-3">
           {/* User info */}
           <div
             className={cn(
-              'rounded-xl border border-slate-700/80 bg-slate-900/70 p-2',
+              'rounded-md border border-brand-800 bg-brand-900/60 p-2',
               collapsed ? 'p-1.5' : 'p-3',
             )}
           >
             <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
-              <Avatar className="h-10 w-10 rounded-xl border">
-                <AvatarFallback className={cn('rounded-xl text-sm font-black', roleStyles)}>
+              <Avatar className="h-9 w-9 rounded-md border border-brand-700">
+                <AvatarFallback className={cn('rounded-md text-xs font-semibold', roleStyles)}>
                   {initials}
                 </AvatarFallback>
               </Avatar>
               {!collapsed && (
                 <div className="min-w-0 flex-1">
-                  <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                    Tài khoản hiện tại
+                  <p className="mb-0.5 text-[9px] font-medium uppercase tracking-[0.16em] text-brand-200/45">
+                    Tài khoản
                   </p>
-                  <p className="truncate text-sm font-bold leading-tight text-slate-100" title={displayName}>
+                  <p className="truncate text-[13px] font-semibold leading-tight text-brand-50" title={displayName}>
                     {displayName}
                   </p>
                   <p
-                    className="mt-1 truncate text-[11px] text-slate-400"
+                    className="mt-1 truncate text-[11px] text-brand-200/55"
                     title={currentUser?.email || 'Chưa cập nhật email'}
                   >
                     {currentUser?.email || 'Chưa cập nhật email'}
@@ -474,12 +526,12 @@ export function DashboardSidebar({
             </div>
             {!collapsed && (
               <>
-                <Separator className="my-3 bg-slate-800" />
+                <Separator className="my-3 bg-brand-800" />
                 <div className="flex items-center justify-between gap-2">
-                  <Badge variant={badgeVariant} className="text-[10px] font-bold">
+                  <Badge variant={badgeVariant} className="text-[10px] font-medium">
                     {roleLabel}
                   </Badge>
-                  <span className="text-[10px] text-slate-500">Đã xác thực</span>
+                  <span className="text-[10px] text-brand-200/45">Đã xác thực</span>
                 </div>
               </>
             )}
@@ -491,7 +543,7 @@ export function DashboardSidebar({
             size="sm"
             onClick={handleLogout}
             className={cn(
-              'h-9 w-full justify-start gap-2 rounded-xl border border-transparent text-xs font-semibold text-destructive hover:border-rose-900/50 hover:bg-destructive/10 hover:text-destructive',
+              'h-9 w-full justify-start gap-2 rounded-md border border-transparent text-[13px] font-medium text-brand-200/70 hover:border-brand-800 hover:bg-brand-900 hover:text-brand-50',
               collapsed && 'justify-center px-0',
             )}
             title="Đăng xuất khỏi hệ thống"

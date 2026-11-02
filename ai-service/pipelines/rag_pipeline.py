@@ -1,38 +1,68 @@
 """
-Smart LMS - RAG Pipeline
-Retrieval-Augmented Generation: nhận câu hỏi + lesson_id
-→ tìm chunks liên quan → gọi Gemini → stream câu trả lời qua SSE.
+Smart LMS - RAG Pipeline (Lesson-bounded AI Tutor)
 
 Flow:
-  1. Embed câu hỏi (RETRIEVAL_QUERY task type)
-  2. Similarity search trong lesson-bounded chunks
-  3. Xây dựng context từ các chunks tìm được
-  4. Gọi Gemini với system prompt (tutor mode, chống hallucination)
-  5. Stream response qua Server-Sent Events
+  1. Chuẩn hóa câu hỏi + lịch sử hội thoại (câu hỏi tiếp nối).
+  2. Embed truy vấn và tìm ứng viên trong đúng lesson.
+  3. Lọc bằng chứng: similarity + trùng từ khóa; câu ngoài phạm vi bị loại.
+  4. Xây dựng context có tên bài/video, mốc thời gian và trang.
+  5. Gọi Gemini (fallback Groq) với prompt phân tách "bài giảng" và "bổ sung".
+  6. Stream SSE kèm sources có timestamp để UI mở lại đúng đoạn video.
 """
 
 import asyncio
+import json
 import re
-from typing import AsyncGenerator, List, Optional
-import structlog
+import unicodedata
+from typing import AsyncGenerator, Iterable, List, Optional
 
 import google.generativeai as genai
+import structlog
 
 from core.config import settings
 from core.database import AsyncSessionLocal
-from core.groq_client import groq_generate, groq_stream, has_valid_groq_key, is_quota_error
+from core.groq_client import groq_generate, groq_stream, has_valid_groq_key
 from document_processor.embedder import get_embedder
+from prompts.tutor_prompt import build_rag_user_prompt, build_tutor_system_prompt
 from vector_store.pgvector_store import PgVectorStore
-from prompts.tutor_prompt import build_tutor_system_prompt, build_rag_user_prompt
 
 logger = structlog.get_logger(__name__)
 
-# Cấu hình Gemini
 genai.configure(api_key=settings.GOOGLE_API_KEY)
 
 NO_API_KEY_MESSAGE = (
     "AI Service chưa được cấu hình GOOGLE_API_KEY hợp lệ nên không thể sinh câu trả lời từ học liệu. "
     "Vui lòng cấu hình API key cho AI Service rồi thử lại."
+)
+
+# Từ nối/đại từ không mang nội dung — bỏ khi đo mức trùng từ khóa.
+_STOPWORDS = {
+    "là", "và", "của", "cho", "trong", "một", "như", "thế", "nào", "có",
+    "không", "được", "khi", "ra", "thì", "mà", "ở", "để", "với", "bạn",
+    "mình", "hay", "hoặc", "các", "những", "nhiều", "giữa", "sự", "gì",
+    "về", "tại", "sao", "hãy", "giúp", "đi", "rồi", "vậy", "hơn", "rất",
+    "cũng", "đã", "đang", "sẽ", "bị", "bởi", "vì", "nên", "nếu", "lại",
+    "đó", "này", "kia", "ai", "đâu", "bao", "nhiêu", "thêm", "ý", "trên",
+    "dưới", "sau", "trước", "đến", "từ", "bằng", "theo", "vào", "làm",
+    "cách", "muốn", "cần", "phải", "nhưng", "vẫn", "chỉ", "còn", "đúng",
+    "sai", "ạ", "nhé", "nhỉ", "đấy", "thôi", "chứ", "hả",
+}
+
+_WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
+_FOLLOW_UP_RE = re.compile(
+    r"^(nó|vậy|thế|và|còn|tiếp|thêm|ví dụ|giải thích thêm|tại sao|"
+    r"ý trên|đoạn (đó|này)|cho (mình )?(một )?ví dụ|cụ thể hơn|rõ hơn)",
+    re.IGNORECASE,
+)
+_SUMMARY_HINTS = (
+    "tóm tắt",
+    "tổng quan",
+    "ý chính",
+    "nội dung chính",
+    "bài này nói",
+    "bài giảng này nói",
+    "summary",
+    "overview",
 )
 
 
@@ -43,11 +73,7 @@ def has_valid_google_key() -> bool:
 
 
 def format_gemini_error(e: Exception) -> str:
-    """Rút gọn lỗi từ Gemini thành thông báo ngắn, trung thực cho người học.
-
-    Giữ nguyên bản chất lỗi (ví dụ hết quota 429, thời gian thử lại) nhưng không
-    gửi nguyên khối log kỹ thuật/protobuf cho người dùng cuối.
-    """
+    """Rút gọn lỗi Gemini thành thông báo ngắn, trung thực cho người học."""
     raw = str(e)
     if "429" in raw or "quota" in raw.lower():
         m = re.search(r"Please retry in (\d+h\d+m)", raw)
@@ -56,17 +82,50 @@ def format_gemini_error(e: Exception) -> str:
             "Dịch vụ AI đang hết hạn mức sử dụng miễn phí (Gemini lỗi 429)"
             f"{retry}. Đây là giới hạn từ nhà cung cấp, không phải lỗi của khóa học."
         )
-    first_line = (raw.splitlines()[0].strip() if raw.strip() else "lỗi không rõ")
+    first_line = raw.splitlines()[0].strip() if raw.strip() else "lỗi không rõ"
     return f"Gemini không phản hồi: {first_line[:300]}"
 
 
-def build_no_context_answer(lesson_id: int) -> str:
-    """Thông báo minh bạch khi học liệu của bài học không có nội dung liên quan đến câu hỏi."""
+def build_no_context_answer(lesson_id: int, lesson_title: Optional[str] = None) -> str:
+    """Trả lời minh bạch khi không có bằng chứng trong học liệu của bài."""
+    title = f'"{lesson_title}"' if lesson_title else f"bài học #{lesson_id}"
     return (
-        "⚠️ **Không tìm thấy nội dung liên quan trong học liệu số hóa của bài học này.**\n\n"
-        "Trợ lý AI Tutor hoạt động theo cơ chế ràng buộc ngữ cảnh (Lesson-Bounded RAG), chỉ giải đáp bám sát nội dung bài học để đảm bảo tính chuẩn xác tuyệt đối.\n\n"
-        "💡 **Gợi ý:** Bạn có thể đặt câu hỏi về các khái niệm chính trong bài học, hoặc xem qua phần nội dung tóm tắt và slide đính kèm."
+        f"**Trong bài giảng {title} hiện chưa có nội dung trả lời câu hỏi này.**\n\n"
+        "Mình chỉ trả lời dựa trên phụ đề và tài liệu của đúng bài học, nên sẽ không suy đoán "
+        "để tránh cung cấp thông tin sai.\n\n"
+        "Bạn có thể thử:\n"
+        "- Hỏi lại bằng một khái niệm khác có trong bài giảng.\n"
+        "- Xem lại phần transcript hoặc slide đính kèm.\n"
+        "- Nhờ giảng viên bổ sung nội dung này vào học liệu."
     )
+
+
+def _tokenize(text: str) -> List[str]:
+    """Tách từ tiếng Việt đơn giản, giữ dấu để tránh nhầm 'bò' với 'bộ'."""
+    normalized = unicodedata.normalize("NFC", (text or "").lower())
+    return [
+        word
+        for word in _WORD_RE.findall(normalized)
+        if len(word) >= 2 and word not in _STOPWORDS
+    ]
+
+
+def _overlap(query_tokens: set[str], content: str) -> float:
+    if not query_tokens:
+        return 0.0
+    content_tokens = set(_tokenize(content))
+    return len(query_tokens & content_tokens) / len(query_tokens)
+
+
+def _is_follow_up(question: str) -> bool:
+    """Câu ngắn/đại từ thường là hỏi tiếp, cần ghép câu hỏi trước để truy xuất."""
+    tokens = _tokenize(question)
+    return len(tokens) <= 3 or bool(_FOLLOW_UP_RE.search((question or "").strip()))
+
+
+def _is_summary_request(question: str) -> bool:
+    lowered = (question or "").lower()
+    return any(hint in lowered for hint in _SUMMARY_HINTS)
 
 
 async def call_groq_fallback(
@@ -74,14 +133,11 @@ async def call_groq_fallback(
     context: str,
     lesson_id: int,
     reason: str = "gemini_error",
+    chat_history: Optional[Iterable[dict]] = None,
+    lesson_title: Optional[str] = None,
+    course_level: Optional[str] = None,
 ) -> str:
-    """
-    Gọi Groq LLM làm fallback khi Gemini hết quota hoặc trả nội dung rỗng.
-    Sử dụng cùng system prompt và context như Gemini để đảm bảo chất lượng nhất quán.
-
-    Thông báo lỗi phản ánh ĐÚNG nguyên nhân thật (hết quota vs. nội dung rỗng),
-    tránh báo nhầm "hết hạn mức" khi Gemini chỉ trả về nội dung trống.
-    """
+    """Gọi Groq khi Gemini hết quota hoặc trả nội dung rỗng, dùng cùng prompt."""
     if not has_valid_groq_key():
         logger.warning("Groq API key is not configured; fallback unavailable", reason=reason)
         if reason == "empty":
@@ -92,47 +148,146 @@ async def call_groq_fallback(
             "Gemini đã hết hạn mức hoặc gặp sự cố và chưa cấu hình fallback AI. Vui lòng thử lại sau."
         )
 
-    system_prompt = build_tutor_system_prompt(lesson_id=lesson_id)
-    user_message = build_rag_user_prompt(question=question, context=context)
+    system_prompt = build_tutor_system_prompt(
+        lesson_id=lesson_id, lesson_title=lesson_title, course_level=course_level
+    )
+    user_message = build_rag_user_prompt(
+        question=question,
+        context=context,
+        chat_history=chat_history,
+        lesson_title=lesson_title or "",
+    )
 
     logger.info("Switching to Groq fallback because Gemini failed", lesson_id=lesson_id)
     try:
         answer = await groq_generate(prompt=user_message, system_prompt=system_prompt)
-        return answer.strip() if answer else (
-            "Groq không trả về phản hồi. Vui lòng thử lại."
-        )
+        return answer.strip() if answer else "Groq không trả về phản hồi. Vui lòng thử lại."
     except Exception as e:
         logger.error("Groq fallback failed", error=str(e))
-        raise RuntimeError(
-            "Gemini và Groq đều không khả dụng. Vui lòng thử lại sau."
-        ) from e
+        raise RuntimeError("Gemini và Groq đều không khả dụng. Vui lòng thử lại sau.") from e
 
 
 class RAGPipeline:
-    """
-    Pipeline RAG chính cho AI Tutor của Smart LMS.
+    """Pipeline RAG chính cho AI Tutor của Smart LMS.
 
-    Đặc điểm:
-    - Lesson-bounded: chỉ tìm kiếm trong chunks của bài học được chỉ định
-    - Anti-hallucination: system prompt yêu cầu Gemini chỉ trả lời dựa trên context
-    - SSE Streaming: stream response từng token để UX tốt hơn
-    - Tiếng Việt: prompt được tối ưu cho phản hồi tiếng Việt
+    - Lesson-bounded: chỉ tìm trong chunks của đúng bài học.
+    - Lọc bằng chứng trước khi gọi LLM: câu ngoài phạm vi không có context.
+    - Phân tách nội dung bài giảng và kiến thức bổ sung trong prompt.
+    - Hỗ trợ lịch sử hội thoại cho câu hỏi tiếp nối.
+    - SSE streaming, sources có timestamp/trang để UI mở lại học liệu.
     """
 
     def __init__(self):
-        self.embedder = get_embedder()  # Default: GeminiEmbedder
+        self.embedder = get_embedder()
         self.model = genai.GenerativeModel(
             model_name=settings.GEMINI_MODEL,
             generation_config={
-                "temperature": 0.3,      # Thấp để giảm hallucination
+                "temperature": 0.25,
                 "top_p": 0.8,
                 "top_k": 40,
                 "max_output_tokens": 2048,
             },
         )
 
-    # Ghi chú: pipeline KHÔNG sinh câu trả lời giả khi thiếu tri thức hoặc khi
-    # Gemini lỗi. Mọi phản hồi đều hoặc lấy từ học liệu thật, hoặc báo lỗi rõ ràng.
+    def _build_retrieval_query(
+        self, question: str, chat_history: Optional[Iterable[dict]] = None
+    ) -> str:
+        """Câu hỏi tiếp nối được ghép với câu hỏi trước để embed đúng chủ đề."""
+        user_turns = [
+            str(turn.get("content", "")).strip()
+            for turn in (chat_history or [])
+            if str(turn.get("role", "")).lower() == "user" and str(turn.get("content", "")).strip()
+        ]
+        if user_turns and _is_follow_up(question):
+            return f"{user_turns[-1]} {question}".strip()
+        return question
+
+    def _select_evidence(
+        self,
+        chunks: List[dict],
+        retrieval_query: str,
+        question: str,
+    ) -> List[dict]:
+        """Giữ chunk có bằng chứng; loại câu ngoài phạm vi bài giảng."""
+        if not chunks:
+            return []
+
+        query_tokens = set(_tokenize(retrieval_query))
+        current_tokens = set(_tokenize(question))
+        summary_request = _is_summary_request(question)
+        scored: list[tuple[float, dict]] = []
+
+        for chunk in chunks:
+            similarity = chunk.get("similarity")
+            similarity = float(similarity) if isinstance(similarity, (int, float)) else 0.0
+            content = chunk.get("content") or ""
+            overlap = _overlap(query_tokens, content)
+            # Với câu hỏi mới (không phải hỏi tiếp), ưu tiên trùng từ khóa của chính câu hỏi.
+            current_overlap = _overlap(current_tokens, content) if current_tokens else overlap
+            evidence_score = similarity + 0.15 * max(overlap, current_overlap)
+
+            if summary_request:
+                keep = True
+            else:
+                best_overlap = max(overlap, current_overlap)
+                keep = (
+                    similarity >= settings.RAG_MIN_SIMILARITY
+                    or (
+                        similarity >= settings.RAG_LEXICAL_MIN_SIMILARITY
+                        and best_overlap >= settings.RAG_MIN_LEXICAL_OVERLAP
+                    )
+                    # Nhiều từ khóa trùng khớp mạnh có thể bù cho similarity thấp hơn
+                    # (câu hỏi dùng từ ngữ đời thường so với phụ đề).
+                    or (similarity >= 0.52 and best_overlap >= 0.70)
+                )
+            if not keep:
+                continue
+
+            enriched = {
+                **chunk,
+                "lexical_overlap": round(overlap, 3),
+                "evidence_score": round(evidence_score, 3),
+            }
+            scored.append((evidence_score, enriched))
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        if not summary_request and scored:
+            # Bỏ nguồn kém hơn hẳn nguồn tốt nhất: tránh trích dẫn lan man, sai mốc.
+            cutoff = scored[0][0] * settings.RAG_RELATIVE_SCORE_CUTOFF
+            scored = [item for item in scored if item[0] >= cutoff]
+        # Câu hỏi thường chỉ cần 3 nguồn sát nhất; câu tóm tắt cần nhiều đoạn hơn.
+        limit = max(1, settings.RAG_MAX_CHUNKS if summary_request else min(3, settings.RAG_MAX_CHUNKS))
+        selected = [chunk for _, chunk in scored[:limit]]
+        # Context dễ đọc hơn khi giữ thứ tự đoạn trong bài.
+        selected.sort(key=lambda item: item.get("chunk_index", 0))
+        return selected
+
+    async def _retrieve_chunks(
+        self,
+        question: str,
+        lesson_id: int,
+        top_k: Optional[int] = None,
+        chat_history: Optional[Iterable[dict]] = None,
+    ) -> List[dict]:
+        """Embed truy vấn và lọc bằng chứng trong đúng lesson."""
+        retrieval_query = self._build_retrieval_query(question, chat_history)
+        try:
+            query_embedding = await self.embedder.embed_query(retrieval_query)
+            async with AsyncSessionLocal() as db:
+                store = PgVectorStore(db)
+                candidates = await store.similarity_search_by_lesson(
+                    query_embedding=query_embedding,
+                    lesson_id=lesson_id,
+                    top_k=top_k or max(settings.RAG_CANDIDATE_K, settings.RAG_MAX_CHUNKS),
+                    threshold=0.45,
+                )
+        except Exception as e:
+            logger.error("pgvector similarity search failed", error=str(e))
+            raise RuntimeError(
+                "Không thể truy xuất kho học liệu vector của bài học. Vui lòng thử lại sau."
+            ) from e
+
+        return self._select_evidence(candidates, retrieval_query, question)
 
     async def ask(
         self,
@@ -140,69 +295,85 @@ class RAGPipeline:
         lesson_id: int,
         chat_history: Optional[List[dict]] = None,
         top_k: Optional[int] = None,
+        lesson_title: Optional[str] = None,
+        course_level: Optional[str] = None,
+        course_category: Optional[str] = None,
+        grade_label: Optional[str] = None,
+        target_audience: Optional[str] = None,
+        language: Optional[str] = None,
+        tutor_mode: Optional[str] = "socratic",
     ) -> dict:
-        """RAG query không streaming. Hoặc trả lời dựa trên học liệu thật, hoặc báo lỗi rõ ràng."""
+        """RAG không streaming; trả lời thật hoặc nói rõ chưa có trong bài."""
         if not has_valid_google_key():
             raise RuntimeError(NO_API_KEY_MESSAGE)
 
-        try:
-            chunks = await self._retrieve_chunks(question, lesson_id, top_k)
-        except RuntimeError:
-            # Lỗi cấu hình/embedding: không được che dấu thành "không có tri thức"
-            raise
-        except Exception as e:
-            logger.error("Lỗi retrieve chunks trong ask", error=str(e))
-            chunks = []
-
+        chunks = await self._retrieve_chunks(
+            question, lesson_id, top_k, chat_history=chat_history
+        )
         if not chunks:
-            # Không có tri thức liên quan trong học liệu → nói thật là không có, không bịa nội dung/trích dẫn
             return {
-                "answer": build_no_context_answer(lesson_id),
+                "answer": build_no_context_answer(lesson_id, lesson_title),
                 "sources": [],
                 "lesson_id": lesson_id,
                 "chunks_used": 0,
             }
 
         context = self._build_context(chunks)
-        system_prompt = build_tutor_system_prompt(lesson_id=lesson_id)
-        user_message = build_rag_user_prompt(question=question, context=context)
+        system_prompt = build_tutor_system_prompt(
+            lesson_id=lesson_id,
+            lesson_title=lesson_title,
+            course_level=course_level,
+            course_category=course_category,
+            grade_label=grade_label,
+            target_audience=target_audience,
+            language=language,
+            tutor_mode=tutor_mode,
+        )
+        user_message = build_rag_user_prompt(
+            question=question,
+            context=context,
+            chat_history=chat_history,
+            lesson_title=lesson_title or "",
+        )
         full_prompt = f"{system_prompt}\n\n{user_message}"
 
         try:
             loop = asyncio.get_running_loop()
             response = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    lambda: self.model.generate_content(full_prompt),
-                ),
+                loop.run_in_executor(None, lambda: self.model.generate_content(full_prompt)),
                 timeout=60.0,
             )
         except Exception as e:
             logger.warning("Gemini generate_content failed, switching to Groq fallback", error=str(e))
-            answer = await call_groq_fallback(question, context, lesson_id, reason="gemini_error")
+            answer = await call_groq_fallback(
+                question,
+                context,
+                lesson_id,
+                reason="gemini_error",
+                chat_history=chat_history,
+                lesson_title=lesson_title,
+                course_level=course_level,
+            )
         else:
             answer = (response.text or "").strip() if response else ""
             if not answer:
                 logger.warning("Gemini returned empty content; switching to Groq fallback")
-                answer = await call_groq_fallback(question, context, lesson_id, reason="empty")
+                answer = await call_groq_fallback(
+                    question,
+                    context,
+                    lesson_id,
+                    reason="empty",
+                    chat_history=chat_history,
+                    lesson_title=lesson_title,
+                    course_level=course_level,
+                )
 
         return {
             "answer": answer,
-            "sources": [
-                {
-                    "content": c["content"][:200] + "...",
-                    "similarity": round(c["similarity"], 3) if isinstance(c.get("similarity"), (int, float)) else None,
-                    "document_id": c.get("document_id"),
-                    "page": (c.get("metadata") or {}).get("page"),
-                    "filename": (c.get("metadata") or {}).get("filename") or c.get("document_id"),
-                    "chunk_index": c.get("chunk_index", 1),
-                }
-                for c in chunks
-            ],
+            "sources": [self._source_ref(c, lesson_title) for c in chunks],
             "lesson_id": lesson_id,
             "chunks_used": len(chunks),
         }
-
 
     async def ask_stream(
         self,
@@ -210,23 +381,24 @@ class RAGPipeline:
         lesson_id: int,
         chat_history: Optional[List[dict]] = None,
         top_k: Optional[int] = None,
+        lesson_title: Optional[str] = None,
+        course_level: Optional[str] = None,
+        course_category: Optional[str] = None,
+        grade_label: Optional[str] = None,
+        target_audience: Optional[str] = None,
+        language: Optional[str] = None,
+        tutor_mode: Optional[str] = "socratic",
     ) -> AsyncGenerator[str, None]:
-        """
-        RAG query với streaming response qua SSE.
-        Không bao giờ bịa nội dung/trích dẫn: hoặc stream câu trả lời thật từ học liệu,
-        hoặc stream thông báo minh bạch/lỗi rõ ràng.
-        """
-        import json
+        """Stream SSE; sources được gửi trước khi sinh câu trả lời."""
 
         def sse(payload: dict) -> str:
             return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
         async def stream_text(text: str) -> AsyncGenerator[str, None]:
-            for w in text.split(" "):
-                yield sse({"type": "chunk", "content": w + " ", "token": w + " "})
-                await asyncio.sleep(0.02)
+            for word in text.split(" "):
+                yield sse({"type": "chunk", "content": word + " ", "token": word + " "})
+                await asyncio.sleep(0.015)
 
-        # Bước 1: Kiểm tra cấu hình & Retrieve chunks an toàn
         if not has_valid_google_key():
             logger.error("GOOGLE_API_KEY is not configured for AI Service")
             yield sse({"type": "error", "error": NO_API_KEY_MESSAGE})
@@ -234,9 +406,10 @@ class RAGPipeline:
             return
 
         try:
-            chunks = await self._retrieve_chunks(question, lesson_id, top_k)
+            chunks = await self._retrieve_chunks(
+                question, lesson_id, top_k, chat_history=chat_history
+            )
         except RuntimeError as e:
-            # Lỗi embedding/cấu hình: báo lỗi thật, không giả vờ là hết tri thức
             logger.error("Embedding failed during document retrieval", error=str(e))
             yield sse({"type": "error", "error": str(e)})
             yield sse({"type": "done", "done": True})
@@ -245,17 +418,35 @@ class RAGPipeline:
             logger.error("Chunk retrieval failed during streaming", error=str(e))
             chunks = []
 
-        # Bước 2: Không có tri thức liên quan trong học liệu → nói thật, không bịa
+        # Không có bằng chứng → nói thật, không gọi LLM để tránh bịa.
         if not chunks:
-            async for event in stream_text(build_no_context_answer(lesson_id)):
+            async for event in stream_text(build_no_context_answer(lesson_id, lesson_title)):
                 yield event
             yield sse({"type": "sources", "data": []})
             yield sse({"type": "done", "done": True})
             return
 
+        sources = [self._source_ref(c, lesson_title) for c in chunks]
+        # Gửi nguồn ngay khi truy xuất xong để UI hiển thị trong lúc chờ câu trả lời.
+        yield sse({"type": "sources", "data": sources})
+
         context = self._build_context(chunks)
-        system_prompt = build_tutor_system_prompt(lesson_id=lesson_id)
-        user_message = build_rag_user_prompt(question=question, context=context)
+        system_prompt = build_tutor_system_prompt(
+            lesson_id=lesson_id,
+            lesson_title=lesson_title,
+            course_level=course_level,
+            course_category=course_category,
+            grade_label=grade_label,
+            target_audience=target_audience,
+            language=language,
+            tutor_mode=tutor_mode,
+        )
+        user_message = build_rag_user_prompt(
+            question=question,
+            context=context,
+            chat_history=chat_history,
+            lesson_title=lesson_title or "",
+        )
         full_prompt = f"{system_prompt}\n\n{user_message}"
 
         streamed_any = False
@@ -275,92 +466,89 @@ class RAGPipeline:
             gemini_error = e
             logger.warning("Gemini streaming failed; switching to Groq fallback", error=str(e))
 
-        # Nếu Gemini không stream được gì → fallback sang Groq
         if not streamed_any:
             if has_valid_groq_key():
                 logger.info("Streaming qua Groq fallback", lesson_id=lesson_id)
                 try:
-                    system_prompt = build_tutor_system_prompt(lesson_id=lesson_id)
-                    user_message = build_rag_user_prompt(question=question, context=context)
-                    async for chunk_text in groq_stream(prompt=user_message, system_prompt=system_prompt):
+                    async for chunk_text in groq_stream(
+                        prompt=user_message, system_prompt=system_prompt
+                    ):
                         if chunk_text:
                             streamed_any = True
-                            yield sse({"type": "chunk", "content": chunk_text, "token": chunk_text})
+                            yield sse(
+                                {"type": "chunk", "content": chunk_text, "token": chunk_text}
+                            )
                             await asyncio.sleep(0.005)
                 except Exception as groq_err:
                     logger.error("Groq streaming fallback failed", error=str(groq_err))
-                    yield sse({"type": "error", "error": "Cả Gemini và Groq đều không khả dụng. Vui lòng thử lại sau."})
+                    yield sse(
+                        {
+                            "type": "error",
+                            "error": "Cả Gemini và Groq đều không khả dụng. Vui lòng thử lại sau.",
+                        }
+                    )
                     yield sse({"type": "done", "done": True})
                     return
             else:
-                # Không có Groq key → thông báo lỗi rõ ràng
-                err_msg = format_gemini_error(gemini_error) if gemini_error else "Dịch vụ AI không phản hồi."
+                err_msg = (
+                    format_gemini_error(gemini_error)
+                    if gemini_error
+                    else "Dịch vụ AI không phản hồi."
+                )
                 yield sse({"type": "error", "error": err_msg})
                 yield sse({"type": "done", "done": True})
                 return
 
-        # Nguồn trích dẫn thật lấy từ pgvector (similarity thật, không phải số bịa)
-        yield sse({
-            "type": "sources",
-            "data": [
-                {
-                    "content": c["content"][:200] + "...",
-                    "similarity": round(c["similarity"], 3) if isinstance(c.get("similarity"), (int, float)) else None,
-                    "document_id": c.get("document_id"),
-                    "page": (c.get("metadata") or {}).get("page"),
-                    "filename": (c.get("metadata") or {}).get("filename") or c.get("document_id"),
-                }
-                for c in chunks
-            ],
-        })
         yield sse({"type": "done", "done": True})
 
+    @staticmethod
+    def _source_ref(chunk: dict, lesson_title: Optional[str] = None) -> dict:
+        """Chuẩn hóa nguồn trích dẫn, tương thích nguồn tài liệu cũ (page/file).
 
-    async def _retrieve_chunks(
-        self,
-        question: str,
-        lesson_id: int,
-        top_k: Optional[int] = None,
-    ) -> List[dict]:
-        """Embed câu hỏi và tìm chunks liên quan trong lesson.
-
-        Hỗ trợ fallback lấy trực tiếp chunks hoặc transcript của bài học trong cơ sở dữ liệu.
+        `lesson_title` do Backend lấy từ DB gửi sang, để UI hiển thị đủ
+        "bài học + video + mốc thời gian" cho mỗi dẫn chứng.
         """
-        chunks = []
-        try:
-            query_embedding = await self.embedder.embed_query(question)
-            async with AsyncSessionLocal() as db:
-                store = PgVectorStore(db)
-                chunks = await store.similarity_search_by_lesson(
-                    query_embedding=query_embedding,
-                    lesson_id=lesson_id,
-                    top_k=top_k,
-                )
-        except Exception as e:
-            logger.error("pgvector similarity search failed", error=str(e))
-            raise RuntimeError(
-                "Không thể truy xuất kho học liệu vector của bài học. Vui lòng thử lại sau."
-            ) from e
-
-        return chunks
+        metadata = chunk.get("metadata") or {}
+        start = metadata.get("start_seconds")
+        end = metadata.get("end_seconds")
+        return {
+            "lesson_title": lesson_title,
+            "content": (chunk.get("content") or "")[:200] + "...",
+            "similarity": round(chunk["similarity"], 3)
+            if isinstance(chunk.get("similarity"), (int, float))
+            else None,
+            "document_id": chunk.get("document_id"),
+            "page": metadata.get("page"),
+            "filename": metadata.get("filename") or chunk.get("document_id"),
+            "chunk_index": chunk.get("chunk_index", 1),
+            "lesson_id": metadata.get("lesson_id"),
+            "course_id": metadata.get("course_id"),
+            "youtube_video_id": metadata.get("youtube_video_id"),
+            "video_title": metadata.get("video_title"),
+            "source_type": metadata.get("source_type"),
+            "start_seconds": start if isinstance(start, (int, float)) else None,
+            "end_seconds": end if isinstance(end, (int, float)) else None,
+            "start_timestamp": metadata.get("start_timestamp"),
+            "end_timestamp": metadata.get("end_timestamp"),
+        }
 
     def _build_context(self, chunks: List[dict]) -> str:
-        """
-        Ghép các chunks thành context string cho LLM.
-        Sắp xếp theo chunk_index để giữ thứ tự tự nhiên.
-        """
+        """Ghép context có nguồn, tên video, mốc thời gian/trang để trích dẫn."""
         sorted_chunks = sorted(chunks, key=lambda x: x.get("chunk_index", 0))
-
         context_parts = []
-        for i, chunk in enumerate(sorted_chunks, 1):
-            sim = chunk.get("similarity")
-            sim_label = f"{sim:.2f}" if isinstance(sim, (int, float)) else "n/a"
+
+        for index, chunk in enumerate(sorted_chunks, 1):
             metadata = chunk.get("metadata") or {}
-            source = metadata.get("filename") or chunk.get("document_id") or "học liệu"
+            title = metadata.get("video_title") or metadata.get("filename") or chunk.get("document_id")
+            start_ts = metadata.get("start_timestamp")
+            end_ts = metadata.get("end_timestamp")
             page = metadata.get("page")
-            source_label = f"{source}, trang {page}" if page else source
-            context_parts.append(
-                f"[Đoạn {i} - Nguồn: {source_label} - Độ liên quan: {sim_label}]\n{chunk['content']}"
-            )
+            if start_ts:
+                source_label = f'Video "{title}" [{start_ts}–{end_ts}]' if end_ts else f'Video "{title}" [{start_ts}]'
+            elif page:
+                source_label = f"{title}, trang {page}"
+            else:
+                source_label = str(title or "học liệu")
+            context_parts.append(f"[Nguồn {index} | {source_label}]\n{chunk['content']}")
 
         return "\n\n---\n\n".join(context_parts)

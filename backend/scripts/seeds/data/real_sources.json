@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "note": "Học liệu và tài liệu tham khảo chính quy – Trường Đại học Đông Á",
+  "courses": [
+    {
+      "id": 201,
+      "title": "Toán cao cấp 2 – Đại số tuyến tính",
+      "category_slug": "toan-cao-cap",
+      "level_code": "GENERAL",
+      "grade_label": "Năm 1 – Đại cương",
+      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "description": "Ma trận, định thức, hệ phương trình tuyến tính, không gian vector và trị riêng vector riêng.",
+      "lessons": [
+        {
+          "title": "Bài 1: Ma trận và các phép toán ma trận",
+          "video_url": "https://www.youtube.com/watch?v=0k2G_Z4qZpQ",
+          "duration": 2700
+        },
+        {
+          "title": "Bài 2: Định thức và ma trận nghịch đảo",
+          "video_url": "https://www.youtube.com/watch?v=v0Lg9uU2q58",
+          "duration": 2700
+        }
+      ]
+    },
+    {
+      "id": 202,
+      "title": "Kiến trúc Máy tính & Hệ điều hành",
+      "category_slug": "he-thong-thong-tin",
+      "level_code": "FOUNDATION",
+      "grade_label": "Năm 2 – Cơ sở ngành",
+      "target_audience": "Sinh viên Khoa Công nghệ Thông tin – ĐH Đông Á",
+      "description": "Cơ chế quản lý tiến trình, bộ nhớ ảo, phân trang và kiến trúc CPU Von Neumann.",
+      "lessons": [
+        {
+          "title": "Bài 1: Kiến trúc tập lệnh và chu kỳ lệnh CPU",
+          "video_url": "https://www.youtube.com/watch?v=tSLZXqY3X_0",
+          "duration": 2700
+        },
+        {
+          "title": "Bài 2: Tiến trình, Luồng và Lập lịch CPU",
+          "video_url": "https://www.youtube.com/watch?v=dYk8w1fJ24M",
+          "duration": 2700
+        }
+      ]
+    }
+  ]
+}

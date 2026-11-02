@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
+  Wand2,
+  Play,
   ArrowLeft,
   Sparkles,
   CheckCircle2,
@@ -19,8 +21,10 @@ import {
   HelpCircle,
   Clock,
   BookOpen,
+  UploadCloud,
+  Loader2,
 } from 'lucide-react';
-import { coursesApi } from '@/lib/api';
+import { coursesApi, categoriesApi, educationLevelsApi, aiDiscoveryApi } from '@/lib/api';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -73,22 +77,22 @@ const PRESET_THUMBNAILS = [
   {
     name: 'Python & Trí tuệ Nhân tạo',
     category: 'AI & Data',
-    url: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=700&auto=format&fit=crop&q=80',
+    url: 'https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/python-ai.jpg',
   },
   {
     name: 'Backend & Lập trình Hệ thống',
     category: 'Backend',
-    url: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=700&auto=format&fit=crop&q=80',
+    url: 'https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/fastapi-db.jpg',
   },
   {
     name: 'Frontend Web & React.js',
     category: 'Frontend',
-    url: 'https://images.unsplash.com/photo-1593720213428-28a5b9e94613?w=700&auto=format&fit=crop&q=80',
+    url: 'https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/nextjs-ui.jpg',
   },
   {
     name: 'Cơ sở Dữ liệu & Cloud DevOps',
     category: 'Cloud & DB',
-    url: 'https://images.unsplash.com/photo-1544383835-bda2bc66a55d?w=700&auto=format&fit=crop&q=80',
+    url: 'https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/cloud-devops.jpg',
   },
 ];
 
@@ -112,10 +116,32 @@ export default function CreateCoursePage() {
   const [price, setPrice] = useState('');
   const [statusVal, setStatusVal] = useState<'published' | 'draft'>('published');
   const [thumbnail, setThumbnail] = useState(PRESET_THUMBNAILS[0].url);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [coverError, setCoverError] = useState('');
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
   const [outcomes, setOutcomes] = useState<string[]>([]);
   const [newOutcome, setNewOutcome] = useState('');
   const [prerequisites, setPrerequisites] = useState<string[]>([]);
   const [newPrereq, setNewPrereq] = useState('');
+
+  // ── Multi-domain & Multi-level states (Master Spec Section III & IV) ──
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [categoriesTree, setCategoriesTree] = useState<any[]>([]);
+  const [educationLevelId, setEducationLevelId] = useState<number | null>(null);
+  const [educationLevels, setEducationLevels] = useState<any[]>([]);
+  const [gradeLabel, setGradeLabel] = useState('');
+  const [proficiencyLevel, setProficiencyLevel] = useState('Trung cấp');
+  const [targetAudience, setTargetAudience] = useState('Học sinh');
+  const [language, setLanguage] = useState('vi');
+
+  // ── AI Course Builder Assistant State ──
+  const [showAiBuilder, setShowAiBuilder] = useState(false);
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiLevel, setAiLevel] = useState('Chuyên ngành (Năm 3 - 4)');
+  const [aiDomain, setAiDomain] = useState('Khoa Công nghệ Thông tin');
+  const [aiAudience, setAiAudience] = useState('Sinh viên');
+  const [isAiBuilding, setIsAiBuilding] = useState(false);
+  const [aiBlueprintResult, setAiBlueprintResult] = useState<any | null>(null);
 
   // ── Step 2: Lessons Management ──
   const [lessons, setLessons] = useState<LessonDraft[]>([]);
@@ -145,6 +171,16 @@ export default function CreateCoursePage() {
   // Gợi ý danh mục lấy từ dữ liệu thật trong DB thay vì hardcode ở client.
   useEffect(() => {
     let isMounted = true;
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('mode') === 'ai') setShowAiBuilder(true);
+    }
+    categoriesApi.getTree().then((res) => {
+      if (isMounted) setCategoriesTree(res.data?.data?.tree || []);
+    }).catch(() => {});
+    educationLevelsApi.getAll().then((res) => {
+      if (isMounted) setEducationLevels(res.data?.data || []);
+    }).catch(() => {});
     coursesApi
       .getCategories({ status: 'all' })
       .then((res) => {
@@ -153,13 +189,54 @@ export default function CreateCoursePage() {
           .filter((name: string | undefined): name is string => Boolean(name));
         if (isMounted) setCategoryOptions(names);
       })
-      .catch(() => {
-        // Không chặn việc tạo khóa học nếu endpoint gợi ý tạm lỗi.
-      });
+      .catch(() => {});
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const handleRunAiBuilder = async () => {
+    if (!aiTopic.trim()) return;
+    setIsAiBuilding(true);
+    setErrorMsg('');
+    try {
+      const res = await aiDiscoveryApi.discover({
+        topic: aiTopic.trim(),
+        target_level: aiLevel,
+        domain_category: aiDomain,
+        target_audience: aiAudience,
+      });
+      const bp = res.data?.data?.blueprint;
+      if (bp) {
+        setAiBlueprintResult(bp);
+        // Tự động điền vào Course Form
+        setTitle(bp.course_title || aiTopic);
+        setDescription(bp.description || '');
+        setCategory(bp.domain || aiDomain);
+        setGradeLabel(bp.grade_label || aiLevel);
+        setTargetAudience(bp.target_audience || aiAudience);
+        setProficiencyLevel(bp.proficiency_level || 'Trung cấp');
+        if (bp.outcomes) setOutcomes(bp.outcomes);
+        if (bp.prerequisites) setPrerequisites(bp.prerequisites);
+        if (bp.lessons && bp.lessons.length > 0) {
+          const mappedLessons: LessonDraft[] = bp.lessons.map((l: any, idx: number) => ({
+            id: `lesson-ai-${Date.now()}-${idx}`,
+            title: l.title,
+            duration: Math.round((l.duration || 1800) / 60),
+            videoUrl: l.video_url || '',
+            resourcesUrl: l.resources_url || '',
+            transcript: l.transcript_summary || '',
+          }));
+          setLessons(mappedLessons);
+        }
+        setSuccessMsg(`AI đã khám phá và tự động thiết kế khóa học: "${bp.course_title || aiTopic}" kèm ${bp.lessons?.length || 0} bài học!`);
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.response?.data?.detail || 'Không thể sinh khóa học qua AI.');
+    } finally {
+      setIsAiBuilding(false);
+    }
+  };
 
   // Hàm trích xuất YouTube Embed URL
   const getYouTubeEmbedUrl = (url: string) => {
@@ -179,6 +256,36 @@ export default function CreateCoursePage() {
       .trim()
       .replace(/\s+/g, '-');
     setSlug(generatedSlug);
+  };
+
+  // Tải ảnh bìa lên Cloudinary qua backend (ký phía máy chủ, không lộ API secret).
+  const handleCoverUpload = async (file: File | null | undefined) => {
+    if (!file) return;
+    setCoverError('');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setCoverError('Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setCoverError('Ảnh vượt quá 8MB. Vui lòng chọn ảnh nhỏ hơn.');
+      return;
+    }
+    setIsUploadingCover(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await coursesApi.uploadImage(formData);
+      const url = res.data?.data?.url;
+      if (!url) throw new Error('Máy chủ không trả về liên kết ảnh.');
+      setThumbnail(url);
+    } catch (err: any) {
+      setCoverError(
+        err?.response?.data?.detail || err?.message || 'Không tải được ảnh lên. Vui lòng thử lại.',
+      );
+    } finally {
+      setIsUploadingCover(false);
+      if (coverInputRef.current) coverInputRef.current.value = '';
+    }
   };
 
   // Thêm / Xóa Chuẩn đầu ra
@@ -495,8 +602,14 @@ export default function CreateCoursePage() {
         title: title.trim(),
         slug: slug.trim() || undefined,
         description: description.trim() || 'Khóa học đào tạo trực tuyến chuẩn chất lượng tích hợp Gia sư AI 24/7.',
-        category: category.trim(),
+        category: category.trim() || 'Đa lĩnh vực',
         level,
+        category_id: categoryId,
+        education_level_id: educationLevelId,
+        grade_label: gradeLabel.trim() || undefined,
+        proficiency_level: proficiencyLevel.trim() || undefined,
+        target_audience: targetAudience.trim() || undefined,
+        language: language || 'vi',
         price: isFree ? 0 : Number(price) || 0,
         thumbnail: thumbnail.trim(),
         status: statusVal,
@@ -629,12 +742,12 @@ export default function CreateCoursePage() {
   const activeYoutubeEmbed = currentLessonPreview ? getYouTubeEmbedUrl(currentLessonPreview.videoUrl) : '';
 
   return (
-    <div className="pb-28 font-sans text-slate-800">
+    <div className="pb-28 font-sans text-stone-800">
       {/* ── Toolbar: Chế độ hiển thị & Lưu khóa học ── */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-sm font-extrabold tracking-tight text-foreground">
+            <h1 className="text-sm font-semibold tracking-tight text-foreground">
               Tạo Khóa học & Soạn Đề thi AI
             </h1>
             <Badge variant="info">Studio</Badge>
@@ -687,7 +800,7 @@ export default function CreateCoursePage() {
       {/* Main Content */}
       <main className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
         {/* ── BĂNG BANNER TIẾN TRÌNH 3 BƯỚC (WIZARD PIPELINE HERO) ── */}
-        <Card className="mb-6 rounded-3xl">
+        <Card className="mb-6 rounded-lg">
           <CardContent className="p-4 sm:p-5">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {[
@@ -723,7 +836,7 @@ export default function CreateCoursePage() {
                       }
                     }}
                     className={cn(
-                      'h-auto items-center justify-start gap-2.5 whitespace-normal rounded-xl p-3 text-left',
+                      'h-auto items-center justify-start gap-2.5 whitespace-normal rounded-lg p-3 text-left',
                       isCurrent && 'border-primary bg-primary/5 ring-2 ring-primary/20',
                       isPast && 'border-emerald-300 bg-emerald-50/40',
                     )}
@@ -755,14 +868,14 @@ export default function CreateCoursePage() {
 
         {/* Thông báo Alert */}
         {errorMsg && (
-          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive">
+          <div className="mb-6 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800">
+          <div className="mb-6 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
             <span>{successMsg}</span>
           </div>
@@ -771,15 +884,106 @@ export default function CreateCoursePage() {
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
           {/* ================= CỘT TRÁI: NỘI DUNG 3 BƯỚC (8 COLS) ================= */}
           <div className="space-y-8 lg:col-span-8">
+            {/* ── AI COURSE BUILDER & DISCOVERY BANNER (Master Spec Section Bổ sung) ── */}
+            <Card className="rounded-lg border-brand-300 bg-linear-to-r from-brand-50/70 via-white to-brand-50/30 shadow-xs">
+              <CardContent className="p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white shadow-xs">
+                      <Wand2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-stone-900">AI Course Builder & Discovery</h3>
+                        <Badge variant="success" className="text-[10px] font-bold">Khám phá thông minh</Badge>
+                      </div>
+                      <p className="mt-0.5 text-xs text-stone-600">
+                        Nhập chủ đề bất kỳ (Toán học, Tiếng Anh, Lập trình...), AI sẽ tự tìm học liệu, video bài giảng YouTube và thiết lập khóa học cho bạn duyệt!
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={showAiBuilder ? 'outline' : 'default'}
+                    onClick={() => setShowAiBuilder(!showAiBuilder)}
+                    className="shrink-0 text-xs font-semibold gap-1.5"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    {showAiBuilder ? 'Đóng AI Builder' : 'Dùng AI Sinh Khóa học'}
+                  </Button>
+                </div>
+
+                {showAiBuilder && (
+                  <div className="mt-4 pt-4 border-t border-brand-200/80 space-y-3.5">
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <div className="sm:col-span-2">
+                        <Label className="text-xs font-semibold">Chủ đề đào tạo muốn AI xây dựng *</Label>
+                        <Input
+                          value={aiTopic}
+                          onChange={(e) => setAiTopic(e.target.value)}
+                          placeholder="VD: Toán cao cấp & Giải tích, Lập trình Fullstack Next.js/FastAPI, Tiếng Anh chuyên ngành IT..."
+                          className="mt-1 text-xs bg-white"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold">Lĩnh vực</Label>
+                        <select
+                          value={aiDomain}
+                          onChange={(e) => setAiDomain(e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-input bg-white p-2 text-xs font-medium h-9"
+                        >
+                          <option value="Khoa Công nghệ Thông tin">Khoa Công nghệ Thông tin</option>
+                          <option value="Khoa Ngoại ngữ">Khoa Ngoại ngữ</option>
+                          <option value="Khoa Quản trị - Kinh tế">Khoa Quản trị - Kinh tế</option>
+                          <option value="Khoa Khoa học Cơ bản & Đại cương">Khoa Khoa học Cơ bản & Đại cương</option>
+                          <option value="Khoa Kỹ thuật - Tự động hóa">Khoa Kỹ thuật - Tự động hóa</option>
+                          <option value="Kỹ năng Bổ trợ & Hướng nghiệp ĐH Đông Á">Kỹ năng Bổ trợ & Hướng nghiệp</option>
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="text-xs font-semibold">Cấp học</Label>
+                        <select
+                          value={aiLevel}
+                          onChange={(e) => setAiLevel(e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-input bg-white p-2 text-xs font-medium h-9"
+                        >
+                          <option value="Đại cương (Năm 1 - 2)">Đại cương (Năm 1 - 2)</option>
+                          <option value="Cơ sở ngành (Năm 2 - 3)">Cơ sở ngành (Năm 2 - 3)</option>
+                          <option value="Chuyên ngành (Năm 3 - 4)">Chuyên ngành (Năm 3 - 4)</option>
+                          <option value="Đồ án & Khóa luận tốt nghiệp">Đồ án & Khóa luận tốt nghiệp</option>
+                          <option value="Chuẩn đầu ra & Chứng chỉ nghề">Chuẩn đầu ra & Chứng chỉ nghề</option>
+                          <option value="Sau đại học & Nghiên cứu">Sau đại học & Nghiên cứu</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isAiBuilding || !aiTopic.trim()}
+                        onClick={handleRunAiBuilder}
+                        className="text-xs font-semibold gap-1.5 px-4"
+                      >
+                        <Sparkles className={`w-3.5 h-3.5 ${isAiBuilding ? 'animate-spin' : ''}`} />
+                        {isAiBuilding ? 'AI đang tìm kiếm & thiết kế...' : 'Khám phá & Điền tự động vào Form'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* ══════════════════════════════════════════════════════════════════════
                 BƯỚC 1: THÔNG TIN KHÓA HỌC
                ══════════════════════════════════════════════════════════════════════ */}
             {(viewMode === 'all-in-one' || activeStep === 1) && (
               <section id="section-step-1" className="space-y-6">
-                <Card className="rounded-3xl">
+                <Card className="rounded-lg">
                   <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0 border-b border-border pb-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 font-bold text-primary">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 font-bold text-primary">
                         1
                       </div>
                       <div>
@@ -836,21 +1040,72 @@ export default function CreateCoursePage() {
 
                     <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="course-category">Danh mục</Label>
-                        <Input
+                        <Label htmlFor="course-category">Danh mục / Lĩnh vực</Label>
+                        <select
                           id="course-category"
-                          list="category-suggestions"
-                          value={category}
-                          onChange={(e) => setCategory(e.target.value)}
-                          placeholder="Chọn hoặc nhập danh mục mới..."
-                          className="font-semibold"
-                        />
-                        <datalist id="category-suggestions">
-                          {categoryOptions.map((c) => (
-                            <option key={c} value={c} />
+                          value={categoryId ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value ? Number(e.target.value) : null;
+                            setCategoryId(val);
+                            if (val) {
+                              const found = categoriesTree.flatMap(p => [p, ...(p.children || [])]).find(c => c.id === val);
+                              if (found) setCategory(found.name);
+                            }
+                          }}
+                          className="w-full rounded-lg border border-input bg-background p-2 text-xs font-semibold h-10"
+                        >
+                          <option value="">(Chọn lĩnh vực đào tạo)</option>
+                          {categoriesTree.map((p) => (
+                            <optgroup key={p.id} label={p.name}>
+                              <option value={p.id}>{p.name} (Chung)</option>
+                              {p.children?.map((ch: any) => (
+                                <option key={ch.id} value={ch.id}>&nbsp;&nbsp;↳ {ch.name}</option>
+                              ))}
+                            </optgroup>
                           ))}
-                        </datalist>
-                        <p className="text-[11px] text-muted-foreground">Có thể tự nhập danh mục riêng.</p>
+                        </select>
+                        <p className="text-[11px] text-muted-foreground">Lĩnh vực chuẩn hóa cho hệ thống AI.</p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="education-level">Cấp học / Trình độ</Label>
+                        <select
+                          id="education-level"
+                          value={educationLevelId ?? ''}
+                          onChange={(e) => setEducationLevelId(e.target.value ? Number(e.target.value) : null)}
+                          className="w-full rounded-lg border border-input bg-background p-2 text-xs font-semibold h-10"
+                        >
+                          <option value="">(Chọn cấp học)</option>
+                          {educationLevels.map((lvl) => (
+                            <option key={lvl.id} value={lvl.id}>{lvl.name} ({lvl.code})</option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] text-muted-foreground">Đại cương, Cơ sở ngành, Chuyên ngành, Đồ án...</p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="grade-label">Lớp / Mức năng lực</Label>
+                        <Input
+                          id="grade-label"
+                          value={gradeLabel}
+                          onChange={(e) => setGradeLabel(e.target.value)}
+                          placeholder="VD: Năm 1 - Đại cương, Năm 3 - Chuyên ngành, Chuẩn B1/TOEIC..."
+                          className="font-semibold text-xs h-10"
+                        />
+                        <p className="text-[11px] text-muted-foreground">Hiển thị trực tiếp cho học viên.</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 pt-1 sm:grid-cols-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="target-audience">Đối tượng người học</Label>
+                        <Input
+                          id="target-audience"
+                          value={targetAudience}
+                          onChange={(e) => setTargetAudience(e.target.value)}
+                          placeholder="Sinh viên năm 1-2, Sinh viên chuyên ngành CNTT, Sinh viên làm đồ án..."
+                          className="text-xs h-10"
+                        />
                       </div>
 
                       <div className="space-y-1.5">
@@ -919,7 +1174,7 @@ export default function CreateCoursePage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-col justify-between gap-3 rounded-xl border border-border bg-muted/30 p-3 sm:flex-row sm:items-center">
+                    <div className="flex flex-col justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center">
                       <div>
                         <p className="text-xs font-bold text-foreground">Trạng thái xuất bản</p>
                         <p className="text-[11px] text-muted-foreground">
@@ -953,22 +1208,53 @@ export default function CreateCoursePage() {
                 </Card>
 
                 {/* Chọn Ảnh Thumbnail */}
-                <Card className="rounded-3xl">
+                <Card className="rounded-lg">
                   <CardContent className="space-y-4 p-6 sm:p-7">
                     <div className="flex items-center justify-between">
                       <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
                         Ảnh đại diện Khóa học (Thumbnail)
                       </h3>
-                      <span className="text-[11px] text-muted-foreground">Chọn mẫu hoặc dán URL tùy ý</span>
+                      <span className="text-[11px] text-muted-foreground">Chọn mẫu, tải ảnh riêng hoặc dán URL</span>
                     </div>
 
-                    <Input
-                      type="url"
-                      value={thumbnail}
-                      onChange={(e) => setThumbnail(e.target.value)}
-                      placeholder="Dán liên kết ảnh đại diện (https://...)"
-                      className="bg-muted font-mono text-xs"
-                    />
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        type="url"
+                        value={thumbnail}
+                        onChange={(e) => setThumbnail(e.target.value)}
+                        placeholder="Dán liên kết ảnh đại diện (https://...)"
+                        className="bg-muted font-mono text-xs"
+                      />
+                      <input
+                        ref={coverInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(e) => handleCoverUpload(e.target.files?.[0])}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isUploadingCover}
+                        onClick={() => coverInputRef.current?.click()}
+                        className="shrink-0"
+                      >
+                        {isUploadingCover ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <UploadCloud className="h-4 w-4" />
+                        )}
+                        {isUploadingCover ? 'Đang tải…' : 'Tải ảnh lên'}
+                      </Button>
+                    </div>
+                    {coverError && (
+                      <p className="text-[11px] text-destructive" role="alert">
+                        {coverError}
+                      </p>
+                    )}
+                    <p className="text-[11px] text-muted-foreground">
+                      Ảnh được lưu trên Cloudinary (JPG/PNG/WEBP, tối đa 8MB).
+                    </p>
 
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                       {PRESET_THUMBNAILS.map((preset) => (
@@ -978,7 +1264,7 @@ export default function CreateCoursePage() {
                           variant="outline"
                           onClick={() => setThumbnail(preset.url)}
                           className={cn(
-                            'h-auto w-full flex-col items-stretch gap-0 whitespace-normal rounded-xl p-2 text-left font-normal',
+                            'h-auto w-full flex-col items-stretch gap-0 whitespace-normal rounded-lg p-2 text-left font-normal',
                             thumbnail === preset.url && 'border-primary bg-primary/5 ring-2 ring-primary/20',
                           )}
                         >
@@ -1004,7 +1290,7 @@ export default function CreateCoursePage() {
                 </Card>
 
                 {/* Chuẩn đầu ra & Tiên quyết */}
-                <Card className="rounded-3xl">
+                <Card className="rounded-lg">
                   <CardContent className="space-y-6 p-6 sm:p-7">
                     <div>
                       <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-foreground">
@@ -1019,7 +1305,7 @@ export default function CreateCoursePage() {
                           outcomes.map((item, idx) => (
                             <div
                               key={idx}
-                              className="flex items-center gap-2 rounded-xl border border-border bg-muted/50 p-2 text-xs"
+                              className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-2 text-xs"
                             >
                               <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
                               <span className="flex-1 font-medium text-foreground">{item}</span>
@@ -1062,7 +1348,7 @@ export default function CreateCoursePage() {
                           prerequisites.map((item, idx) => (
                             <div
                               key={idx}
-                              className="flex items-center gap-2 rounded-xl border border-border bg-muted/50 p-2 text-xs"
+                              className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-2 text-xs"
                             >
                               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                               <span className="flex-1 font-medium text-foreground">{item}</span>
@@ -1110,10 +1396,10 @@ export default function CreateCoursePage() {
                ══════════════════════════════════════════════════════════════════════ */}
             {(viewMode === 'all-in-one' || activeStep === 2) && (
               <section id="section-step-2" className="space-y-6">
-                <Card className="rounded-3xl">
+                <Card className="rounded-lg">
                   <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0 border-b border-border pb-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 font-bold text-emerald-600">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 font-bold text-emerald-600">
                         2
                       </div>
                       <div>
@@ -1135,10 +1421,10 @@ export default function CreateCoursePage() {
                     {showAddLessonForm && (
                       <form
                         onSubmit={handleAddNewLesson}
-                        className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-5"
+                        className="space-y-4 rounded-lg border border-emerald-200 bg-emerald-50/40 p-5"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-900">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-900">
                             Soạn bài học #{lessons.length + 1}
                           </span>
                           <Button
@@ -1251,7 +1537,7 @@ export default function CreateCoursePage() {
                     {/* Danh sách các bài giảng hiện tại */}
                     <div className="space-y-3">
                       {lessons.length === 0 ? (
-                        <div className="space-y-2 rounded-2xl border-2 border-dashed border-border bg-muted/30 p-8 text-center">
+                        <div className="space-y-2 rounded-lg border-2 border-dashed border-border bg-muted/30 p-8 text-center">
                           <Video className="mx-auto h-8 w-8 text-muted-foreground/50" />
                           <p className="text-xs font-bold text-foreground">Chưa có bài học nào trong khóa học này</p>
                           <p className="mx-auto max-w-sm text-[11px] text-muted-foreground">
@@ -1264,7 +1550,7 @@ export default function CreateCoursePage() {
                           <div
                             key={les.id}
                             className={cn(
-                              'flex flex-col justify-between gap-3 rounded-2xl border p-4 transition sm:flex-row sm:items-center',
+                              'flex flex-col justify-between gap-3 rounded-lg border p-4 transition sm:flex-row sm:items-center',
                               activeLessonIndex === idx
                                 ? 'border-emerald-500 bg-emerald-50/30'
                                 : 'border-border bg-card hover:border-primary/40',
@@ -1273,7 +1559,7 @@ export default function CreateCoursePage() {
                             <div className="flex min-w-0 items-center gap-3">
                               <span
                                 className={cn(
-                                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-xs font-bold',
+                                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold',
                                   activeLessonIndex === idx
                                     ? 'bg-emerald-600 text-white'
                                     : 'bg-muted text-muted-foreground',
@@ -1348,10 +1634,10 @@ export default function CreateCoursePage() {
                ══════════════════════════════════════════════════════════════════════ */}
             {(viewMode === 'all-in-one' || activeStep === 3) && (
               <section id="section-step-3" className="space-y-6">
-                <Card className="rounded-3xl">
+                <Card className="rounded-lg">
                   <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0 border-b border-border pb-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-purple-50 font-bold text-purple-600">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-clay-50 font-bold text-clay-600">
                         3
                       </div>
                       <div>
@@ -1366,12 +1652,12 @@ export default function CreateCoursePage() {
 
                   <CardContent className="space-y-5 pt-5">
                     {/* Thanh điều khiển sinh đề AI */}
-                    <div className="space-y-3 rounded-2xl border border-purple-200/80 bg-gradient-to-r from-purple-50 via-indigo-50 to-pink-50 p-4">
+                    <div className="space-y-3 rounded-lg border border-clay-200 bg-clay-50/70 p-4">
                       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
                         <div className="flex-1 space-y-1.5">
                           <Label>Chọn bài học để AI sinh bộ đề:</Label>
                           {lessons.length === 0 ? (
-                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
                               Chưa có bài học nào. Hãy quay lại Bước 2 để thêm bài học trước.
                             </div>
                           ) : (
@@ -1445,7 +1731,7 @@ export default function CreateCoursePage() {
 
                     {/* Danh sách các bộ Quiz đã sinh */}
                     {quizzes.length === 0 ? (
-                      <div className="space-y-2 rounded-3xl border-2 border-dashed border-border p-8 text-center">
+                      <div className="space-y-2 rounded-lg border-2 border-dashed border-border p-8 text-center">
                         <HelpCircle className="mx-auto h-10 w-10 text-muted-foreground/50" />
                         <p className="text-xs font-bold text-foreground">Chưa có bộ đề trắc nghiệm nào</p>
                         <p className="mx-auto max-w-sm text-[11px] text-muted-foreground">
@@ -1456,7 +1742,7 @@ export default function CreateCoursePage() {
                     ) : (
                       <div className="space-y-6">
                         {quizzes.map((quiz, quizIdx) => (
-                          <div key={quizIdx} className="space-y-4 rounded-3xl border border-border bg-muted/40 p-5">
+                          <div key={quizIdx} className="space-y-4 rounded-lg border border-border bg-muted/40 p-5">
                             <div className="flex items-center justify-between border-b border-border pb-3">
                               <div>
                                 <Badge variant="purple">Bộ đề trắc nghiệm AI</Badge>
@@ -1492,10 +1778,10 @@ export default function CreateCoursePage() {
                               {quiz.questions.map((q, qIdx) => (
                                 <div
                                   key={q.question_number}
-                                  className="space-y-3 rounded-2xl border border-border bg-card p-4"
+                                  className="space-y-3 rounded-lg border border-border bg-card p-4"
                                 >
                                   <div className="flex items-start justify-between gap-2">
-                                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-black text-primary">
+                                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
                                       {q.question_number}
                                     </span>
                                     <Input
@@ -1521,7 +1807,7 @@ export default function CreateCoursePage() {
                                       <div
                                         key={opt.key}
                                         className={cn(
-                                          'flex items-center gap-2 rounded-xl border p-2 transition',
+                                          'flex items-center gap-2 rounded-lg border p-2 transition',
                                           q.correct_option === opt.key
                                             ? 'border-emerald-500 bg-emerald-50/50 text-emerald-900 ring-1 ring-emerald-400'
                                             : 'border-border bg-muted/40 text-foreground',
@@ -1603,7 +1889,7 @@ export default function CreateCoursePage() {
           {/* ================= CỘT PHẢI: LIVE PREVIEW & VIDEO VIEWER (4 COLS) ================= */}
           <div className="space-y-6 lg:col-span-4 lg:sticky lg:top-28">
             {/* Live Video Preview Box */}
-            <Card className="rounded-3xl">
+            <Card className="rounded-lg">
               <CardContent className="space-y-4 p-5">
                 <div className="flex items-center justify-between border-b border-border pb-3">
                   <div className="flex items-center gap-2">
@@ -1614,7 +1900,7 @@ export default function CreateCoursePage() {
                 </div>
 
                 {/* YouTube Player Preview */}
-                <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+                <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-stone-800 bg-stone-950">
                   {activeYoutubeEmbed ? (
                     <iframe
                       src={activeYoutubeEmbed}
@@ -1624,9 +1910,9 @@ export default function CreateCoursePage() {
                       className="h-full w-full border-0"
                     />
                   ) : (
-                    <div className="flex h-full w-full flex-col items-center justify-center space-y-2 p-4 text-center text-slate-500">
-                      <Video className="h-8 w-8 text-slate-600" />
-                      <p className="text-xs font-medium text-slate-400">
+                    <div className="flex h-full w-full flex-col items-center justify-center space-y-2 p-4 text-center text-stone-500">
+                      <Video className="h-8 w-8 text-stone-600" />
+                      <p className="text-xs font-medium text-stone-400">
                         {lessons.length === 0
                           ? 'Chưa có bài học nào. Thêm bài học ở Bước 2 để phát thử.'
                           : 'Bài học chưa có link video YouTube. Nhập link video ở Bước 2.'}
@@ -1653,19 +1939,19 @@ export default function CreateCoursePage() {
             </Card>
 
             {/* Course Card Preview */}
-            <Card className="rounded-3xl">
+            <Card className="rounded-lg">
               <CardContent className="space-y-4 p-5">
                 <div className="flex items-center justify-between border-b border-border pb-3">
                   <span className="text-xs font-bold text-foreground">Thẻ khóa học hiển thị</span>
                   <Badge variant="info">{statusVal === 'published' ? 'Công khai' : 'Bản nháp'}</Badge>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="overflow-hidden rounded-lg border border-border bg-card">
                   <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-muted">
                     {thumbnail ? (
                       <Image src={thumbnail} alt="Preview" fill sizes="(max-width: 1024px) 100vw, 480px" className="object-cover" />
                     ) : (
-                      <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-tr from-slate-100 to-indigo-50 p-4 text-center text-muted-foreground">
+                      <div className="flex h-full w-full flex-col items-center justify-center bg-muted/60 p-4 text-center text-muted-foreground">
                         <BookOpen className="mb-1 h-8 w-8 text-muted-foreground/50" />
                         <span className="text-[11px] font-semibold">Chưa chọn ảnh thumbnail</span>
                       </div>
@@ -1690,7 +1976,7 @@ export default function CreateCoursePage() {
                       {title || 'Tên khóa học sẽ hiển thị tại đây...'}
                     </h4>
                     <div className="flex items-center justify-between border-t border-border pt-2 text-xs">
-                      <span className="font-extrabold text-foreground">
+                      <span className="font-semibold text-foreground">
                         {isFree
                           ? 'Miễn phí'
                           : price && Number(price) > 0
@@ -1707,12 +1993,12 @@ export default function CreateCoursePage() {
             </Card>
 
             {/* Bảo chứng AI Smart LMS */}
-            <div className="space-y-3 rounded-3xl bg-gradient-to-br from-indigo-950 to-slate-900 p-5 text-white shadow-lg">
+            <div className="space-y-3 rounded-lg border border-brand-900 bg-brand-950 p-5 text-brand-50">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-emerald-400" />
                 <span className="text-xs font-bold">Cơ chế AI Studio Smart LMS</span>
               </div>
-              <p className="text-[11px] leading-relaxed text-indigo-200/80">
+              <p className="text-[11px] leading-relaxed text-brand-200/80">
                 Tất cả slide bài giảng và transcript sẽ được tự động phân mảnh và nạp vào pgvector khi lưu. Bộ trắc
                 nghiệm bám sát thang đo Bloom và do Giảng viên trực tiếp phê duyệt đáp án.
               </p>

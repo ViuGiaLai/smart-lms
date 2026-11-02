@@ -2,50 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Smart LMS — hệ thống thiết kế "giấy học thuật"
+ * Nền giấy ấm, mực xanh rêu đậm, một sắc nhấn đất nung.
+ * Đường kẻ mảnh, bán kính nhỏ, không đổ bóng mờ, không gradient hào quang.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --background: 42 33% 96%;
+    --foreground: 40 12% 12%;
+    --card: 44 40% 99%;
+    --card-foreground: 40 12% 12%;
+    --popover: 44 40% 99%;
+    --popover-foreground: 40 12% 12%;
+    --primary: 153 29% 21%;
+    --primary-foreground: 42 33% 97%;
+    --secondary: 40 20% 91%;
+    --secondary-foreground: 40 12% 18%;
+    --muted: 40 20% 92%;
+    --muted-foreground: 38 9% 40%;
+    --accent: 35 45% 90%;
+    --accent-foreground: 30 20% 20%;
+    --destructive: 4 62% 42%;
+    --destructive-foreground: 42 33% 97%;
+    --border: 38 20% 84%;
+    --input: 38 20% 84%;
+    --ring: 153 29% 21%;
+    --radius: 0.375rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --background: 40 10% 9%;
+    --foreground: 42 25% 92%;
+    --card: 40 9% 12%;
+    --card-foreground: 42 25% 92%;
+    --popover: 40 9% 12%;
+    --popover-foreground: 42 25% 92%;
+    --primary: 148 24% 62%;
+    --primary-foreground: 40 12% 10%;
+    --secondary: 40 8% 18%;
+    --secondary-foreground: 42 25% 92%;
+    --muted: 40 8% 17%;
+    --muted-foreground: 40 10% 65%;
+    --accent: 35 22% 20%;
+    --accent-foreground: 42 25% 92%;
+    --destructive: 4 55% 45%;
+    --destructive-foreground: 42 33% 97%;
+    --border: 40 8% 22%;
+    --input: 40 8% 22%;
+    --ring: 148 24% 62%;
   }
 }
 
@@ -53,7 +58,104 @@
   * {
     @apply border-border;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* Tiêu đề trang dùng chân serif để tạo nhịp biên tập, không dùng cho mọi thẻ. */
+  h1 {
+    font-family: var(--font-serif), Georgia, 'Times New Roman', serif;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.16);
+    color: hsl(var(--foreground));
+  }
+  :where(a, button, [role='button'], summary):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Nhãn nhỏ phía trên tiêu đề: chữ in hoa, giãn chữ, màu mực nhạt. */
+  .kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
+  }
+  /* Đường kẻ ngăn khu vực, thay cho các khối đổ bóng. */
+  .rule {
+    @apply border-t border-border;
+  }
+  /* Nền giấy có vân nhẹ cho các khối lớn (hero, chứng chỉ). */
+  .paper-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.35) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+}
+
+@layer utilities {
+  .scrollbar-slim {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: hsl(var(--muted-foreground) / 0.3);
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+  .scrollbar-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .pb-safe {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+  /* Khung ảnh bìa: viền mảnh, không bo tròn quá mức. */
+  .cover-frame {
+    @apply overflow-hidden rounded-md border border-border bg-muted;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #certificate-print-root,
+  #certificate-print-root * {
+    visibility: visible;
+  }
+  #certificate-print-root {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border: 0;
+    box-shadow: none;
   }
 }

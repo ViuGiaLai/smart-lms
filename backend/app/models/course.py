@@ -43,6 +43,17 @@ class Course(Base):
     )
     category: Mapped[str | None] = mapped_column(String(255), nullable=True)
     level: Mapped[str | None] = mapped_column(String(50), nullable=True)  # beginner / intermediate / advanced
+    # ── Mở rộng Đa Lĩnh Vực & Đa Trình Độ (Smart Tutor LMS Master Spec) ──
+    category_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("learning_categories.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    education_level_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("education_levels.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    grade_label: Mapped[str | None] = mapped_column(String(100), nullable=True)  # Lớp 4, Lớp 8, Đại học năm 1, v.v.
+    proficiency_level: Mapped[str | None] = mapped_column(String(50), nullable=True)  # A1, A2, B1, B2, Cơ bản, Nâng cao
+    target_audience: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Học sinh, Sinh viên, Người đi làm, Người tự học
+    language: Mapped[str | None] = mapped_column(String(20), default="vi", nullable=True)  # vi, en
     # Mục tiêu/chuẩn đầu ra và yêu cầu tiên quyết do giảng viên nhập.
     # Lưu dạng mảng chuỗi thay vì nối vào description để hiển thị/nhận sửa độc lập.
     outcomes: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
@@ -58,6 +69,12 @@ class Course(Base):
     # ── Relationships ─
     instructor: Mapped["User"] = relationship(  # noqa: F821
         "User", back_populates="courses", foreign_keys=[instructor_id]
+    )
+    learning_category: Mapped["LearningCategory | None"] = relationship(  # noqa: F821
+        "LearningCategory", back_populates="courses", foreign_keys=[category_id]
+    )
+    education_level_rel: Mapped["EducationLevel | None"] = relationship(  # noqa: F821
+        "EducationLevel", back_populates="courses", foreign_keys=[education_level_id]
     )
     lessons: Mapped[list["Lesson"]] = relationship(  # noqa: F821
         "Lesson", back_populates="course", cascade="all, delete-orphan", order_by="Lesson.order_index"

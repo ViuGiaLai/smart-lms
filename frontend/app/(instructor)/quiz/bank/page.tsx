@@ -184,7 +184,7 @@ export default function QuizBankPage() {
             <select
               value={selectedCourseFilter}
               onChange={(e) => setSelectedCourseFilter(e.target.value)}
-              className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-9 rounded-lg border border-input bg-background px-3 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="all">Tất cả khóa học ({quizzes.length})</option>
               {uniqueCourses.map((c) => (
@@ -251,7 +251,7 @@ export default function QuizBankPage() {
                     </span>
                     {quiz.isAiGenerated && (
                       <Badge variant="purple" className="rounded-md text-[10px] font-semibold">
-                        <Sparkles className="h-3 w-3 text-purple-500" />
+                        <Sparkles className="h-3 w-3 text-clay-500" />
                         AI Bloom
                       </Badge>
                     )}
@@ -275,7 +275,7 @@ export default function QuizBankPage() {
                       <strong className="font-semibold text-foreground/80">{Math.round(quiz.timeLimit / 60)}</strong> phút
                     </span>
                     <span className="flex items-center gap-1">
-                      <Award className="h-3.5 w-3.5 text-violet-500" />
+                      <Award className="h-3.5 w-3.5 text-clay-500" />
                       Điểm đạt: <strong className="font-semibold text-foreground/80">{Math.round(quiz.passScore * 100)}%</strong>
                     </span>
                     {quiz.createdAt && (
@@ -341,7 +341,7 @@ export default function QuizBankPage() {
               <div className="flex-1 space-y-4 overflow-y-auto p-5">
                 {selectedQuizPreview.questions && selectedQuizPreview.questions.length > 0 ? (
                   selectedQuizPreview.questions.map((q, idx) => (
-                    <div key={q.id || idx} className="space-y-3 rounded-2xl border border-border bg-muted/50 p-4">
+                    <div key={q.id || idx} className="space-y-3 rounded-lg border border-border bg-muted/50 p-4">
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-xs font-bold text-primary">Câu {idx + 1}:</span>
                         <span className="text-xs font-medium text-muted-foreground">1 điểm</span>
@@ -362,7 +362,7 @@ export default function QuizBankPage() {
                           return (
                             <div
                               key={optIdx}
-                              className={`flex items-center justify-between rounded-xl border p-2.5 text-xs ${
+                              className={`flex items-center justify-between rounded-lg border p-2.5 text-xs ${
                                 isCorrect
                                   ? 'border-emerald-500/40 bg-emerald-500/10 font-semibold text-emerald-900'
                                   : 'border-border bg-card text-muted-foreground'
@@ -390,7 +390,7 @@ export default function QuizBankPage() {
 
                       {/* Explanation */}
                       {q.explanation && (
-                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-900">
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-900">
                           <span className="font-bold">Giải thích: </span>
                           {q.explanation}
                         </div>

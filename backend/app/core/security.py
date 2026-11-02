@@ -34,8 +34,13 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── JWT 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
-    """Create a signed JWT access token."""
+    """Create a signed JWT access token.
+
+    `ver` (token_version cua user) duoc nhung vao token de co the thu hoi toan bo
+    phien khi nguoi dung dang xuat.
+    """
     payload = data.copy()
+    payload.setdefault("ver", 0)
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
@@ -46,6 +51,7 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
 def create_refresh_token(data: dict[str, Any]) -> str:
     """Create a signed JWT refresh token."""
     payload = data.copy()
+    payload.setdefault("ver", 0)
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     payload.update({"exp": expire, "type": "refresh"})
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
@@ -65,6 +71,18 @@ def decode_token(token: str, expected_type: str | None = None) -> dict[str, Any]
         return payload
     except JWTError:
         raise credentials_exception
+
+
+def token_version_of(payload: dict[str, Any]) -> int:
+    """Doc claim `ver` (token_version) tu payload; token cu khong co = 0."""
+    try:
+        return int(payload.get("ver", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 # ── Current user dependency 
@@ -89,6 +107,14 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Token cu sau khi dang xuat (token_version tang) khong con gia tri.
+    if token_version_of(payload) != (user.token_version or 0):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Phiên đăng nhập đã bị thu hồi. Vui lòng đăng nhập lại.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 

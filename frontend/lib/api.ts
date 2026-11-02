@@ -44,9 +44,53 @@ const processQueue = (error: Error | null, token: string | null = null) => {
   failedQueue = []
 }
 
+// FastAPI trả `detail` dạng MẢNG object cho lỗi 422 (validation). Render thẳng
+// giá trị đó làm React ném "Objects are not valid as a React child" và trắng trang.
+// Chuẩn hoá ngay tại tầng axios để mọi component chỉ nhận về chuỗi.
+function formatApiDetail(detail: unknown): string | null {
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object') {
+          const record = item as { msg?: unknown; loc?: unknown }
+          const msg = typeof record.msg === 'string' ? record.msg : ''
+          const loc = Array.isArray(record.loc) ? record.loc.filter((part) => part !== 'body') : []
+          const field = loc.length ? String(loc[loc.length - 1]) : ''
+          return [field, msg].filter(Boolean).join(': ')
+        }
+        return ''
+      })
+      .filter(Boolean)
+    return parts.length ? parts.join('; ') : null
+  }
+  if (detail && typeof detail === 'object') {
+    const msg = (detail as { msg?: unknown }).msg
+    if (typeof msg === 'string' && msg) return msg
+    try {
+      return JSON.stringify(detail)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function normalizeApiError(error: AxiosError) {
+  const data = error.response?.data
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const record = data as { detail?: unknown }
+    const text = formatApiDetail(record.detail)
+    if (text) record.detail = text
+  }
+  return error
+}
+
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
+    normalizeApiError(error)
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
 
     // Không kích hoạt cơ chế refresh token đối với các API đăng nhập, đăng ký, làm mới phiên
@@ -134,15 +178,16 @@ export const authApi = {
 
   logout: () => api.post('/api/v1/auth/logout'),
 
+  forgotPassword: (email: string) =>
+    api.post('/api/v1/auth/forgot-password', { email }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    api.post('/api/v1/auth/reset-password', { token, newPassword }),
+
   refreshToken: (refreshToken: string) =>
     api.post('/api/v1/auth/refresh', { refreshToken }),
 
   getProfile: () => api.get('/api/v1/auth/profile'),
-
-  updateProfile: (data: FormData) =>
-    api.patch('/api/v1/auth/profile', data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
 }
 
 // Courses
@@ -155,6 +200,12 @@ export const coursesApi = {
 
   createCourse: (data: any) =>
     api.post('/api/v1/courses', data),
+
+  // Tải ảnh bìa khóa học lên Cloudinary qua backend (ký phía máy chủ).
+  uploadImage: (formData: FormData) =>
+    api.post('/api/v1/uploads/image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 
   getBySlug: (slug: string) =>
     api.get(`/api/v1/courses/slug/${encodeURIComponent(slug)}`),
@@ -173,6 +224,13 @@ export const coursesApi = {
 
   markLessonComplete: (courseId: string, lessonId: string, watchedSeconds: number) =>
     api.post(`/api/v1/courses/${courseId}/lessons/${lessonId}/complete`, { watchedSeconds }),
+
+  // Lưu tiến độ xem dở của từng bài (progress.percent_complete trong PostgreSQL).
+  saveLessonProgress: (lessonId: string | number, percentComplete: number, lastPosition = 0) =>
+    api.put(`/api/v1/progress/lessons/${lessonId}`, {
+      percent_complete: Math.max(0, Math.min(100, percentComplete)),
+      last_position: Math.max(0, Math.round(lastPosition)),
+    }),
 
   getEnrolled: () =>
     api.get('/api/v1/courses/enrolled'),
@@ -201,12 +259,6 @@ export const instructorApi = {
   getDashboardStats: () =>
     api.get('/api/v1/instructor/dashboard'),
 
-  createSection: (courseId: string, data: { title: string; order: number }) =>
-    api.post(`/api/v1/instructor/courses/${courseId}/sections`, data),
-
-  createLesson: (courseId: string, sectionId: string, data: Record<string, unknown>) =>
-    api.post(`/api/v1/instructor/courses/${courseId}/sections/${sectionId}/lessons`, data),
-
   getQuizzes: () =>
     api.get('/api/v1/instructor/quizzes'),
 
@@ -230,31 +282,26 @@ export const instructorApi = {
     api.post(`/api/v1/courses/${courseId}/lessons/${lessonId}/documents/upload`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+
+  uploadImage: (formData: FormData) =>
+    api.post('/api/v1/uploads/image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 }
 
 // AI Chat
-export const aiApi = {
-  getSessions: (courseId: string) =>
-    api.get(`/api/v1/ai/sessions`, { params: { courseId } }),
-
-  getSession: (sessionId: string) =>
-    api.get(`/api/v1/ai/sessions/${sessionId}`),
-
-  createSession: (data: { courseId: string; lessonId?: string }) =>
-    api.post('/api/v1/ai/sessions', data),
-
-  // SSE streaming - returns URL for EventSource
-  getStreamUrl: (sessionId: string) =>
-    `${API_BASE_URL}/api/v1/ai/sessions/${sessionId}/stream`,
-
-  sendMessage: (sessionId: string, data: { message: string; lessonId?: string }) =>
-    api.post(`/api/v1/ai/sessions/${sessionId}/messages`, data),
-}
+// Trợ lý AI chỉ có một endpoint streaming thật: POST /api/v1/ai-tutor/chat (SSE),
+// được gọi trong `lib/hooks/useAIChat.ts` vì phải đọc stream bằng ReadableStream.
+// Trước đây file này còn khai báo các route `/api/v1/ai/sessions*` không tồn tại ở
+// backend nên đã được bỏ để không ai gọi nhầm.
 
 // Student
 export const studentApi = {
   getDashboardStats: () =>
     api.get('/api/v1/student/dashboard'),
+
+  getMastery: () =>
+    api.get('/api/v1/student/mastery'),
 
   // Tổng hợp 1 request: thay cho vòng lặp enrollments -> quizzes -> submissions
   getQuizzes: () =>
@@ -265,9 +312,6 @@ export const studentApi = {
 
   getNotifications: () =>
     api.get('/api/v1/student/notifications'),
-
-  markNotificationRead: (notificationId: string) =>
-    api.patch(`/api/v1/student/notifications/${notificationId}/read`),
 
   getCertificate: (courseId: string) =>
     api.get(`/api/v1/student/certificates/${courseId}`),
@@ -288,6 +332,36 @@ export const quizApi = {
 
   getSubmissions: (quizId: string | number) =>
     api.get(`/api/v1/quizzes/${quizId}/submissions`),
+}
+
+// YouTube Import (admin/giảng viên)
+export const youtubeApi = {
+  getStatus: () =>
+    api.get('/api/v1/youtube/status'),
+
+  analyze: (url: string) =>
+    api.post('/api/v1/youtube/analyze', { url }),
+
+  importVideo: (courseId: string | number, videoId: string) =>
+    api.post('/api/v1/youtube/import', {
+      course_id: Number(courseId),
+      video_id: videoId,
+    }),
+
+  getCourseLessons: (courseId: string | number) =>
+    api.get(`/api/v1/youtube/courses/${courseId}/lessons`),
+
+  fetchSubtitle: (lessonId: string | number) =>
+    api.post(`/api/v1/youtube/lessons/${lessonId}/subtitle/fetch`),
+
+  uploadSubtitle: (lessonId: string | number, formData: FormData) =>
+    api.post(`/api/v1/youtube/lessons/${lessonId}/subtitle/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    }),
+
+  reingestSubtitle: (lessonId: string | number) =>
+    api.post(`/api/v1/youtube/lessons/${lessonId}/subtitle/reingest`),
 }
 
 // Public (không cần xác thực)
@@ -318,6 +392,51 @@ export const adminApi = {
 
   changeCourseStatus: (courseId: string | number, newStatus: 'draft' | 'published' | 'archived') =>
     api.patch(`/api/v1/admin/courses/${courseId}/status`, null, { params: { new_status: newStatus } }),
+}
+
+// Danh mục Lĩnh vực & Môn học (Master Spec Section III)
+export const categoriesApi = {
+  getTree: (includeInactive = false) =>
+    api.get('/api/v1/categories', { params: { include_inactive: includeInactive } }),
+
+  create: (data: { name: string; slug?: string; description?: string; icon?: string; parent_id?: number | null; order_index?: number; is_active?: boolean }) =>
+    api.post('/api/v1/admin/categories', data),
+
+  update: (id: number | string, data: Record<string, unknown>) =>
+    api.put(`/api/v1/admin/categories/${id}`, data),
+
+  delete: (id: number | string) =>
+    api.delete(`/api/v1/admin/categories/${id}`),
+}
+
+// Cấp học & Trình độ Đào tạo
+export const educationLevelsApi = {
+  getAll: (includeInactive = false) =>
+    api.get('/api/v1/education-levels', { params: { include_inactive: includeInactive } }),
+
+  create: (data: { name: string; code: string; description?: string; order_index?: number; is_active?: boolean }) =>
+    api.post('/api/v1/admin/education-levels', data),
+
+  update: (id: number | string, data: Record<string, unknown>) =>
+    api.put(`/api/v1/admin/education-levels/${id}`, data),
+}
+
+// AI Discovery Service (Master Spec Section Bổ sung)
+export const aiDiscoveryApi = {
+  discover: (data: { topic: string; target_level?: string; domain_category?: string; target_audience?: string }) =>
+    api.post('/api/v1/ai-discovery/discover', data),
+
+  getJobs: () =>
+    api.get('/api/v1/ai-discovery/jobs'),
+
+  getJob: (id: number | string) =>
+    api.get(`/api/v1/ai-discovery/jobs/${id}`),
+
+  approve: (id: number | string) =>
+    api.post(`/api/v1/ai-discovery/jobs/${id}/approve`),
+
+  convertToCourse: (id: number | string, data?: { title?: string; price?: number; auto_publish?: boolean }) =>
+    api.post(`/api/v1/ai-discovery/jobs/${id}/convert-to-course`, data || {}),
 }
 
 export default api

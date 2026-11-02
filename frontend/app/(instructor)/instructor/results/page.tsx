@@ -203,7 +203,7 @@ export default function InstructorResultsPage() {
                 setCourseFilter(e.target.value);
                 setQuizFilter('all');
               }}
-              className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-9 rounded-lg border border-input bg-background px-3 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="all">Tất cả khóa học ({courseOptions.length})</option>
               {courseOptions.map((course) => (
@@ -216,7 +216,7 @@ export default function InstructorResultsPage() {
             <select
               value={quizFilter}
               onChange={(e) => setQuizFilter(e.target.value)}
-              className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-9 rounded-lg border border-input bg-background px-3 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="all">Tất cả đề thi ({quizOptions.length})</option>
               {quizOptions.map((quiz) => (
@@ -300,7 +300,7 @@ export default function InstructorResultsPage() {
                       Điểm
                     </p>
                     <p
-                      className={`mt-0.5 text-lg font-black ${
+                      className={`mt-0.5 text-lg font-bold ${
                         row.passed ? 'text-emerald-600' : 'text-destructive'
                       }`}
                     >

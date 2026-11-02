@@ -132,6 +132,8 @@ class QuizSubmissionResponse(BaseModel):
 # Giới hạn le=30 khớp với GenerateQuizRequest của AI Service (nếu vượt, AI trả 422
 # và Backend sẽ báo 502 "AI từ chối" — gây nhầm lẫn cho giảng viên).
 DifficultyLiteral = Literal["easy", "medium", "hard", "mixed"]
+# Bloom Taxonomy – đặc tả §V.2 "Sinh đề thi AI (Bloom)" và §X giai đoạn 4.
+BloomLiteral = Literal["remember", "understand", "apply", "analyze", "evaluate", "create", "mixed"]
 
 
 class AIQuizGenRequest(BaseModel):
@@ -140,10 +142,12 @@ class AIQuizGenRequest(BaseModel):
     topic: str
     num_questions: int = Field(10, ge=1, le=30)
     difficulty: DifficultyLiteral = "medium"
+    bloom_level: BloomLiteral = "mixed"
 
 
 class AIQuizGenPreviewRequest(BaseModel):
     topic: str
     num_questions: int = Field(5, ge=1, le=30)
     difficulty: DifficultyLiteral = "medium"
+    bloom_level: BloomLiteral = "mixed"
     course_id: int | None = None

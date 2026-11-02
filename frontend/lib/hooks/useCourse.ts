@@ -32,7 +32,11 @@ export function useCourse(idOrSlug: string) {
   return useQuery({
     queryKey: courseKeys.detail(idOrSlug),
     queryFn: async () => {
-      const response = await coursesApi.getBySlug(idOrSlug)
+      // `/courses/slug/{slug}` chỉ nhận slug: nếu truyền id số thì phải gọi
+      // `/courses/id/{id}`, nếu không sẽ luôn nhận 404.
+      const response = /^\d+$/.test(idOrSlug)
+        ? await coursesApi.getById(idOrSlug)
+        : await coursesApi.getBySlug(idOrSlug)
       return response.data.data as Course
     },
     enabled: !!idOrSlug,

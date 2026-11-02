@@ -26,12 +26,12 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-border bg-card px-6 py-12 text-center',
+        'flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card px-6 py-12 text-center',
         className,
       )}
     >
       {icon && (
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+        <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-muted-foreground">
           {icon}
         </span>
       )}
@@ -63,7 +63,7 @@ export function ErrorState({ message, actionLabel, onAction, className }: ErrorS
     <div
       role="alert"
       className={cn(
-        'flex flex-col items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-5 py-4 text-destructive sm:flex-row sm:items-center sm:justify-between',
+        'flex flex-col items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-5 py-4 text-destructive sm:flex-row sm:items-center sm:justify-between',
         className,
       )}
     >

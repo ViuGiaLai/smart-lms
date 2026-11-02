@@ -18,6 +18,7 @@ class LessonBase(BaseModel):
     order_index: int = Field(0, ge=0)
     transcript: str | None = None
     resources_url: str | None = None
+    source_type: Literal["youtube", "upload", "external", "manual"] | None = None
 
 
 class LessonCreate(LessonBase):
@@ -32,6 +33,7 @@ class LessonUpdate(BaseModel):
     order_index: int | None = Field(None, ge=0)
     transcript: str | None = None
     resources_url: str | None = None
+    source_type: Literal["youtube", "upload", "external", "manual"] | None = None
 
 
 class LessonResponse(LessonBase):
@@ -50,6 +52,13 @@ class CourseBase(BaseModel):
     thumbnail: str | None = None
     category: str | None = None
     level: str | None = None
+    # ── Mở rộng Đa lĩnh vực & Đa trình độ ──
+    category_id: int | None = None
+    education_level_id: int | None = None
+    grade_label: str | None = None
+    proficiency_level: str | None = None
+    target_audience: str | None = None
+    language: str | None = "vi"
     status: CourseStatusLiteral = "draft"
     outcomes: list[str] | None = None
     prerequisites: list[str] | None = None
@@ -67,6 +76,12 @@ class CourseUpdate(BaseModel):
     status: CourseStatusLiteral | None = None
     category: str | None = None
     level: str | None = None
+    category_id: int | None = None
+    education_level_id: int | None = None
+    grade_label: str | None = None
+    proficiency_level: str | None = None
+    target_audience: str | None = None
+    language: str | None = None
     slug: str | None = Field(None, max_length=255)
     outcomes: list[str] | None = None
     prerequisites: list[str] | None = None
@@ -80,6 +95,8 @@ class CourseResponse(CourseBase):
     created_at: datetime
     updated_at: datetime
     lessons: list[LessonResponse] = []
+    category_name: str | None = None
+    education_level_name: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -90,5 +107,7 @@ class CourseListResponse(CourseBase):
     instructor_id: int
     status: str
     created_at: datetime
+    category_name: str | None = None
+    education_level_name: str | None = None
 
     model_config = {"from_attributes": True}

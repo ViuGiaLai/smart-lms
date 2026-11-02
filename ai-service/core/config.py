@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # ---- Groq (fallback khi Gemini hết quota) ----
     GROQ_API_KEY: str = Field(default="", description="Groq API Key (fallback khi Gemini 429)")
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "qwen/qwen3.8-27b"
 
     # ---- Provider Priority ----
     AI_PROVIDER: str = "gemini"       # "gemini" | "openai"
@@ -102,6 +102,16 @@ class Settings(BaseSettings):
     # ---- RAG Settings ----
     SIMILARITY_THRESHOLD: float = 0.50   # Ngưỡng cosine similarity cho Gemini embeddings
     MAX_CONTEXT_TOKENS: int = 8000       # Giới hạn tokens cho context
+    # Lấy nhiều ứng viên rồi lọc bằng chứng (similarity + trùng từ khóa) trước khi
+    # đưa vào prompt. Tránh trường hợp chunk không liên quan vẫn lọt vào context.
+    RAG_CANDIDATE_K: int = 10
+    RAG_MIN_SIMILARITY: float = 0.68
+    RAG_LEXICAL_MIN_SIMILARITY: float = 0.58
+    RAG_MIN_LEXICAL_OVERLAP: float = 0.45
+    RAG_MAX_CHUNKS: int = 5
+    RAG_MAX_HISTORY_TURNS: int = 6
+    # Loại nguồn có điểm thấp hơn nhiều so với nguồn tốt nhất để giảm nhiễu trích dẫn.
+    RAG_RELATIVE_SCORE_CUTOFF: float = 0.75
 
     # ---- Whisper (Speech-to-Text) ----
     WHISPER_MODEL: str = "base"  # tiny | base | small | medium | large

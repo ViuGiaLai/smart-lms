@@ -27,6 +27,11 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Tang len moi khi nguoi dung dang xuat: moi JWT cu (access + refresh) co
+    # claim "ver" thap hon se bi tu choi, ke ca khi token chua het han.
+    token_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

@@ -3,78 +3,88 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogOut, Sparkles } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 /**
- * Minimal public header. Application navigation belongs exclusively to the
- * left sidebar after a user enters a role-specific workspace.
+ * Header công khai. Sau khi đăng nhập, toàn bộ điều hướng nằm ở sidebar
+ * trong khu vực làm việc theo vai trò — header chỉ giữ lối quay lại.
  */
 export function Navbar() {
   const router = useRouter();
   const { user: currentUser, isLoading, logout } = useAuth();
 
   const role = currentUser?.role || 'student';
-  const workspaceHref = role === 'admin'
-    ? '/admin-dashboard'
-    : role === 'instructor'
-      ? '/instructor-dashboard'
-      : '/dashboard';
+  const workspaceHref =
+    role === 'admin' ? '/admin-dashboard' : role === 'instructor' ? '/instructor-dashboard' : '/dashboard';
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.push('/login');
   };
 
-  if (isLoading) {
-    return (
-      <header className="sticky top-0 z-50 h-16 border-b border-slate-200 bg-white/95 px-4 backdrop-blur-md sm:px-6">
-        <div className="mx-auto flex h-full max-w-7xl items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5" aria-label="Trang chủ Smart LMS">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-200">
-              <Sparkles className="h-5 w-5" />
-            </span>
-            <span className="flex flex-col">
-              <span className="text-xl font-black leading-none tracking-tight text-slate-900">Smart LMS</span>
-              <span className="hidden text-[10px] font-semibold uppercase tracking-widest text-indigo-600 sm:inline">AI Tutoring Platform</span>
-            </span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <div className="w-20 h-8 animate-pulse bg-slate-200 rounded" />
-          </div>
-        </div>
-      </header>
-    );
-  }
-
   return (
-    <header className="sticky top-0 z-50 h-16 border-b border-slate-200 bg-white/95 px-4 backdrop-blur-md sm:px-6">
-      <div className="mx-auto flex h-full max-w-7xl items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5" aria-label="Trang chủ Smart LMS">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-200">
-            <Sparkles className="h-5 w-5" />
+    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+        <Link href="/" className="group flex items-baseline gap-3" aria-label="Trang chủ Smart LMS">
+          <span className="font-serif text-[22px] font-semibold leading-none tracking-tight text-foreground">
+            Smart LMS
           </span>
-          <span className="flex flex-col">
-            <span className="text-xl font-black leading-none tracking-tight text-slate-900">Smart LMS</span>
-            <span className="hidden text-[10px] font-semibold uppercase tracking-widest text-indigo-600 sm:inline">AI Tutoring Platform</span>
+          <span className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground sm:inline">
+            Đại học Đông Á
           </span>
         </Link>
 
-        {currentUser ? (
-          <div className="flex items-center gap-2">
-            <Link href={workspaceHref} className="rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-indigo-700">
-              Vào khu vực của tôi
-            </Link>
-            <button onClick={handleLogout} className="rounded-xl border border-rose-200 px-3 py-2 text-rose-600 transition hover:bg-rose-50" title="Đăng xuất" aria-label="Đăng xuất">
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Link href="/login" className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:text-indigo-600">Đăng nhập</Link>
-            <Link href="/register" className="rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-indigo-700">Đăng ký</Link>
-          </div>
-        )}
+        <nav className="flex items-center gap-1 sm:gap-2">
+          <Link
+            href="/courses"
+            className="hidden rounded-md px-3 py-2 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground sm:inline"
+          >
+            Khóa học
+          </Link>
+          <Link
+            href="/#about"
+            className="hidden rounded-md px-3 py-2 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground sm:inline"
+          >
+            Về đề tài
+          </Link>
+
+          {isLoading ? (
+            <span className="ml-2 h-8 w-24 animate-pulse rounded-md bg-muted" />
+          ) : currentUser ? (
+            <div className="ml-2 flex items-center gap-2">
+              <Link
+                href={workspaceHref}
+                className="rounded-md bg-primary px-3.5 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Vào lớp học
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="rounded-md border border-border p-2 text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
+                title="Đăng xuất"
+                aria-label="Đăng xuất"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="ml-2 flex items-center gap-2">
+              <Link
+                href="/login"
+                className="rounded-md px-3 py-2 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
+              >
+                Đăng nhập
+              </Link>
+              <Link
+                href="/register"
+                className="rounded-md bg-primary px-3.5 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Tạo tài khoản
+              </Link>
+            </div>
+          )}
+        </nav>
       </div>
     </header>
   );

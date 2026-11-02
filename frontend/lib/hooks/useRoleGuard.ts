@@ -45,7 +45,10 @@ export function useRoleGuard(allowedRoles?: UserRole[]) {
       } catch {
         hasSession = false
       }
-      if (!hasSession && pathname !== '/login') router.replace('/login')
+      // Ghi nhớ trang đang muốn vào để đưa người dùng quay lại sau khi đăng nhập.
+      if (!hasSession && pathname !== '/login') {
+        router.replace(`/login?next=${encodeURIComponent(pathname)}`)
+      }
       return
     }
 

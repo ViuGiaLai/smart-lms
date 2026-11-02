@@ -6,9 +6,21 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Eye, EyeOff, Loader2, ShieldCheck, GraduationCap, BookOpen } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowRight,
+  BookOpen,
+  Eye,
+  EyeOff,
+  GraduationCap,
+  Loader2,
+  Lock,
+  Mail,
+  ShieldCheck,
+} from 'lucide-react'
 import { authApi } from '@/lib/api'
 import axios from 'axios'
+import { AuthShell } from '@/components/auth/AuthShell'
 
 const loginSchema = z.object({
   email: z.string().email('Địa chỉ email không hợp lệ'),
@@ -21,6 +33,9 @@ type LoginFormData = z.infer<typeof loginSchema>
 // Backend cũng kiểm tra ALLOW_DEMO_LOGIN nên đây chỉ là lớp UI.
 const ALLOW_DEMO_LOGIN = process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === 'true'
 
+const inputClass =
+  'w-full rounded-md border border-input bg-card py-2.5 pl-10 pr-4 text-sm text-foreground transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30'
+
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
@@ -29,11 +44,20 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   })
+
+  // Trang bị chặn trước đó được giữ trong ?next= để quay lại đúng chỗ.
+  const resolveNextPath = () => {
+    if (typeof window === 'undefined') return null
+    const raw = new URLSearchParams(window.location.search).get('next')
+    if (!raw) return null
+    // Chỉ chấp nhận đường dẫn nội bộ, tránh open-redirect ra domain khác.
+    if (!raw.startsWith('/') || raw.startsWith('//')) return null
+    return raw
+  }
 
   // Đăng nhập nhanh an toàn qua Demo API phía server (không lộ password)
   const handleQuickDemoLogin = async (role: 'student' | 'instructor' | 'admin') => {
@@ -52,7 +76,10 @@ export default function LoginPage() {
         window.dispatchEvent(new Event('auth-change'))
       }
 
-      if (userRole === 'admin') {
+      const nextPath = resolveNextPath()
+      if (nextPath) {
+        router.push(nextPath)
+      } else if (userRole === 'admin') {
         router.push('/admin-dashboard')
       } else if (userRole === 'instructor') {
         router.push('/instructor-dashboard')
@@ -80,8 +107,11 @@ export default function LoginPage() {
         window.dispatchEvent(new Event('auth-change'))
       }
 
-      // Điều hướng thông minh theo vai trò
-      if (role === 'admin') {
+      // Điều hướng thông minh theo vai trò (ưu tiên trang bị chặn trước đó)
+      const nextPath = resolveNextPath()
+      if (nextPath) {
+        router.push(nextPath)
+      } else if (role === 'admin') {
         router.push('/admin-dashboard')
       } else if (role === 'instructor') {
         router.push('/instructor-dashboard')
@@ -102,161 +132,168 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50/80 via-white to-violet-50/80 flex items-center justify-center p-4 py-8">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8">
-          {/* Logo */}
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-200">
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-              Smart LMS
-            </span>
-          </div>
-
-          <h1 className="text-2xl font-extrabold text-slate-900 text-center mb-1">
-            Chào mừng trở lại!
-          </h1>
-          <p className="text-slate-500 text-sm text-center mb-6">
-            Đăng nhập để trải nghiệm hệ thống và Trợ lý AI
+    <AuthShell
+      eyebrow="Đăng nhập"
+      title="Chào mừng trở lại!"
+      subtitle="Tiếp tục lộ trình học tập và trò chuyện cùng Gia sư AI của bạn."
+      footer={
+        <p className="text-center text-xs text-stone-600">
+          Chưa có tài khoản?{' '}
+          <Link href="/register" className="font-bold text-brand-600 hover:underline">
+            Đăng ký ngay miễn phí
+          </Link>
+        </p>
+      }
+    >
+      {/* Khối Tài khoản Trải nghiệm Nhanh (chỉ bật khi ALLOW_DEMO_LOGIN=true) */}
+      {ALLOW_DEMO_LOGIN && (
+        <div className="mb-6 rounded-lg border border-stone-200/80 bg-stone-50 p-3.5">
+          <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-stone-600">
+            Chọn nhanh tài khoản thử nghiệm
           </p>
-
-          {/* Khối Tài khoản Trải nghiệm Nhanh (chỉ bật khi ALLOW_DEMO_LOGIN=true) */}
-          {ALLOW_DEMO_LOGIN && (
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 mb-6">
-              <p className="text-[11px] font-semibold text-slate-600 mb-2 uppercase tracking-wider text-center">
-                Chọn nhanh tài khoản thử nghiệm:
-              </p>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('admin')}
-                  className="py-1.5 px-2 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 font-medium transition flex flex-col items-center gap-0.5 shadow-2xs"
-                  title="Đăng nhập nhanh tài khoản Quản trị viên"
-                >
-                  <ShieldCheck className="w-4 h-4 text-rose-600" />
-                  <span className="font-bold text-[11px]">Admin</span>
-                  <span className="text-[9px] text-slate-400">Quản trị viên</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('instructor')}
-                  className="py-1.5 px-2 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 font-medium transition flex flex-col items-center gap-0.5 shadow-2xs"
-                  title="Đăng nhập nhanh tài khoản Giảng viên"
-                >
-                  <GraduationCap className="w-4 h-4 text-emerald-600" />
-                  <span className="font-bold text-[11px]">Giảng viên</span>
-                  <span className="text-[9px] text-slate-400">Giảng viên</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemoLogin('student')}
-                  className="py-1.5 px-2 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 font-medium transition flex flex-col items-center gap-0.5 shadow-2xs"
-                  title="Đăng nhập nhanh tài khoản Học viên"
-                >
-                  <BookOpen className="w-4 h-4 text-indigo-600" />
-                  <span className="font-bold text-[11px]">Học viên</span>
-                  <span className="text-[9px] text-slate-400">Học viên</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {serverError && (
-            <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl mb-6 text-xs">
-              {serverError}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Địa chỉ Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                {...register('email')}
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-900 placeholder:text-slate-400"
-                placeholder="vidu@domain.com"
-              />
-              {errors.email && (
-                <p className="mt-1 text-xs text-rose-600">{errors.email.message}</p>
-              )}
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="password" className="block text-xs font-semibold text-slate-700">
-                  Mật khẩu
-                </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                >
-                  Quên mật khẩu?
-                </Link>
-              </div>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  {...register('password')}
-                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-900 placeholder:text-slate-400 pr-12"
-                  placeholder="••••••••"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {errors.password && (
-                <p className="mt-1 text-xs text-rose-600">{errors.password.message}</p>
-              )}
-            </div>
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => handleQuickDemoLogin('admin')}
+              className="flex flex-col items-center gap-0.5 rounded-lg border border-stone-200 bg-white px-2 py-1.5 font-medium text-stone-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50/50"
+              title="Đăng nhập nhanh tài khoản Quản trị viên"
+            >
+              <ShieldCheck className="h-4 w-4 text-rose-600" />
+              <span className="text-[11px] font-bold">Admin</span>
+              <span className="text-[9px] text-stone-400">Quản trị viên</span>
+            </button>
 
             <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-md shadow-indigo-200 flex items-center justify-center gap-2 text-sm mt-2"
+              type="button"
+              onClick={() => handleQuickDemoLogin('instructor')}
+              className="flex flex-col items-center gap-0.5 rounded-lg border border-stone-200 bg-white px-2 py-1.5 font-medium text-stone-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50/50"
+              title="Đăng nhập nhanh tài khoản Giảng viên"
             >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Đang đăng nhập...
-                </>
-              ) : (
-                'Đăng nhập'
-              )}
+              <GraduationCap className="h-4 w-4 text-emerald-600" />
+              <span className="text-[11px] font-bold">Giảng viên</span>
+              <span className="text-[9px] text-stone-400">Giảng viên</span>
             </button>
-          </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-slate-600 text-xs">
-              Chưa có tài khoản?{' '}
-              <Link href="/register" className="text-indigo-600 font-bold hover:underline">
-                Đăng ký ngay miễn phí
-              </Link>
-            </p>
-          </div>
-
-          <div className="mt-6 pt-5 border-t border-slate-100">
-            <p className="text-[11px] text-center text-slate-400">
-              Bằng việc đăng nhập, bạn đồng ý với{' '}
-              <Link href="/terms" className="underline hover:text-slate-600">Điều khoản</Link> và{' '}
-              <Link href="/privacy" className="underline hover:text-slate-600">Chính sách bảo mật</Link> của chúng tôi.
-            </p>
+            <button
+              type="button"
+              onClick={() => handleQuickDemoLogin('student')}
+              className="flex flex-col items-center gap-0.5 rounded-lg border border-stone-200 bg-white px-2 py-1.5 font-medium text-stone-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50/50"
+              title="Đăng nhập nhanh tài khoản Học viên"
+            >
+              <BookOpen className="h-4 w-4 text-brand-600" />
+              <span className="text-[11px] font-bold">Học viên</span>
+              <span className="text-[9px] text-stone-400">Học viên</span>
+            </button>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+
+      {serverError && (
+        <div
+          role="alert"
+          className="mb-5 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-3 text-xs leading-relaxed text-rose-700"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{serverError}</span>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <div>
+          <label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-stone-700">
+            Địa chỉ Email
+          </label>
+          <div className="relative">
+            <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              autoFocus
+              aria-invalid={Boolean(errors.email)}
+              aria-describedby={errors.email ? 'email-error' : undefined}
+              {...register('email')}
+              className={inputClass}
+              placeholder="vidu@domain.com"
+            />
+          </div>
+          {errors.email && (
+            <p id="email-error" className="mt-1.5 text-xs text-rose-600">
+              {errors.email.message}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label htmlFor="password" className="block text-xs font-semibold text-stone-700">
+              Mật khẩu
+            </label>
+            <Link
+              href="/forgot-password"
+              className="text-xs font-medium text-brand-600 transition hover:text-brand-800"
+            >
+              Quên mật khẩu?
+            </Link>
+          </div>
+          <div className="relative">
+            <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              aria-invalid={Boolean(errors.password)}
+              aria-describedby={errors.password ? 'password-error' : undefined}
+              {...register('password')}
+              className={`${inputClass} pr-12`}
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-stone-400 transition-colors hover:text-stone-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          {errors.password && (
+            <p id="password-error" className="mt-1.5 text-xs text-rose-600">
+              {errors.password.message}
+            </p>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Đang đăng nhập...
+            </>
+          ) : (
+            <>
+              Đăng nhập
+              <ArrowRight className="h-4 w-4" />
+            </>
+          )}
+        </button>
+      </form>
+
+      <p className="mt-6 text-center text-[11px] leading-relaxed text-stone-400">
+        Bằng việc đăng nhập, bạn đồng ý với{' '}
+        <Link href="/terms" className="underline transition hover:text-stone-600">
+          Điều khoản
+        </Link>{' '}
+        và{' '}
+        <Link href="/privacy" className="underline transition hover:text-stone-600">
+          Chính sách bảo mật
+        </Link>{' '}
+        của chúng tôi.
+      </p>
+    </AuthShell>
   )
 }

@@ -1,45 +1,57 @@
 import Link from 'next/link'
-import { GraduationCap, Home, BookOpen, ArrowLeft } from 'lucide-react'
+import { ArrowLeft, BookOpen, Compass, Home } from 'lucide-react'
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-16">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
-        <div className="w-16 h-16 bg-blue-50 text-blue-700 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
-          <GraduationCap className="w-9 h-9" />
-        </div>
-        <span className="inline-block text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-3 py-1 rounded-full mb-3">
-          Mã Lỗi 404
-        </span>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight mb-2">
-          Không tìm thấy trang
-        </h1>
-        <p className="text-sm text-slate-600 leading-relaxed mb-8">
-          Địa chỉ liên kết bạn đang truy cập không tồn tại, đã bị đổi đường dẫn hoặc đang trong quá trình bảo trì nội dung.
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-16">
+      <div className="w-full max-w-lg text-center">
+        <p
+          aria-hidden
+          className="select-none font-serif text-[6rem] leading-none tracking-tight text-border sm:text-[8rem]"
+        >
+          404
         </p>
 
-        <div className="space-y-3">
+        <div className="-mt-6 flex flex-col items-center sm:-mt-10">
+          <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-md border border-border bg-card text-brand-700">
+            <Compass className="h-6 w-6" />
+          </span>
+          <h1 className="text-2xl tracking-tight text-foreground sm:text-3xl">
+            Không tìm thấy trang
+          </h1>
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-stone-500">
+            Đường dẫn bạn truy cập không tồn tại, đã được đổi địa chỉ hoặc nội dung đang được cập nhật.
+          </p>
+
+          <div className="mt-7 flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row">
+            <Link
+              href="/"
+              className="flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Home className="h-4 w-4" />
+              Về trang chủ
+            </Link>
+            <Link
+              href="/courses"
+              className="flex items-center justify-center gap-2 rounded-lg border border-stone-200 bg-white px-5 py-2.5 text-sm font-semibold text-stone-700 transition hover:border-brand-300 hover:text-brand-700"
+            >
+              <BookOpen className="h-4 w-4" />
+              Khám phá khóa học
+            </Link>
+          </div>
+
           <Link
-            href="/"
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-xl transition-colors shadow-sm"
+            href="/dashboard"
+            className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-stone-500 transition hover:text-brand-600"
           >
-            <Home className="w-4 h-4" />
-            Về Trang Chủ
-          </Link>
-          <Link
-            href="/courses"
-            className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-xl transition-colors"
-          >
-            <BookOpen className="w-4 h-4" />
-            Khám Phá Khóa Học
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Về bảng điều khiển của tôi
           </Link>
         </div>
 
-        <div className="mt-8 pt-6 border-t border-slate-100">
-          <p className="text-xs text-slate-600">
-            Smart LMS • Hệ Thống Quản Lý Đào Tạo Trực Tuyến & Trợ Lý Gia Sư AI
-          </p>
-        </div>
+        <p className="mt-12 text-[11px] text-stone-400">
+          Smart LMS · Nền tảng học tập thông minh tích hợp Trợ lý AI
+        </p>
       </div>
     </div>
   )

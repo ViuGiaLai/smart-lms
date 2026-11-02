@@ -5,6 +5,7 @@ Cung cấp các API cho: RAG Chatbot, Quiz Generation, Essay Grading, Summarizat
 """
 
 import secrets
+import sys
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -13,8 +14,17 @@ from fastapi.responses import JSONResponse
 
 from core.config import settings
 from core.database import init_db, close_db
-from routers import rag, quiz, grader, summarizer, documents
+from routers import rag, quiz, grader, summarizer, documents, discovery
 import structlog
+
+# Console Windows mặc định dùng cp1252, làm structlog ném UnicodeEncodeError khi log
+# tiếng Việt (đặc biệt trong fallback Groq). Ép stdout/stderr sang UTF-8 ngay khi khởi động.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # pragma: no cover - phụ thuộc môi trường
+            pass
 
 # Cấu hình logger
 logger = structlog.get_logger(__name__)
@@ -82,6 +92,7 @@ app.include_router(quiz.router, prefix="/api/v1/quiz", tags=["Quiz Generator"])
 app.include_router(grader.router, prefix="/api/v1/grader", tags=["Essay Grader"])
 app.include_router(summarizer.router, prefix="/api/v1/summarizer", tags=["Summarizer"])
 app.include_router(documents.router, prefix="/api/v1/documents", tags=["Documents"])
+app.include_router(discovery.router, prefix="/api/v1", tags=["AI Discovery"])
 
 
 # ===== Health Check =====

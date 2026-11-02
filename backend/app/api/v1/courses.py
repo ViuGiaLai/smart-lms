@@ -5,13 +5,16 @@ from datetime import datetime, timezone
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import inspect as sa_inspect, select, func, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.cache import cache_get_json, cache_set_json, invalidate_course_caches
 from app.core.database import get_db
 from app.core.security import get_current_active_user, get_optional_user, require_instructor
 from app.models.course import Course, CourseStatus
+from app.models.enrollment import Enrollment
+from app.models.category import LearningCategory
+from app.models.education_level import EducationLevel
 from app.models.quiz import Quiz
 from app.models.user import User, UserRole
 from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse
@@ -59,21 +62,52 @@ def _duration_label(seconds: int | None) -> str:
     return f"{minutes} phút"
 
 
+def _eager_attr(obj: Any, attr: str) -> Any | None:
+    """Trả về quan hệ ĐÃ eager-load, hoặc None nếu query chưa load quan hệ đó.
+
+    Truy cập một quan hệ chưa load trong endpoint async sẽ kích hoạt lazy-load
+    đồng bộ và ném `MissingGreenlet` (HTTP 500). Đọc qua helper này để endpoint
+    chỉ dùng dữ liệu đã có trong identity map thay vì làm hỏng cả phản hồi.
+    """
+    try:
+        if attr in sa_inspect(obj).unloaded:
+            return None
+    except Exception:
+        return None
+    return getattr(obj, attr, None)
+
+
 def _format_course_dict(course: Course, student_progress: float | None = None, total_students: int = 0, is_enrolled: bool = False) -> dict[str, Any]:
     """Helper to convert Course model to frontend-friendly dict with live calculated fields."""
     actual_lessons_count = len(course.lessons) if course.lessons else 0
     actual_duration = sum((l.duration or 0) for l in course.lessons) if course.lessons else 0
     status_value = _status_value(course)
+    cat_rel = _eager_attr(course, "learning_category")
+    lvl_rel = _eager_attr(course, "education_level_rel")
+    cat_name = cat_rel.name if cat_rel is not None else (course.category or "Chưa phân loại")
+    lvl_name = lvl_rel.name if lvl_rel is not None else None
     return {
         "id": str(course.id),
         "title": course.title,
         "slug": course.slug,
         "description": course.description or "",
         "shortDescription": (course.description[:120] + "...") if course.description and len(course.description) > 120 else (course.description or ""),
-        "thumbnail": course.thumbnail or "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&fit=crop",
+        "thumbnail": course.thumbnail
+        or (
+            "https://res.cloudinary.com/dqe5syxc0/image/upload/"
+            "f_auto,q_auto,w_1200/smart-lms/courses/nextjs-ui.jpg"
+        ),
         "price": float(course.price) if course.price is not None else 0.0,
         "currency": "VND",
         "level": course.level or "intermediate",
+        "categoryId": course.category_id,
+        "categoryName": cat_name,
+        "educationLevelId": course.education_level_id,
+        "educationLevelName": lvl_name,
+        "gradeLabel": course.grade_label,
+        "proficiencyLevel": course.proficiency_level,
+        "targetAudience": course.target_audience,
+        "language": course.language or "vi",
         "status": status_value,
         "isPublished": status_value == CourseStatus.published.value,
         "duration": actual_duration,
@@ -90,9 +124,9 @@ def _format_course_dict(course: Course, student_progress: float | None = None, t
             "email": course.instructor.email if course.instructor else "",
         },
         "category": {
-            "id": f"cat-{slugify(course.category) or 'chua-phan-loai'}",
-            "name": course.category or "Chưa phân loại",
-            "slug": slugify(course.category) or "chua-phan-loai",
+            "id": f"cat-{slugify(cat_name) or 'chua-phan-loai'}",
+            "name": cat_name,
+            "slug": slugify(cat_name) or "chua-phan-loai",
         },
         # Mục tiêu/chuẩn đầu ra và yêu cầu tiên quyết (dữ liệu giảng viên nhập).
         "outcomes": list(course.outcomes or []),
@@ -109,32 +143,54 @@ async def list_courses(
     limit: int = Query(12, ge=1, le=100),
     status: str | None = None,
     category: str | None = None,
+    category_id: int | None = None,
+    education_level_id: int | None = None,
+    target_audience: str | None = None,
     level: str | None = None,
     sortBy: str | None = None,
     search: str | None = None,
+    current_user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List published courses with pagination and filters."""
+    """List published courses with pagination and multi-domain / multi-level filters."""
+    if status and status != CourseStatus.published.value and not _is_admin(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Chỉ quản trị viên được xem khóa học chưa xuất bản.",
+        )
+
     cache_key = (
         "courses:list:"
-        f"{status or 'published'}:{category or '-'}:{level or '-'}:"
+        f"{status or 'published'}:{category or '-'}:{category_id or '-'}:{education_level_id or '-'}:{target_audience or '-'}:{level or '-'}:"
         f"{sortBy or 'default'}:{search or '-'}:{page}:{skip}:{limit}"
     )
     cached = await cache_get_json(cache_key)
     if cached is not None:
         return cached
 
-    # Gom tat ca dieu kien loc vao mot danh sach de dung cho CA cau query lay du lieu
-    # lan cau query dem tong so luong. Neu chi ap dung bo loc cho stmt ma bo qua count_stmt
-    # thi total/totalPages se sai khi nguoi dung loc theo category/level/search.
     conditions = []
     if status:
         conditions.append(Course.status == status)
     else:
         conditions.append(Course.status == CourseStatus.published)
 
-    if category:
+    if category_id:
+        conditions.append(
+            or_(
+                Course.category_id == category_id,
+                Course.category_id.in_(
+                    select(LearningCategory.id).where(LearningCategory.parent_id == category_id)
+                )
+            )
+        )
+    elif category and category != "All":
         conditions.append(Course.category.ilike(f"%{category}%"))
+
+    if education_level_id:
+        conditions.append(Course.education_level_id == education_level_id)
+
+    if target_audience and target_audience != "All":
+        conditions.append(Course.target_audience.ilike(f"%{target_audience}%"))
 
     if level and level != "All":
         conditions.append(Course.level == level)
@@ -149,7 +205,12 @@ async def list_courses(
 
     stmt = (
         select(Course)
-        .options(selectinload(Course.instructor), selectinload(Course.lessons))
+        .options(
+            selectinload(Course.instructor),
+            selectinload(Course.lessons),
+            selectinload(Course.learning_category),
+            selectinload(Course.education_level_rel),
+        )
         .where(*conditions)
     )
 
@@ -211,7 +272,12 @@ async def get_enrolled_courses(
         select(Course)
         # instructor là quan hệ many-to-one: JOIN trong cùng truy vấn thay vì
         # thêm 1 round-trip riêng (mỗi round-trip tới DB ở xa tốn ~100-200 ms).
-        .options(joinedload(Course.instructor), selectinload(Course.lessons))
+        .options(
+            joinedload(Course.instructor),
+            selectinload(Course.lessons),
+            selectinload(Course.learning_category),
+            selectinload(Course.education_level_rel),
+        )
         .where(
             Course.id.in_(course_ids),
             Course.status == CourseStatus.published,
@@ -290,7 +356,12 @@ async def search_courses(
     """Search courses by query keyword."""
     stmt = (
         select(Course)
-        .options(selectinload(Course.instructor), selectinload(Course.lessons))
+        .options(
+            selectinload(Course.instructor),
+            selectinload(Course.lessons),
+            selectinload(Course.learning_category),
+            selectinload(Course.education_level_rel),
+        )
         .where(Course.status == CourseStatus.published)
         .where(or_(Course.title.ilike(f"%{q}%"), Course.description.ilike(f"%{q}%")))
         .limit(10)
@@ -382,6 +453,24 @@ async def get_course_by_id_route(
     return await get_course(course_id, current_user=current_user, db=db)
 
 
+async def _has_course_access(db: AsyncSession, course: Course, user: User | None) -> bool:
+    """Chủ khóa/admin hoặc học viên đã ghi danh mới được xem đầy đủ nội dung bài giảng.
+
+    `/courses/{id}/lessons` đã chặn bằng require_course_access; endpoint chi tiết khóa học
+    phải chặn giống vậy, nếu không toàn bộ transcript/video/tài liệu bị lộ công khai.
+    """
+    if user is None:
+        return False
+    if _can_manage_course(course, user):
+        return True
+    row = await db.execute(
+        select(Enrollment.id)
+        .where(Enrollment.user_id == user.id, Enrollment.course_id == course.id)
+        .limit(1)
+    )
+    return row.scalar_one_or_none() is not None
+
+
 @router.get("/{course_id}")
 async def get_course(
     course_id: int,
@@ -395,6 +484,8 @@ async def get_course(
             selectinload(Course.lessons),
             selectinload(Course.instructor),
             selectinload(Course.quizzes).selectinload(Quiz.questions),
+            selectinload(Course.learning_category),
+            selectinload(Course.education_level_rel),
         )
         .where(Course.id == course_id)
     )
@@ -403,29 +494,41 @@ async def get_course(
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
 
+    # Bản nháp/lưu trữ không được lộ cho học viên hoặc khách: coi như không tồn tại.
+    if course.status != CourseStatus.published and not _can_manage_course(course, current_user):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
+
     include_answers = await _can_view_answer_key(db, course, current_user)
 
     student_counts = await student_counts_by_course(db, [course.id])
     data = _format_course_dict(course, total_students=student_counts.get(course.id, 0))
-    data["lessons"] = [
-        {
-            "id": str(lesson.id),
-            "title": lesson.title,
-            "description": lesson.description or "",
-            # `duration` luôn là số giây để mọi client tính toán thống nhất;
-            # nhãn hiển thị nằm ở `durationText`.
-            "duration": lesson.duration or 0,
-            "duration_seconds": lesson.duration or 0,
-            "durationText": _duration_label(lesson.duration),
-            "videoUrl": lesson.video_url or "",
-            "video_url": lesson.video_url or "",
-            "transcript": lesson.transcript or "",
-            "resources_url": lesson.resources_url or "",
-            "order": lesson.order_index,
-            "isFree": lesson.order_index == 1,
-        }
-        for lesson in course.lessons
-    ]
+    has_access = await _has_course_access(db, course, current_user)
+    lessons_payload = []
+    for lesson in course.lessons:
+        # Bài đầu tiên mở làm bản xem trước (khớp cờ isFree); các bài sau cần ghi danh.
+        unlocked = has_access or lesson.order_index == 1
+        lessons_payload.append(
+            {
+                "id": str(lesson.id),
+                "title": lesson.title,
+                "description": lesson.description or "",
+                # `duration` luôn là số giây để mọi client tính toán thống nhất;
+                # nhãn hiển thị nằm ở `durationText`.
+                "duration": lesson.duration or 0,
+                "duration_seconds": lesson.duration or 0,
+                "durationText": _duration_label(lesson.duration),
+                "videoUrl": (lesson.video_url or "") if unlocked else "",
+                "video_url": (lesson.video_url or "") if unlocked else "",
+                "transcript": (lesson.transcript or "") if unlocked else "",
+                "resources_url": (lesson.resources_url or "") if unlocked else "",
+                "order": lesson.order_index,
+                "isFree": lesson.order_index == 1,
+                "youtubeVideoId": lesson.youtube_video_id if unlocked else None,
+                "subtitleStatus": lesson.subtitle_status or "none",
+                "subtitleLanguage": lesson.subtitle_language,
+            }
+        )
+    data["lessons"] = lessons_payload
     data["quizzes"] = [
         {
             "id": str(quiz.id),
@@ -463,6 +566,10 @@ async def enroll_course(
     c_res = await db.execute(select(Course).where(Course.id == course_id))
     course = c_res.scalar_one_or_none()
     if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
+
+    # Không cho ghi danh khóa chưa xuất bản (trừ khi chính giảng viên/admin thao tác).
+    if course.status != CourseStatus.published and not _can_manage_course(course, current_user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
 
     from app.models.lesson import Lesson
@@ -570,6 +677,20 @@ async def mark_lesson_complete(
     payload = payload or {}
     user_id = current_user.id
     watched_seconds = payload.get("watchedSeconds", 0)
+
+    # Bài học phải thực sự thuộc khóa học trong URL. Trước đây endpoint chỉ dùng
+    # lesson_id nên có thể ghi tiến độ của bài thuộc khóa KHÁC (hoặc id không tồn
+    # tại) với course_id của một khóa đang ghi danh.
+    from app.models.lesson import Lesson
+
+    lesson_check = await db.execute(
+        select(Lesson.id).where(Lesson.id == lesson_id, Lesson.course_id == course_id)
+    )
+    if lesson_check.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bài học không tồn tại trong khóa học này",
+        )
 
     # Hoàn thành bài học cũng là một hình thức ghi danh: giữ enrollments là
     # nguồn sự thật duy nhất.

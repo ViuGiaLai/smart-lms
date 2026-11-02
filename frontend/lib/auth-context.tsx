@@ -88,7 +88,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   )
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Thu hồi token phía server trước khi xóa phiên cục bộ, để token cũ
+    // không còn dùng được đến khi hết hạn. Lỗi mạng không chặn đăng xuất.
+    try {
+      const { authApi } = await import('@/lib/api')
+      await authApi.logout()
+    } catch {
+      /* bỏ qua: vẫn xóa phiên cục bộ bên dưới */
+    }
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('currentUser')

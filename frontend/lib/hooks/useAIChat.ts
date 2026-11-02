@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { ChatMessage } from '@/types';
+import { ChatMessage, ChatSourceRef } from '@/types';
 
 interface UseAIChatOptions {
   courseId: string;
   lessonId?: string;
   sessionId?: string;
+  tutorMode?: 'socratic' | 'direct' | 'practice';
 }
 
 interface UseAIChatReturn {
@@ -19,9 +20,33 @@ interface UseAIChatReturn {
   currentSessionId: string | null;
 }
 
+/**
+ * Đọc lỗi thật từ Response của backend thay vì luôn báo "AI Service chưa sẵn sàng".
+ * Backend trả JSON `{detail}` cho lỗi 401/403/404/422, hoặc SSE `{error}` khi AI lỗi.
+ */
+async function readErrorMessage(response: Response): Promise<string> {
+  const fallback = `Trợ lý AI trả về lỗi ${response.status}. Vui lòng thử lại.`;
+  try {
+    const text = await response.text();
+    if (!text.trim()) return fallback;
+    try {
+      const parsed = JSON.parse(text);
+      const detail = parsed?.detail ?? parsed?.error ?? parsed?.message;
+      if (typeof detail === 'string' && detail.trim()) return detail;
+      if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg);
+    } catch {
+      return text.trim().slice(0, 300);
+    }
+  } catch {
+    /* không đọc được body: dùng thông báo mặc định */
+  }
+  return fallback;
+}
+
 export function useAIChat({
   courseId,
   lessonId,
+  tutorMode = 'socratic',
 }: UseAIChatOptions): UseAIChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,8 +58,6 @@ export function useAIChat({
     setMessages([]);
     setError(null);
   }, []);
-
-
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -53,6 +76,16 @@ export function useAIChat({
       setIsLoading(true);
       setError(null);
 
+      // Lịch sử gần nhất giúp AI hiểu câu hỏi tiếp nối ("nó", "ví dụ đó"...).
+      // Chỉ gửi nội dung hội thoại, không gửi metadata/nguồn.
+      const history = messages
+        .filter((message) => !message.isStreaming && message.content.trim())
+        .slice(-6)
+        .map((message) => ({
+          role: message.role,
+          content: message.content.slice(0, 1500),
+        }));
+
       // 1. Thêm tin nhắn của User
       const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
@@ -70,6 +103,8 @@ export function useAIChat({
         content: '',
         timestamp: new Date().toISOString(),
         isStreaming: true,
+        // Giữ ngữ cảnh để nguồn trích dẫn có thể mở lại đúng khóa/bài học.
+        metadata: { courseId: String(courseId), lessonId: String(lessonId ?? '') },
       };
       setMessages((prev) => [...prev, assistantMessage]);
 
@@ -79,151 +114,175 @@ export function useAIChat({
 
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+        const numericCourseId = Number(courseId);
 
+        let accumulated = '';
         let responseHandled = false;
+        let streamError: string | null = null;
 
-        // Thử gọi API Backend thật nếu có kết nối
-        try {
-          const res = await fetch(`${apiUrl}/api/v1/ai-tutor/chat`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              question: content.trim(),
-              course_id: parseInt(courseId, 10) || 1,
-              lesson_id: numericLessonId,
-            }),
-            signal: abortControllerRef.current?.signal,
-          });
+        const appendText = (piece: string) => {
+          accumulated += piece;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMessageId ? { ...m, content: accumulated } : m)),
+          );
+        };
 
-          if (res.ok && res.body) {
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder();
-            let accumulated = '';
-            // Lỗi thật do AI Service báo về (ví dụ hết quota Gemini, thiếu API key)
-            let streamError: string | null = null;
+        const applySources = (rawSources: unknown) => {
+          if (!Array.isArray(rawSources)) return;
+          // Giữ nguyên object nguồn (filename, start_seconds…) để ChatMessage
+          // dựng được liên kết xem lại đoạn video; chuỗi cũ vẫn được chấp nhận.
+          const refs: Array<string | ChatSourceRef> = rawSources
+            .filter((s) => s !== null && s !== undefined)
+            .map((s) => (typeof s === 'string' ? s : (s as ChatSourceRef)));
+          if (refs.length === 0) return;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId
+                ? { ...m, metadata: { ...(m.metadata || {}), sources: refs } }
+                : m,
+            ),
+          );
+        };
 
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              const chunk = decoder.decode(value, { stream: true });
-              const lines = chunk.split('\n');
-
-              for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                  const dataStr = line.replace('data: ', '').trim();
-                  if (dataStr === '[DONE]' || dataStr === '{"done": true}') {
-                    responseHandled = true;
-                    break;
-                  }
-                  try {
-                    const parsed = JSON.parse(dataStr);
-                    if (parsed.done || parsed.type === 'done') {
-                      responseHandled = true;
-                      break;
-                    }
-                    if (parsed.type === 'error' || parsed.error) {
-                      // Hiển thị đúng lý do lỗi thật thay vì thông báo chung chung
-                      streamError = String(parsed.error || 'Trợ lý AI gặp lỗi không xác định.');
-                      responseHandled = true;
-                      break;
-                    }
-                    if (parsed.type === 'sources') {
-                      // AI service stream sự kiện nguồn trích dẫn: {type:"sources", data:[{content, similarity}]}
-                      // Trước đây hook bỏ qua sự kiện này nên khối "Nguồn bài giảng" không bao giờ hiện.
-                      const rawSources = Array.isArray(parsed.data)
-                        ? parsed.data
-                        : Array.isArray(parsed.sources)
-                          ? parsed.sources
-                          : [];
-                      const refs: string[] = rawSources.map((s: any, i: number) => {
-                        if (typeof s === 'string') return s;
-                        const sim =
-                          typeof s?.similarity === 'number' ? ` · liên quan ${s.similarity.toFixed(2)}` : '';
-                        const snippet =
-                          typeof s?.content === 'string' ? s.content.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
-                        return snippet ? `Đoạn ${i + 1}${sim}: ${snippet}…` : `Đoạn ${i + 1}${sim}`;
-                      });
-                      if (refs.length > 0) {
-                        setMessages((prev) =>
-                          prev.map((m) =>
-                            m.id === assistantMessageId
-                              ? { ...m, metadata: { ...(m.metadata || {}), sources: refs } }
-                              : m
-                          )
-                        );
-                      }
-                      responseHandled = true;
-                    }
-                    const textPiece = parsed.token || parsed.content || (parsed.type === 'chunk' ? parsed.content : null);
-                    if (textPiece) {
-                      accumulated += textPiece;
-                      setMessages((prev) =>
-                        prev.map((m) =>
-                          m.id === assistantMessageId ? { ...m, content: accumulated } : m
-                        )
-                      );
-                      responseHandled = true;
-                    }
-                  } catch {
-                    // Nếu là raw text
-                    if (dataStr) {
-                      accumulated += dataStr;
-                      setMessages((prev) =>
-                        prev.map((m) =>
-                          m.id === assistantMessageId ? { ...m, content: accumulated } : m
-                        )
-                      );
-                      responseHandled = true;
-                    }
-                  }
-                }
-              }
+        /**
+         * Xử lý MỘT dòng `data:` của SSE. Tách riêng khỏi vòng đọc để có thể
+         * xử lý cả dòng cuối còn dở trong buffer.
+         */
+        const handleDataLine = (line: string) => {
+          if (!line.startsWith('data:')) return;
+          const dataStr = line.slice(5).trim();
+          if (!dataStr) return;
+          if (dataStr === '[DONE]') {
+            responseHandled = true;
+            return;
+          }
+          try {
+            const parsed = JSON.parse(dataStr);
+            if (parsed.done || parsed.type === 'done') {
+              responseHandled = true;
+              return;
             }
+            if (parsed.type === 'error' || parsed.error) {
+              streamError = String(parsed.error || 'Trợ lý AI gặp lỗi không xác định.');
+              responseHandled = true;
+              return;
+            }
+            if (parsed.type === 'sources') {
+              applySources(Array.isArray(parsed.data) ? parsed.data : parsed.sources);
+              return;
+            }
+            const textPiece =
+              parsed.token || parsed.content || (parsed.type === 'chunk' ? parsed.content : null);
+            if (textPiece) {
+              appendText(String(textPiece));
+              responseHandled = true;
+              return;
+            }
+            // Backend cũ trả thẳng {answer: "..."} (không streaming)
+            if (typeof parsed.answer === 'string' && parsed.answer) {
+              appendText(parsed.answer);
+              responseHandled = true;
+            }
+          } catch {
+            // Không phải JSON: coi là văn bản thuần đã stream
+            appendText(dataStr);
+            responseHandled = true;
+          }
+        };
 
-            if (streamError && !accumulated.trim()) {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMessageId ? { ...m, content: `⚠️ ${streamError}` } : m
-                )
-              );
+        const res = await fetch(`${apiUrl}/api/v1/ai-tutor/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            question: content.trim(),
+            // Không gửi course_id nếu client không có mã khóa hợp lệ: backend sẽ
+            // đối chiếu với khóa thật của bài học, tránh gán nhầm ngữ cảnh.
+            ...(Number.isInteger(numericCourseId) && numericCourseId > 0
+              ? { course_id: numericCourseId }
+              : {}),
+            lesson_id: numericLessonId,
+            tutor_mode: tutorMode,
+            ...(history.length > 0 ? { chat_history: history } : {}),
+          }),
+          signal: abortControllerRef.current?.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          streamError = await readErrorMessage(res);
+        } else {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          // SSE frame có thể bị cắt ngang giữa hai lần đọc mạng → phải giữ
+          // lại phần dòng dở, nếu không JSON sẽ vỡ và rơi vào nhánh văn bản thuần.
+          let lineBuffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            lineBuffer += decoder.decode(value, { stream: true });
+            const lines = lineBuffer.split('\n');
+            lineBuffer = lines.pop() ?? '';
+            for (const line of lines) {
+              handleDataLine(line.trim());
             }
           }
-        } catch (apiErr) {
-          // Bắt lỗi nếu Backend hoặc AI service chưa sẵn sàng
-          console.info('Kích hoạt RAG streaming engine dự phòng:', apiErr);
+
+          lineBuffer += decoder.decode();
+          if (lineBuffer.trim()) {
+            handleDataLine(lineBuffer.trim());
+          }
         }
 
-        // 3. Nếu API chưa trả kết quả do AI-service chưa sẵn sàng
-        if (!responseHandled) {
+        if (streamError) {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMessageId
                 ? {
                     ...m,
-                    content:
-                      '⚠️ Không thể kết nối với dịch vụ Trí tuệ Nhân tạo (AI Tutor). Vui lòng kiểm tra lại AI Service (port 8001) hoặc thử lại sau.',
+                    content: accumulated.trim()
+                      ? `${accumulated}\n\n⚠️ ${streamError}`
+                      : `⚠️ ${streamError}`,
                   }
-                : m
-            )
+                : m,
+            ),
+          );
+        } else if (!responseHandled) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId && !m.content
+                ? { ...m, content: '⚠️ Trợ lý AI không trả về nội dung. Vui lòng thử lại.' }
+                : m,
+            ),
           );
         }
       } catch (err: any) {
-        if (err.name !== 'AbortError') {
+        if (err?.name !== 'AbortError') {
           setError('Không thể kết nối đến Trợ lý AI. Vui lòng thử lại.');
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId && !m.content
+                ? {
+                    ...m,
+                    content:
+                      '⚠️ Không kết nối được tới Trợ lý AI. Kiểm tra backend (port 8000) và AI Service (port 8001).',
+                  }
+                : m,
+            ),
+          );
         }
       } finally {
         setMessages((prev) =>
-          prev.map((m) => (m.id === assistantMessageId ? { ...m, isStreaming: false } : m))
+          prev.map((m) => (m.id === assistantMessageId ? { ...m, isStreaming: false } : m)),
         );
         setIsStreaming(false);
         setIsLoading(false);
       }
     },
-    [courseId, lessonId, isStreaming]
+    [courseId, lessonId, tutorMode, isStreaming, messages],
   );
 
   return {

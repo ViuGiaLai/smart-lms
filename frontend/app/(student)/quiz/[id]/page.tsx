@@ -61,6 +61,7 @@ export default function StudentQuizPage() {
 
         // 1. Thử lấy trực tiếp theo /api/v1/quizzes/{id}
         let matched: any = null;
+        let accessError: string | null = null;
         try {
           const directRes = await fetch(`${apiUrl}/api/v1/quizzes/${quizIdParam}`, {
             headers: {
@@ -73,6 +74,14 @@ export default function StudentQuizPage() {
             if (matched?.course_id) {
               setResolvedCourseId(String(matched.course_id));
             }
+          } else if (directRes.status === 401 || directRes.status === 403) {
+            // Giữ nguyên lý do thật (chưa đăng nhập / chưa ghi danh khóa học)
+            // thay vì báo chung chung "không tìm thấy đề".
+            const body = await directRes.json().catch(() => null);
+            accessError =
+              typeof body?.detail === 'string'
+                ? body.detail
+                : 'Bạn không có quyền làm bài kiểm tra này.';
           }
         } catch {}
 
@@ -86,9 +95,11 @@ export default function StudentQuizPage() {
           });
           if (res.ok) {
             const list: any[] = await res.json();
-            if (list && list.length > 0) {
-              matched = list.find((q) => String(q.id) === String(quizIdParam)) || list[0];
-            }
+            // Chỉ nhận ĐÚNG đề được yêu cầu: trước đây fallback `|| list[0]`
+            // khiến học viên có thể làm nhầm đề khác trong cùng khóa.
+            matched = Array.isArray(list)
+              ? list.find((q) => String(q.id) === String(quizIdParam)) ?? null
+              : null;
           }
         }
 
@@ -114,7 +125,9 @@ export default function StudentQuizPage() {
             questions: mappedQuestions,
           });
         } else if (isMounted) {
-          setErrorMessage('Không tìm thấy bài trắc nghiệm trong cơ sở dữ liệu.');
+          setErrorMessage(
+            accessError || 'Không tìm thấy bài trắc nghiệm trong cơ sở dữ liệu.',
+          );
         }
       } catch (err: any) {
         if (isMounted) {
@@ -183,7 +196,12 @@ export default function StudentQuizPage() {
 
       if (res.ok) {
         const subData = await res.json();
-        const scoreVal = Math.round((subData.score || 0) * questions.length);
+        // Backend trả score theo thang 0–1 kèm correct_count/total_questions.
+        // Ưu tiên số câu đúng backend đã chấm (tránh sai số do làm tròn).
+        const totalQuestions = Number(subData.total_questions) || questions.length;
+        const scoreVal = Number.isFinite(Number(subData.correct_count))
+          ? Number(subData.correct_count)
+          : Math.round((Number(subData.score) || 0) * totalQuestions);
         const answerMap = (subData.results || []).reduce((acc: Record<number, string>, result: any) => {
           if (result.question_id && result.correct_answer) {
             acc[result.question_id] = result.correct_answer;
@@ -192,7 +210,7 @@ export default function StudentQuizPage() {
         }, {});
         setCorrectAnswers(answerMap);
         setCalculatedScore(scoreVal);
-        setIsPassed(subData.passed || scoreVal >= questions.length * activeQuiz.pass_score);
+        setIsPassed(Boolean(subData.passed));
         setIsSubmitted(true);
 
         // Nếu đạt yêu cầu, cập nhật tiến độ bài học trong cơ sở dữ liệu
@@ -211,20 +229,29 @@ export default function StudentQuizPage() {
   };
 
   const handleGoBack = () => {
+    // Nút hứa "quay lại bài giảng" nên phải mở đúng bài của đề, không dùng history
+    // (history có thể là danh sách đề hoặc trang khác).
+    const backCourseId = resolvedCourseId || courseId;
+    if (backCourseId) {
+      const backLessonId = activeQuiz?.lesson_id;
+      router.push(
+        `/courses/${backCourseId}/learn${backLessonId ? `?lessonId=${backLessonId}` : ''}`
+      );
+      return;
+    }
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
     } else {
-      const backCourseId = resolvedCourseId || courseId;
-      router.push(backCourseId ? `/courses/${backCourseId}/learn` : '/courses');
+      router.push('/courses');
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+      <div className="min-h-screen bg-stone-50 font-sans flex flex-col">
         <div className="flex-1 flex flex-col items-center justify-center p-6 gap-3">
-          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-semibold text-slate-500">Đang tải đề thi từ cơ sở dữ liệu PostgreSQL...</p>
+          <div className="w-8 h-8 border-3 border-brand-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-semibold text-stone-500">Đang tải đề thi từ cơ sở dữ liệu PostgreSQL...</p>
         </div>
       </div>
     );
@@ -232,19 +259,19 @@ export default function StudentQuizPage() {
 
   if (errorMessage || !activeQuiz || questions.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+      <div className="min-h-screen bg-stone-50 font-sans flex flex-col">
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto space-y-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
             <AlertCircle className="w-6 h-6" />
           </div>
-          <h2 className="text-base font-bold text-slate-900">Không tìm thấy bài trắc nghiệm</h2>
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <h2 className="text-base font-bold text-stone-900">Không tìm thấy bài trắc nghiệm</h2>
+          <p className="text-xs text-stone-500 leading-relaxed">
             {errorMessage || 'Chưa có bộ câu hỏi ôn tập cho bài học này trong hệ thống.'}
           </p>
           <div className="pt-2 flex items-center gap-3">
             <button
               onClick={handleGoBack}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition"
+              className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition"
             >
               Quay lại khóa học
             </button>
@@ -255,36 +282,36 @@ export default function StudentQuizPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28 md:pb-12 font-sans">
+    <div className="min-h-screen bg-stone-50 pb-28 md:pb-12 font-sans">
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* Navigation */}
         <div className="flex items-center justify-between">
           <button
             onClick={handleGoBack}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-white hover:bg-indigo-50 border border-slate-200 px-3.5 py-2 rounded-xl shadow-2xs transition"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:text-brand-800 bg-white hover:bg-brand-50 border border-stone-200 px-3.5 py-2 rounded-lg shadow-2xs transition"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Quay lại bài giảng (Bài {quizIdParam})</span>
+            <span>Quay lại bài giảng</span>
           </button>
 
           <Link
             href={resolvedCourseId || courseId ? `/courses/${resolvedCourseId || courseId}` : '/courses'}
-            className="text-xs text-slate-500 hover:text-slate-800 font-medium transition"
+            className="text-xs text-stone-500 hover:text-stone-800 font-medium transition"
           >
             Về tổng quan khóa học
           </Link>
         </div>
 
         {/* Header Quiz Banner */}
-        <div className="p-6 rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 text-white shadow-xl space-y-2 relative overflow-hidden">
-          <div className="flex items-center gap-2 text-indigo-300 text-xs font-bold uppercase tracking-wider">
+        <div className="relative space-y-2 overflow-hidden rounded-lg border border-brand-900 bg-brand-950 p-6 text-brand-50">
+          <div className="flex items-center gap-2 text-brand-300 text-xs font-bold uppercase tracking-wider">
             <Sparkles className="w-4 h-4 text-amber-300" />
-            Đề kiểm tra AI Bloom Taxonomy • Bài ${quizIdParam}
+            Đề kiểm tra AI Bloom Taxonomy • Đề #{activeQuiz.id ?? quizIdParam}
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">
             {activeQuiz.title}
           </h1>
-          <p className="text-xs text-indigo-200/80 max-w-xl">
+          <p className="text-xs text-brand-200/80 max-w-xl">
             {activeQuiz.description || 'Bộ câu hỏi được đồng bộ trực tiếp từ cơ sở dữ liệu PostgreSQL.'}
           </p>
         </div>
@@ -295,13 +322,13 @@ export default function StudentQuizPage() {
             {questions.map((q) => (
               <div
                 key={q.id}
-                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-3"
+                className="bg-white rounded-lg p-5 border border-stone-200 shadow-2xs space-y-3"
               >
                 <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="w-6 h-6 rounded-lg bg-brand-50 text-brand-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                     {q.question_number}
                   </span>
-                  <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug">
+                  <p className="text-xs sm:text-sm font-bold text-stone-800 leading-snug">
                     {q.question_text}
                   </p>
                 </div>
@@ -313,17 +340,17 @@ export default function StudentQuizPage() {
                       <button
                         key={opt.key}
                         onClick={() => handleSelect(q.id, opt.key)}
-                        className={`w-full text-left p-3 rounded-xl border text-xs transition flex items-center gap-3 ${
+                        className={`w-full text-left p-3 rounded-lg border text-xs transition flex items-center gap-3 ${
                           isSelected
-                            ? 'bg-indigo-50/80 border-indigo-600 text-indigo-900 font-bold ring-2 ring-indigo-500/20'
-                            : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                            ? 'bg-brand-50/80 border-brand-600 text-brand-900 font-bold ring-2 ring-brand-500/20'
+                            : 'bg-white border-stone-200 hover:border-stone-300 text-stone-700'
                         }`}
                       >
                         <span
                           className={`w-5 h-5 rounded-full border text-[11px] font-bold flex items-center justify-center shrink-0 ${
                             isSelected
-                              ? 'bg-indigo-600 border-indigo-600 text-white'
-                              : 'border-slate-300 text-slate-500'
+                              ? 'bg-brand-600 border-brand-600 text-white'
+                              : 'border-stone-300 text-stone-500'
                           }`}
                         >
                           {opt.key}
@@ -340,7 +367,7 @@ export default function StudentQuizPage() {
               <button
                 onClick={handleSubmit}
                 disabled={submitting || Object.keys(answers).length < questions.length}
-                className="px-8 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-lg shadow-emerald-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="rounded-md bg-primary px-8 py-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {submitting ? 'Đang chấm điểm trên máy chủ...' : `Nộp bài & Chấm điểm (${Object.keys(answers).length}/${questions.length} câu)`}
               </button>
@@ -349,15 +376,15 @@ export default function StudentQuizPage() {
         ) : (
           /* Results View with AI Explanations */
           <div className="space-y-6">
-            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-md text-center space-y-3">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center shadow-inner">
+            <div className="bg-white rounded-lg p-6 border border-stone-200 shadow-md text-center space-y-3">
+              <div className="w-14 h-14 rounded-lg bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center shadow-inner">
                 <Award className="w-8 h-8" />
               </div>
-              <h2 className="text-xl font-black text-slate-900">Kết quả Kiểm tra của bạn</h2>
-              <div className="text-3xl font-black text-indigo-600">
+              <h2 className="text-xl font-bold text-stone-900">Kết quả Kiểm tra của bạn</h2>
+              <div className="text-3xl font-bold text-brand-600">
                 {calculatedScore} / {questions.length}
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-stone-500">
                 {isPassed
                   ? '🎉 Xuất sắc! Bạn đã vượt qua bài kiểm tra và được ghi nhận tiến độ vào PostgreSQL.'
                   : '👍 Bạn đã hoàn thành bài kiểm tra. Hãy xem lại giải thích chi tiết bên dưới để ôn tập lại nhé!'}
@@ -368,13 +395,13 @@ export default function StudentQuizPage() {
                     setIsSubmitted(false);
                     setAnswers({});
                   }}
-                  className="px-5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  className="px-5 py-2 rounded-lg border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50"
                 >
                   Làm lại bài thi
                 </button>
                 <button
                   onClick={handleGoBack}
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-100"
+                  className="px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-100"
                 >
                   Tiếp tục xem video bài giảng
                 </button>
@@ -383,7 +410,7 @@ export default function StudentQuizPage() {
 
             {/* Explanations */}
             <div className="space-y-4">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              <h3 className="text-xs font-bold text-stone-700 uppercase tracking-wider">
                 Giải thích đáp án chi tiết từ AI Tutor
               </h3>
               {questions.map((q) => {
@@ -391,12 +418,12 @@ export default function StudentQuizPage() {
                 return (
                   <div
                     key={q.id}
-                    className={`bg-white rounded-2xl p-5 border shadow-2xs space-y-3 ${
+                    className={`bg-white rounded-lg p-5 border shadow-2xs space-y-3 ${
                       isCorrect ? 'border-emerald-200' : 'border-red-200'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-xs sm:text-sm font-bold text-slate-900">
+                      <p className="text-xs sm:text-sm font-bold text-stone-900">
                         Câu {q.question_number}: {q.question_text}
                       </p>
                       <span
@@ -410,7 +437,7 @@ export default function StudentQuizPage() {
                       </span>
                     </div>
 
-                    <div className="text-xs space-y-1 text-slate-600 pl-4 border-l-2 border-slate-200">
+                    <div className="text-xs space-y-1 text-stone-600 pl-4 border-l-2 border-stone-200">
                       <p>
                         Đáp án của bạn:{' '}
                         <span className="font-bold">{answers[q.id] || 'Chưa chọn'}</span>
@@ -421,11 +448,11 @@ export default function StudentQuizPage() {
                       </p>
                     </div>
 
-                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1">
-                      <p className="font-bold text-indigo-700 flex items-center gap-1.5">
+                    <div className="p-3.5 rounded-lg bg-stone-50 border border-stone-200 text-xs text-stone-700 space-y-1">
+                      <p className="font-bold text-brand-700 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Giải thích sư phạm:
                       </p>
-                      <p className="leading-relaxed text-slate-600">{q.explanation}</p>
+                      <p className="leading-relaxed text-stone-600">{q.explanation}</p>
                     </div>
                   </div>
                 );

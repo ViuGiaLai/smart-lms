@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.cache import invalidate_course_caches
 from app.core.database import get_db
-from app.core.security import get_current_active_user, require_instructor
+from app.core.security import require_instructor
 from app.models.course import Course, CourseStatus
 from app.models.user import User
 from app.api.v1.courses import _format_course_dict
@@ -570,94 +570,6 @@ async def get_instructor_quizzes(
     return {
         "success": True,
         "data": formatted,
-    }
-
-
-@router.post("/courses/{course_id}/sections")
-async def create_section(
-    course_id: int,
-    data: dict[str, Any],
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Create a course section."""
-    from app.models.user import UserRole
-    c_res = await db.execute(select(Course).where(Course.id == course_id))
-    course = c_res.scalar_one_or_none()
-    if not course:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
-
-    is_admin = current_user.role == UserRole.admin or getattr(current_user.role, "value", str(current_user.role)) == "admin"
-    if not is_admin and course.instructor_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Không có quyền quản lý khóa học này")
-
-    return {
-        "success": True,
-        "message": "Tạo chương học thành công",
-        "data": {
-            "id": f"sec-{course_id}-{data.get('order', 1)}",
-            "title": data.get("title", "Chương mới"),
-            "order": data.get("order", 1),
-            "lessons": [],
-        },
-    }
-
-
-@router.post("/courses/{course_id}/sections/{section_id}/lessons")
-async def create_lesson(
-    course_id: int,
-    section_id: str,
-    data: dict[str, Any] | None = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """Create a lesson in a section and persist into PostgreSQL."""
-    from app.models.lesson import Lesson
-    from app.models.user import UserRole
-
-    data = data or {}
-
-    c_res = await db.execute(select(Course).where(Course.id == course_id))
-    course = c_res.scalar_one_or_none()
-    if not course:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
-
-    is_admin = current_user.role == UserRole.admin or getattr(current_user.role, "value", str(current_user.role)) == "admin"
-    if not is_admin and course.instructor_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Không có quyền quản lý khóa học này")
-
-    order = int(data.get("order", data.get("order_index", 1)))
-    duration = int(data.get("duration", 0))
-
-    lesson = Lesson(
-        course_id=course_id,
-        title=data.get("title", "Bài học mới"),
-        description=data.get("description"),
-        video_url=data.get("video_url") or data.get("videoUrl"),
-        duration=duration,
-        order_index=order,
-        transcript=data.get("transcript"),
-        resources_url=data.get("resources_url"),
-    )
-    db.add(lesson)
-    await db.commit()
-    await db.refresh(lesson)
-    await invalidate_course_caches()
-
-    return {
-        "success": True,
-        "message": "Tạo bài học thành công và đã lưu vào cơ sở dữ liệu PostgreSQL",
-        "data": {
-            "id": str(lesson.id),
-            "title": lesson.title,
-            "order": lesson.order_index,
-            "duration": lesson.duration,
-            "videoUrl": lesson.video_url,
-            "video_url": lesson.video_url,
-            "transcript": lesson.transcript,
-            "resources_url": lesson.resources_url,
-            "isFree": lesson.order_index == 1,
-        },
     }
 
 

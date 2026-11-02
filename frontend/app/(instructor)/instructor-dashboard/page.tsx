@@ -57,7 +57,7 @@ export default function InstructorDashboardPage() {
               studentsCount: c.studentsCount ?? c.totalStudents ?? 0,
               lessonsCount: c.lessons?.length ?? c.totalLessons ?? 0,
               status: c.status === 'published' ? 'Đã xuất bản' : 'Bản nháp',
-              thumbnail: c.thumbnail || 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&fit=crop',
+              thumbnail: c.thumbnail || 'https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/python-ai.jpg',
             }));
             setCourses(apiCourses);
           }
@@ -94,8 +94,11 @@ export default function InstructorDashboardPage() {
             <Badge variant="info" className="mb-1 text-[11px]">
               Phân hệ Giảng viên (Instructor Panel)
             </Badge>
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
-              Bảng điều khiển Giảng viên {instructorUser?.name ? `• ${instructorUser.name}` : ''}
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              Bảng điều khiển Giảng viên
+              {instructorUser?.fullName || instructorUser?.name
+                ? ` · ${instructorUser.fullName || instructorUser.name}`
+                : ''}
             </h1>
             <p className="mt-1 text-xs text-muted-foreground">
               Quản lý học liệu, chèn video YouTube, số hóa tài liệu RAG và sử dụng công cụ AI tự động sinh đề thi
@@ -135,12 +138,12 @@ export default function InstructorDashboardPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Card>
             <CardContent className="flex items-center gap-4 p-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 font-bold text-primary">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 font-bold text-primary">
                 <BookOpen className="h-6 w-6" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Khóa học phụ trách</p>
-                <p className="text-xl font-extrabold text-foreground">
+                <p className="text-xl font-semibold text-foreground">
                   {loading ? <Skeleton className="h-6 w-14" /> : stats?.totalCourses ?? courses.length}
                 </p>
               </div>
@@ -149,12 +152,12 @@ export default function InstructorDashboardPage() {
 
           <Card>
             <CardContent className="flex items-center gap-4 p-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 font-bold text-emerald-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-500/10 font-bold text-emerald-600">
                 <Users className="h-6 w-6" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Tổng sinh viên theo học</p>
-                <p className="text-xl font-extrabold text-foreground">
+                <p className="text-xl font-semibold text-foreground">
                   {loading ? (
                     <Skeleton className="h-6 w-14" />
                   ) : (
@@ -167,14 +170,14 @@ export default function InstructorDashboardPage() {
           </Card>
 
           <Card className="flex h-full flex-row items-center transition-colors hover:border-ring/40">
-            <Link href="/quiz/bank" className="flex flex-1 items-center justify-between p-5">
+            <Link href="/instructor/results" className="flex flex-1 items-center justify-between p-5">
               <span className="flex items-center gap-4">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-500/10 font-bold text-purple-600 transition-colors group-hover:bg-primary group-hover:text-white">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-clay-500/10 font-bold text-clay-600 transition-colors group-hover:bg-primary group-hover:text-white">
                   <Layers className="h-6 w-6" />
                 </span>
                 <span className="flex flex-col">
                   <span className="text-xs font-medium text-muted-foreground">Bài nộp học viên</span>
-                  <span className="text-xl font-extrabold text-foreground">
+                  <span className="text-xl font-semibold text-foreground">
                     {loading ? <Skeleton className="h-6 w-14" /> : `${stats?.totalSubmissions ?? 0} lượt`}
                   </span>
                 </span>
@@ -185,12 +188,12 @@ export default function InstructorDashboardPage() {
 
           <Card>
             <CardContent className="flex items-center gap-4 p-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/10 font-bold text-violet-600">
-                <Sparkles className="h-6 w-6" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-clay-500/10 font-bold text-clay-600">
+                <Layers className="h-6 w-6" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Tổng số bài học</p>
-                <p className="text-xl font-extrabold text-foreground">
+                <p className="text-xl font-semibold text-foreground">
                   {loading ? (
                     <Skeleton className="h-6 w-14" />
                   ) : (
@@ -203,12 +206,12 @@ export default function InstructorDashboardPage() {
 
           <Card>
             <CardContent className="flex items-center gap-4 p-5">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 font-bold text-amber-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-500/10 font-bold text-amber-600">
                 <TrendingUp className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Trạng thái AI Tutor & RAG</p>
-                <p className="text-xl font-extrabold text-foreground">
+                <p className="text-xs text-muted-foreground">Khóa đã xuất bản</p>
+                <p className="text-xl font-semibold text-foreground">
                   {loading ? (
                     <Skeleton className="h-6 w-20" />
                   ) : (
@@ -238,7 +241,7 @@ export default function InstructorDashboardPage() {
 
           <CardContent className="space-y-6">
             {courses.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border bg-muted/40 py-12 text-center">
+              <div className="rounded-lg border border-dashed border-border bg-muted/40 py-12 text-center">
                 <BookOpen className="mb-2 h-10 w-10 text-muted-foreground/50" />
                 <p className="text-sm font-bold text-foreground">Chưa có khóa học nào được phân công</p>
                 <p className="mb-4 mt-1 text-xs text-muted-foreground">
@@ -259,7 +262,7 @@ export default function InstructorDashboardPage() {
                   >
                     <div className="relative aspect-video w-full overflow-hidden bg-muted">
                       <Image
-                        src={c.thumbnail || 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&fit=crop'}
+                        src={c.thumbnail || 'https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/python-ai.jpg'}
                         alt={c.title}
                         fill
                         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"

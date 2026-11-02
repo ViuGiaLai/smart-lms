@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -14,6 +16,15 @@ from app.schemas.course import LessonCreate, LessonUpdate, LessonResponse
 from app.services.enrollment_service import require_course_access
 
 router = APIRouter(prefix="/courses/{course_id}/lessons")
+
+_YOUTUBE_ID_RE = re.compile(
+    r"(?:youtu\.be/|youtube\.com/(?:watch\?(?:.*&)?v=|embed/|v/))([A-Za-z0-9_-]{11})"
+)
+
+
+def _youtube_video_id(url: str | None) -> str | None:
+    match = _YOUTUBE_ID_RE.search((url or "").strip())
+    return match.group(1) if match else None
 
 
 async def _get_course_or_404(course_id: int, db: AsyncSession) -> Course:
@@ -95,8 +106,26 @@ async def update_lesson(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your course")
 
     lesson = await _get_lesson_or_404(lesson_id, course_id, db)
+    previous_video_id = lesson.youtube_video_id
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(lesson, field, value)
+
+    # Một bài học được sửa từ màn quản lý có thể vừa được gắn/đổi URL YouTube.
+    # Đồng bộ metadata nguồn ở đây để các thao tác lấy phụ đề sau đó luôn biết
+    # chính xác video nào, thay vì chỉ hoạt động với lesson tạo qua importer.
+    if "video_url" in payload.model_fields_set:
+        video_id = _youtube_video_id(lesson.video_url)
+        lesson.youtube_video_id = video_id
+        lesson.source_type = "youtube" if video_id else ("external" if lesson.video_url else "manual")
+        if video_id != previous_video_id:
+            lesson.subtitle_status = "none"
+            lesson.subtitle_language = None
+            lesson.subtitle_srt = None
+            lesson.subtitle_checksum = None
+            lesson.subtitle_error = None
+            # Transcript của video cũ không bao giờ được dùng lẫn sang video mới.
+            # Người quản lý có thể lưu transcript mới sau khi đổi video.
+            lesson.transcript = None
     await db.flush()
     await db.refresh(lesson)
     await db.commit()

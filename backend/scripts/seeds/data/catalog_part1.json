@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "note": "Giáo trình học phần chuẩn Trường Đại học Đông Á (UDA)",
+  "courses": [
+    {
+      "slug": "tieng-anh-a2-ngu-phap-nen-tang",
+      "title": "Tiếng Anh A2 – Ngữ pháp nền tảng",
+      "category_slug": "tieng-anh",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "A2",
+      "proficiency_level": "A2",
+      "target_audience": "Người mới bắt đầu",
+      "level": "beginner",
+      "description": "Hệ thống hoá các thì cơ bản, mạo từ và giới từ theo chuẩn A2; giải thích vì sao dùng thì nào thay vì học thuộc công thức.",
+      "outcomes": [
+        "Phân biệt present simple và present continuous",
+        "Dùng past simple đúng trong kể chuyện",
+        "Chọn mạo từ a/an/the hợp ngữ cảnh"
+      ],
+      "prerequisites": [
+        "Vốn từ khoảng 500 từ"
+      ],
+      "source": "https://learnenglish.britishcouncil.org/free-resources/grammar/a1-a2",
+      "lessons": [
+        {
+          "title": "Present simple và present continuous",
+          "summary": "Thói quen dùng present simple, việc đang diễn ra dùng continuous. Bài học so sánh cặp câu giống nhau về nghĩa từ nhưng khác thì.",
+          "concepts": [
+            "thói quen",
+            "đang diễn ra",
+            "trạng từ nhận biết"
+          ],
+          "duration": 1500
+        },
+        {
+          "title": "Present perfect và past simple",
+          "summary": "Present perfect nối quá khứ với hiện tại, past simple nêu thời điểm đã kết thúc. Học sinh chọn thì theo ngữ cảnh thời gian.",
+          "concepts": [
+            "have/has + V3",
+            "thời điểm xác định",
+            "just, already, yet"
+          ],
+          "duration": 1800
+        },
+        {
+          "title": "Mạo từ a, an, the",
+          "summary": "Khi nào dùng mạo từ không xác định, khi nào dùng xác định, khi nào không dùng. Quy tắc theo lần nhắc và tính duy nhất.",
+          "concepts": [
+            "a/an",
+            "the",
+            "không dùng mạo từ"
+          ],
+          "duration": 1500
+        },
+        {
+          "title": "Giới từ chỉ thời gian và nơi chốn",
+          "summary": "in/on/at theo thời gian, in/on/at theo địa điểm. Học sinh sửa lỗi giới từ trong đoạn văn mẫu.",
+          "concepts": [
+            "in/on/at thời gian",
+            "in/on/at nơi chốn",
+            "lỗi thường gặp"
+          ],
+          "duration": 1200
+        }
+      ]
+    },
+    {
+      "slug": "tieng-nhat-n5-nhap-mon",
+      "title": "Tiếng Nhật N5 – Nhập môn",
+      "category_slug": "tieng-nhat",
+      "level_code": "SELF_LEARNING",
+      "grade_label": "N5",
+      "proficiency_level": "N5",
+      "target_audience": "Người mới bắt đầu",
+      "level": "beginner",
+      "description": "Làm quen Hiragana, Katakana và mẫu câu N5 đầu tiên; luyện nghe theo hội thoại ngắn.",
+      "outcomes": [
+        "Đọc viết Hiragana và Katakana",
+        "Dùng mẫu câu は…です để giới thiệu",
+        "Đặt câu hỏi cơ bản với か"
+      ],
+      "prerequisites": [
+        "Không cần"
+      ],
+      "source": "https://www3.nhk.or.jp/nhkworld/en/learnjapanese/",
+      "lessons": [
+        {
+          "title": "Hiragana và quy tắc phát âm",
+          "summary": "Bảng 46 âm cơ bản, trường âm và âm ngắt. Học sinh luyện đọc theo cột và viết đúng thứ tự nét.",
+          "concepts": [
+            "46 âm cơ bản",
+            "trường âm",
+            "thứ tự nét"
+          ],
+          "duration": 1500
+        },
+        {
+          "title": "Katakana cho từ ngoại lai",
+          "summary": "Katakana dùng cho từ mượn và tên nước ngoài. Quy tắc chuyển âm khi phiên âm.",
+          "concepts": [
+            "từ mượn",
+            "phiên âm",
+            "cặp dễ nhầm"
+          ],
+          "duration": 1200
+        },
+        {
+          "title": "Mẫu câu は…です và trợ từ か",
+          "summary": "Giới thiệu tên, nghề nghiệp, quốc tịch; tạo câu hỏi bằng か và trả lời có/không.",
+          "concepts": [
+            "A は B です",
+            "か nghi vấn",
+            "はい/いいえ"
+          ],
+          "duration": 1200
+        },
+        {
+          "title": "Hội thoại chào hỏi hằng ngày",
+          "summary": "Chào buổi sáng, cảm ơn, xin lỗi và giới thiệu bản thân trong tình huống gặp lần đầu.",
+          "concepts": [
+            "あいさつ",
+            "自己紹介",
+            "luyện nghe"
+          ],
+          "duration": 1200
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "title": "Toán cao cấp 1 – Giải tích & Ứng dụng",
+      "category_slug": "toan-cao-cap",
+      "level_code": "GENERAL",
+      "grade_label": "Năm 1 – Đại cương",
+      "target_audience": "Sinh viên năm 1 Trường Đại học Đông Á",
+      "description": "Giới hạn, đạo hàm, vi phân và tích phân một biến số thực.",
+      "lessons": [
+        {
+          "title": "Bài 1: Giới hạn hàm số và vô cùng bé",
+          "video_url": "https://www.youtube.com/watch?v=0k2G_Z4qZpQ",
+          "duration": 2700
+        },
+        {
+          "title": "Bài 2: Đạo hàm và quy tắc vi phân",
+          "video_url": "https://www.youtube.com/watch?v=v0Lg9uU2q58",
+          "duration": 2700
+        },
+        {
+          "title": "Bài 3: Tích phân và ứng dụng tính diện tích",
+          "video_url": "https://www.youtube.com/watch?v=M7s1O1zJjXo",
+          "duration": 2700
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "title": "Cấu trúc Dữ liệu & Giải thuật Cơ sở",
+      "category_slug": "ky-thuat-phan-mem",
+      "level_code": "FOUNDATION",
+      "grade_label": "Năm 2 – Cơ sở ngành",
+      "target_audience": "Sinh viên Khoa Công nghệ Thông tin – ĐH Đông Á",
+      "description": "Danh sách liên kết, Ngăn xếp, Hàng đợi, Cây nhị phân và các thuật toán tìm kiếm, sắp xếp.",
+      "lessons": [
+        {
+          "title": "Bài 1: Độ phức tạp thuật toán Big-O",
+          "video_url": "https://www.youtube.com/watch?v=tSLZXqY3X_0",
+          "duration": 2700
+        },
+        {
+          "title": "Bài 2: Cấu trúc mảng động và danh sách liên kết",
+          "video_url": "https://www.youtube.com/watch?v=kYv9z5H5d40",
+          "duration": 2700
+        },
+        {
+          "title": "Bài 3: Cây nhị phân tìm kiếm (BST)",
+          "video_url": "https://www.youtube.com/watch?v=dYk8w1fJ24M",
+          "duration": 2700
+        }
+      ]
+    }
+  ]
+}

@@ -96,10 +96,10 @@ async def update_database():
         inst4_id = user_map["giangvien4@donga.edu.vn"]
 
         courses_data = [
-            (1, "Lập trình Python Nâng cao & Ứng dụng Trí tuệ Nhân tạo", inst1_id, "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&fit=crop", "Trí tuệ Nhân tạo & Python"),
-            (2, "Thiết kế RESTful API Chuẩn Quốc tế với FastAPI & PostgreSQL", inst2_id, "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&fit=crop", "Lập trình Backend"),
-            (3, "Xây dựng Ứng dụng Web Hiện đại với Next.js 14 & Tailwind CSS", inst3_id, "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?w=600&fit=crop", "Lập trình Frontend"),
-            (4, "Kiến trúc Hệ thống Cloud & Triển khai DevOps Thực chiến", inst4_id, "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&fit=crop", "Điện toán Đám mây & DevOps"),
+            (1, "Lập trình Python Nâng cao & Ứng dụng Trí tuệ Nhân tạo", inst1_id, "https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/python-ai.jpg", "Trí tuệ Nhân tạo & Python"),
+            (2, "Thiết kế RESTful API Chuẩn Quốc tế với FastAPI & PostgreSQL", inst2_id, "https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/fastapi-db.jpg", "Lập trình Backend"),
+            (3, "Xây dựng Ứng dụng Web Hiện đại với Next.js 14 & Tailwind CSS", inst3_id, "https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/nextjs-ui.jpg", "Lập trình Frontend"),
+            (4, "Kiến trúc Hệ thống Cloud & Triển khai DevOps Thực chiến", inst4_id, "https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/cloud-devops.jpg", "Điện toán Đám mây & DevOps"),
         ]
 
         for cid, title, iid, thumb, cat in courses_data:

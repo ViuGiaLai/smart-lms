@@ -20,7 +20,7 @@ _INSECURE_SECRET_PREFIXES = ("changeme", "supersecret", "your-secret", "your_sec
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -35,6 +35,21 @@ class Settings(BaseSettings):
     # ── API ──
     API_V1_PREFIX: str = "/api/v1"
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+
+    @property
+    def cors_allow_origin_regex(self) -> str | None:
+        """Regex origin bổ sung cho môi trường phát triển.
+
+        Next.js tự chọn cổng khác (vd 52816) khi 3000 đang bận. Nếu chỉ dùng
+        danh sách cứng thì preflight CORS trả 400 và MỌI request dữ liệu của
+        frontend thất bại (giao diện báo "Không thể tải… Vui lòng thử lại").
+
+        Chỉ mở cho loopback khi KHÔNG phải production; production vẫn chỉ dùng
+        ALLOWED_ORIGINS để không nới rộng quyền cho domain lạ.
+        """
+        if self.ENVIRONMENT.strip().lower() in ("production", "prod"):
+            return None
+        return r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
 
     # ── Database ───────
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/smart_lms"
@@ -57,6 +72,12 @@ class Settings(BaseSettings):
     # Mặc định TẮT; production bắt buộc để false.
     ALLOW_DEMO_LOGIN: bool = False
 
+    # ── Chống brute-force (in-process, theo IP) ───────
+    RATE_LIMIT_ENABLED: bool = True
+    LOGIN_RATE_LIMIT_PER_MINUTE: int = 10
+    REGISTER_RATE_LIMIT_PER_MINUTE: int = 5
+    REFRESH_RATE_LIMIT_PER_MINUTE: int = 30
+
     # ── Redis / Celery ─
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
@@ -69,11 +90,42 @@ class Settings(BaseSettings):
     S3_BUCKET_NAME: str = "smart-lms-media"
 
     # ── AI Service ─────
+    # Cloudinary: luu anh bia khoa hoc / thumbnail
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+    CLOUDINARY_FOLDER: str = "smart-lms/courses"
+
+    # ── YouTube Import ──
+    # Chi dung YouTube Data API v3 de lay metadata; khong tai video.
+    YOUTUBE_API_KEY: str = ""
+    YOUTUBE_IMPORT_ENABLED: bool = False
+    # yt-dlp chi la cong cu ho tro lay phu de khi duoc phep; co the tat.
+    YOUTUBE_SUBTITLE_ENABLED: bool = False
+    YOUTUBE_SUBTITLE_TIMEOUT: int = 60
+    YOUTUBE_SUBTITLE_LANGUAGES: str = "vi,en"
+    # Gioi han so video moi lan phan tich nguon (playlist/kenh rat dai).
+    YOUTUBE_MAX_ITEMS: int = 200
+
     AI_SERVICE_URL: str = "http://localhost:8001"
     AI_SERVICE_TIMEOUT: int = 120
     # Khoa noi bo gui kem header X-Internal-Api-Key khi goi AI Service.
     # De rong neu AI Service khong bat kiem tra (dev cuc bo).
     AI_SERVICE_INTERNAL_KEY: str = ""
+
+    # ── Quen mat khau / gui email ─────
+    # Dung de tao link dat lai mat khau trong email.
+    FRONTEND_URL: str = "http://localhost:3000"
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
+    FORGOT_RATE_LIMIT_PER_MINUTE: int = 5
+    # Neu SMTP_HOST trong: backend ghi link vao log (chi o moi truong dev).
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_STARTTLS: bool = True
+    SMTP_SSL: bool = False
 
     @property
     def ai_service_headers(self) -> dict[str, str]:

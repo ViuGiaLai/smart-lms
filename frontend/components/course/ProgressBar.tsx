@@ -28,14 +28,14 @@ export function ProgressBar({
   return (
     <div className={`w-full space-y-1.5 ${className}`}>
       {(label || showLabel) && (
-        <div className="flex justify-between text-xs text-slate-600 font-medium">
+        <div className="flex justify-between text-xs text-stone-600 font-medium">
           <span>{label || 'Tiến độ'}</span>
           <span>{safeProgress}%</span>
         </div>
       )}
-      <div className={`w-full ${heightClass} bg-slate-100 rounded-full overflow-hidden border border-slate-200/60`}>
+      <div className={`w-full ${heightClass} bg-stone-100 rounded-full overflow-hidden border border-stone-200/60`}>
         <div
-          className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all duration-300 ease-out"
+          className="h-full rounded-full bg-brand-600 transition-all duration-300 ease-out"
           style={{ width: `${safeProgress}%` }}
         />
       </div>

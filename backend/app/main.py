@@ -12,7 +12,24 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.database import engine, Base
 import app.models  # ensure models are registered in Base.metadata
-from app.api.v1 import auth, courses, lessons, quiz as quiz_router, progress as progress_router, ai_tutor, ai_quiz_gen, student, instructor, admin, public, documents
+from app.api.v1 import (
+    auth,
+    courses,
+    lessons,
+    quiz as quiz_router,
+    progress as progress_router,
+    ai_tutor,
+    ai_quiz_gen,
+    student,
+    instructor,
+    admin,
+    public,
+    documents,
+    uploads,
+    youtube,
+    categories,
+    ai_discovery,
+)
 
 
 @asynccontextmanager
@@ -42,6 +59,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
+    # Dev: chấp nhận mọi cổng loopback (Next.js có thể chạy ở cổng khác 3000).
+    # Production: None, chỉ dùng danh sách ALLOWED_ORIGINS ở trên.
+    allow_origin_regex=settings.cors_allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,6 +96,10 @@ app.include_router(student.router,         prefix=prefix, tags=["Student"])
 app.include_router(instructor.router,      prefix=prefix, tags=["Instructor"])
 app.include_router(admin.router,           prefix=prefix, tags=["Admin"])
 app.include_router(documents.router,       prefix=prefix)
+app.include_router(uploads.router,         prefix=prefix, tags=["Uploads"])
+app.include_router(youtube.router,          prefix=prefix, tags=["YouTube Import"])
+app.include_router(categories.router,       prefix=prefix, tags=["Categories & Levels"])
+app.include_router(ai_discovery.router,     prefix=prefix, tags=["AI Discovery"])
 
 
 @app.get("/", include_in_schema=False)

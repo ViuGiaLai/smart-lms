@@ -40,7 +40,9 @@ export default function StudentDashboardPage() {
 
   useEffect(() => {
     if (currentUser) {
-      if (currentUser.name) setUserName(currentUser.name);
+      // Bỏ hậu tố vai trò trong tên hiển thị, ví dụ "Nguyễn Văn An (Sinh viên)".
+      const rawName = currentUser.fullName || currentUser.name;
+      if (rawName) setUserName(rawName.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim());
       if (currentUser.email) setUserEmail(currentUser.email);
     }
   }, [currentUser]);
@@ -60,6 +62,17 @@ export default function StudentDashboardPage() {
       const res = await coursesApi.getEnrolled();
       return res.data;
     },
+    // Chỉ gọi khi đã xác thực — tránh 401 hàng loạt lúc mới mở trang.
+    enabled: isAuthorized,
+  });
+
+  const { data: masteryData } = useQuery({
+    queryKey: ['student', 'mastery'],
+    queryFn: async () => {
+      const res = await studentApi.getMastery();
+      return res.data?.data;
+    },
+    enabled: isAuthorized,
   });
 
   const rawEnrollments = enrolledData?.data ?? [];
@@ -89,12 +102,12 @@ export default function StudentDashboardPage() {
       icon: Clock,
       label: 'Thời gian học',
       value: stats ? formatWatchTime(stats.totalWatchTime) : '0 phút',
-      color: 'bg-violet-500/10 text-violet-600 border-violet-500/20',
+      color: 'bg-clay-500/10 text-clay-600 border-clay-500/20',
     },
     {
       icon: Flame,
       label: 'Chuỗi ngày học',
-      value: stats?.currentStreak ?? 1,
+      value: stats?.currentStreak ?? 0,
       color: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
     },
   ];
@@ -117,13 +130,13 @@ export default function StudentDashboardPage() {
         <Card className="flex flex-col justify-between gap-3.5 p-4 sm:flex-row sm:items-center sm:p-6">
           <div className="flex items-center gap-3">
             <Avatar className="h-11 w-11 shrink-0 sm:h-14 sm:w-14">
-              <AvatarFallback className="bg-gradient-to-tr from-primary to-violet-600 text-base font-black text-white sm:text-xl">
+              <AvatarFallback className="bg-primary text-base font-semibold text-primary-foreground sm:text-xl">
                 {userName.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-base font-black tracking-tight text-foreground sm:text-2xl">
+                <h1 className="truncate text-base font-bold tracking-tight text-foreground sm:text-2xl">
                   Xin chào, {userName}
                 </h1>
                 <Badge variant="info" className="hidden text-[11px] sm:inline-block">
@@ -140,10 +153,14 @@ export default function StudentDashboardPage() {
           <div className="flex items-center justify-between gap-2.5 border-t border-border pt-2 sm:justify-end sm:border-t-0 sm:pt-0">
             <Badge
               variant="warning"
-              className="gap-1.5 rounded-xl border-amber-200/80 bg-gradient-to-r from-amber-500/10 to-orange-500/10 px-3 py-1.5 text-xs font-extrabold text-amber-700"
+              className="gap-1.5 rounded-md border border-clay-200 bg-clay-50 px-3 py-1.5 text-xs font-medium text-clay-800"
             >
               <Flame className="h-4 w-4 animate-pulse fill-amber-500 text-amber-500" />
-              <span>Chuỗi {stats?.currentStreak ?? 1} ngày 🔥</span>
+              <span>
+                {(stats?.currentStreak ?? 0) > 0
+                  ? `Chuỗi ${stats?.currentStreak} ngày 🔥`
+                  : 'Bắt đầu chuỗi hôm nay'}
+              </span>
             </Badge>
             <Button asChild variant="outline" size="sm">
               <Link href="/courses">
@@ -162,11 +179,11 @@ export default function StudentDashboardPage() {
             const valueIsLoading = statsLoading || (!stats && card.label === 'Đang theo học');
             return (
               <Card key={card.label} className="flex items-center gap-3 p-3 sm:block sm:p-4">
-                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border sm:mb-2.5 sm:h-10 sm:w-10 ${card.color}`}>
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border sm:mb-2.5 sm:h-10 sm:w-10 ${card.color}`}>
                   <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-base font-black leading-none text-foreground sm:text-2xl">
+                  <div className="text-base font-bold leading-none text-foreground sm:text-2xl">
                     {card.label === 'Thời gian học' && statsLoading ? (
                       <Skeleton className="h-5 w-12" />
                     ) : valueIsLoading && statsLoading ? (
@@ -190,7 +207,7 @@ export default function StudentDashboardPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 animate-ping rounded-full bg-emerald-500" />
-                <h2 className="text-xs font-extrabold uppercase tracking-wider text-primary sm:text-sm">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-primary sm:text-sm">
                   Bài học đang tiếp diễn
                 </h2>
               </div>
@@ -204,13 +221,13 @@ export default function StudentDashboardPage() {
               </span>
             </div>
 
-            <div className="flex flex-col items-start justify-between gap-4 rounded-2xl bg-muted/50 p-3.5 md:flex-row md:items-center sm:p-4">
+            <div className="flex flex-col items-start justify-between gap-4 rounded-lg bg-muted/50 p-3.5 md:flex-row md:items-center sm:p-4">
               <div className="flex w-full items-center gap-3.5 md:w-auto">
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted shadow-sm sm:h-20 sm:w-20">
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-muted shadow-sm sm:h-20 sm:w-20">
                   <Image
                     src={
                       activeEnrollment.course.thumbnail ||
-                      'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=400&fit=crop'
+                      'https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_800/smart-lms/courses/python-ai.jpg'
                     }
                     alt={activeEnrollment.course.title}
                     fill
@@ -256,7 +273,11 @@ export default function StudentDashboardPage() {
                   </Button>
 
                   <Button asChild variant="outline" size="default" className="text-xs font-bold">
-                    <Link href={`/courses/${activeEnrollment.courseId}/learn?askAI=true`}>
+                    <Link
+                      href={`/courses/${activeEnrollment.courseId}/learn?ask=${encodeURIComponent(
+                        'Tóm tắt nội dung chính của bài học này'
+                      )}`}
+                    >
                       <Sparkles className="text-primary" />
                       <span>Hỏi AI bài này</span>
                     </Link>
@@ -267,8 +288,34 @@ export default function StudentDashboardPage() {
           </Card>
         )}
 
+        {/* ── 3b. Trạng thái chưa ghi danh khóa nào ── */}
+        {!activeEnrollment && !enrolledLoading && (
+          <Card className="border-dashed border-border bg-card p-6 sm:p-8">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Compass className="h-6 w-6" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold text-foreground">
+                  Bạn chưa bắt đầu khóa học nào
+                </h2>
+                <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
+                  Khám phá danh mục khóa học và chọn một khóa phù hợp. Tiến độ học tập và Gia sư AI
+                  sẽ xuất hiện ngay tại đây.
+                </p>
+              </div>
+              <Button asChild size="sm" className="mt-1">
+                <Link href="/courses">
+                  Khám phá khóa học
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+          </Card>
+        )}
+
         {/* ── 4. Lối Tắt Gia Sư AI Tức Thì (Mobile Quick Ask Widget) ── */}
-        <Card className="space-y-3 bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 p-4 text-white shadow-lg sm:p-5">
+        <Card className="space-y-3 border border-brand-900 bg-brand-950 p-4 text-brand-50 sm:p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white">
@@ -276,7 +323,7 @@ export default function StudentDashboardPage() {
               </div>
               <div>
                 <h3 className="text-xs font-bold sm:text-sm">Trợ lý Gia sư ảo AI 24/7</h3>
-                <p className="text-[10px] text-indigo-200">
+                <p className="text-[10px] text-brand-200">
                   Đồng hành giải đáp kiến thức theo đúng tài liệu slide bài học
                 </p>
               </div>
@@ -291,42 +338,116 @@ export default function StudentDashboardPage() {
 
           <div className="flex flex-wrap gap-2 pt-1">
             {[
-              '💡 Tóm tắt kiến thức trọng tâm',
-              '❓ Luyện câu hỏi trắc nghiệm ôn tập',
-              '🔍 Giải thích khái niệm chuyên sâu',
+              {
+                label: '💡 Tóm tắt kiến thức trọng tâm',
+                ask: 'Tóm tắt những kiến thức trọng tâm của bài học này',
+              },
+              {
+                label: '❓ Luyện câu hỏi trắc nghiệm ôn tập',
+                ask: 'Tạo 5 câu hỏi trắc nghiệm ôn tập từ nội dung bài học này kèm đáp án',
+              },
+              {
+                label: '🔍 Giải thích khái niệm chuyên sâu',
+                ask: 'Giải thích chuyên sâu khái niệm quan trọng nhất trong bài học này',
+              },
             ].map((chip) => (
               <Button
-                key={chip}
+                key={chip.label}
                 asChild
                 variant="outline"
                 size="sm"
-                className="border-white/10 bg-white/10 text-[11px] font-medium text-indigo-100 hover:bg-white/20 hover:text-white"
+                className="border-white/10 bg-white/10 text-[11px] font-medium text-brand-100 hover:bg-white/20 hover:text-white"
               >
                 <Link
                   href={
                     activeEnrollment
-                      ? `/courses/${activeEnrollment.courseId}/learn?askAI=true`
+                      ? `/courses/${activeEnrollment.courseId}/learn?ask=${encodeURIComponent(chip.ask)}`
                       : '/courses'
                   }
                 >
-                  <span>{chip}</span>
+                  <span>{chip.label}</span>
                 </Link>
               </Button>
             ))}
           </div>
         </Card>
 
+        {/* ── 4.5. Phân Tích Năng Lực Thực Tế & Điểm Cần Cải Thiện (Master Spec Điểm 2 & XII) ── */}
+        {masteryData && masteryData.courses && masteryData.courses.length > 0 && (
+          <Card className="border-brand-200 bg-linear-to-r from-brand-50/40 via-white to-amber-50/30 p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-stone-200/60">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white shadow-xs">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-stone-900">Phân tích Năng lực Thực tế & Điểm Yếu (AI Mastery)</h3>
+                  <p className="text-[11px] text-stone-500">
+                    Không chỉ đo % thời lượng xem video; AI phát hiện kiến thức nào bạn đã vững và dạng bài nào cần ôn thêm.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-stone-600">Độ thành thạo chung:</span>
+                <Badge variant={masteryData.overallMastery >= 75 ? 'success' : 'warning'} className="text-xs font-bold px-2.5 py-0.5">
+                  {masteryData.overallMastery}%
+                </Badge>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {masteryData.courses.slice(0, 2).map((c: any) => (
+                <div key={c.courseId} className="bg-white rounded-lg p-3.5 border border-stone-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-stone-900 truncate max-w-[220px]">{c.courseTitle}</span>
+                    <Badge variant="outline" className="text-[10px]">{c.gradeLabel || c.category}</Badge>
+                  </div>
+
+                  {/* Điểm mạnh */}
+                  {c.strongAreas && c.strongAreas.length > 0 && (
+                    <div className="text-[11px] text-emerald-800 bg-emerald-50/60 p-2 rounded border border-emerald-100 flex items-start gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">Đã nắm vững: </span>
+                        <span>{c.strongAreas.slice(0, 2).join(', ')}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Điểm cần lưu ý / gợi ý */}
+                  {c.needsReviewAreas && c.needsReviewAreas.length > 0 ? (
+                    <div className="text-[11px] text-amber-900 bg-amber-50/60 p-2 rounded border border-amber-200 flex items-start gap-1.5">
+                      <Compass className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">Cần củng cố: </span>
+                        <span>{c.needsReviewAreas[0]}</span>
+                        <p className="mt-0.5 text-[10px] text-amber-700">
+                          {c.topics?.find((t: any) => t.topicName === c.needsReviewAreas[0])?.recommendedNextStep || 'Hỏi thêm Gia sư AI để củng cố dạng bài này'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-stone-500 bg-stone-50 p-2 rounded">
+                      Phong độ rất tốt! Hãy tiếp tục duy trì và làm các bài kiểm tra tiếp theo.
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         {/* ── 5. Danh Sách Các Khóa Học Khác & Thanh Tiến Độ ── */}
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3 sm:gap-8">
           {/* Cột trái: Khóa học đã đăng ký */}
           <div className="space-y-4 lg:col-span-2">
             <div className="flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-foreground sm:text-base">
+              <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-foreground sm:text-base">
                 <BookOpen className="h-4 w-4 text-primary" />
                 Khóa học của bạn ({enrollments.length})
               </h2>
               <Button asChild variant="ghost" size="sm" className="text-primary hover:text-primary">
-                <Link href="/courses">
+                <Link href="/my-courses">
                   Xem tất cả <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </Button>
@@ -336,7 +457,7 @@ export default function StudentDashboardPage() {
               {enrolledLoading
                 ? [...Array(3)].map((_, i) => (
                     <Card key={i} className="flex items-center gap-3 p-3.5 sm:p-4">
-                      <Skeleton className="h-14 w-14 shrink-0 rounded-xl sm:h-16 sm:w-16" />
+                      <Skeleton className="h-14 w-14 shrink-0 rounded-lg sm:h-16 sm:w-16" />
                       <div className="min-w-0 flex-1 space-y-2">
                         <Skeleton className="h-3 w-24" />
                         <Skeleton className="h-3.5 w-3/4" />
@@ -349,11 +470,11 @@ export default function StudentDashboardPage() {
                       className="flex flex-col justify-between gap-3.5 p-3.5 transition-colors hover:border-ring/40 sm:flex-row sm:items-center sm:p-4"
                     >
                       <div className="flex min-w-0 items-center gap-3">
-                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-muted sm:h-16 sm:w-16">
+                        <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-muted sm:h-16 sm:w-16">
                           <Image
                             src={
                               enrollment.course.thumbnail ||
-                              'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&fit=crop'
+                              'https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_800/smart-lms/courses/nextjs-ui.jpg'
                             }
                             alt={enrollment.course.title}
                             fill
@@ -403,8 +524,9 @@ export default function StudentDashboardPage() {
             {(() => {
               const daysLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
               const todayDayIndex = (new Date().getDay() + 6) % 7;
-              const streakVal = stats?.currentStreak ?? 1;
-              const activeDaysCount = Math.min(todayDayIndex + 1, Math.max(1, streakVal));
+              const streakVal = stats?.currentStreak ?? 0;
+              const activeDaysCount =
+                streakVal > 0 ? Math.min(todayDayIndex + 1, streakVal) : 0;
               const weekDays = daysLabels.map((day, idx) => ({
                 day,
                 isToday: idx === todayDayIndex,
@@ -418,7 +540,7 @@ export default function StudentDashboardPage() {
                       <Calendar className="h-4 w-4 text-primary" />
                       <span>Tuần này ({activeDaysCount}/7 ngày)</span>
                     </div>
-                    <Badge variant="warning" className="text-[11px] font-extrabold">
+                    <Badge variant="warning" className="text-[11px] font-semibold">
                       🔥 Đang duy trì {streakVal} ngày
                     </Badge>
                   </div>
@@ -433,9 +555,9 @@ export default function StudentDashboardPage() {
                           {d.day}
                         </span>
                         <div
-                          className={`flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold transition ${
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold transition ${
                             d.active
-                              ? 'bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-sm'
+                              ? 'bg-clay-500 text-white'
                               : d.isToday
                                 ? 'border-2 border-dashed border-primary/50 bg-primary/5 text-primary'
                                 : 'bg-muted text-muted-foreground'
@@ -449,7 +571,9 @@ export default function StudentDashboardPage() {
                   <p className="pt-1 text-center text-[10px] text-muted-foreground">
                     {activeDaysCount >= 7
                       ? 'Xuất sắc! Bạn đã duy trì chuỗi học tập trọn vẹn cả tuần!'
-                      : 'Vào bài học hôm nay để tiếp tục tích lũy kiến thức cùng Gia sư AI!'}
+                      : activeDaysCount === 0
+                        ? 'Học bài đầu tiên hôm nay để bắt đầu chuỗi ngày học của bạn!'
+                        : 'Vào bài học hôm nay để tiếp tục tích lũy kiến thức cùng Gia sư AI!'}
                   </p>
                 </Card>
               );
@@ -467,7 +591,7 @@ export default function StudentDashboardPage() {
                 <div className="flex items-center justify-between border-t border-border pt-2 text-xs">
                   <Button asChild variant="ghost" size="sm" className="px-0 text-primary hover:text-primary">
                     <Link href="/progress">
-                      Xem báo cáo chi tiết & Điểm số <ArrowRight className="h-3.5 w-3.5" />
+                      Xem báo cáo tiến độ chi tiết <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
                   </Button>
                 </div>

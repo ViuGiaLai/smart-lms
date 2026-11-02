@@ -17,7 +17,38 @@ module.exports = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['var(--font-sans)', 'system-ui', 'Segoe UI', 'sans-serif'],
+        serif: ['var(--font-serif)', 'Georgia', 'Times New Roman', 'serif'],
+      },
       colors: {
+        // Thang xanh rêu cho hành động chính, thay màu tím mặc định.
+        brand: {
+          50: '#F2F6F3',
+          100: '#DFE9E2',
+          200: '#C1D6C8',
+          300: '#9BBAA6',
+          400: '#719A80',
+          500: '#4F7B60',
+          600: '#3A614B',
+          700: '#2F4E3D',
+          800: '#274034',
+          900: '#1E3329',
+          950: '#0F1D16',
+        },
+        // Sắc đất nung cho nhãn và điểm nhấn.
+        clay: {
+          50: '#FAF4EA',
+          100: '#F2E4CD',
+          200: '#E6C89F',
+          300: '#D6A76B',
+          400: '#C68A45',
+          500: '#AE7132',
+          600: '#905A28',
+          700: '#724622',
+          800: '#5D3A20',
+          900: '#4C311D',
+        },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

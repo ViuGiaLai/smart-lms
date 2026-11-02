@@ -16,6 +16,8 @@ import {
   Clock,
   Database,
   Settings,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { instructorApi } from '@/lib/api';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
@@ -75,6 +77,8 @@ export default function InstructorMaterialsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [courseFilter, setCourseFilter] = useState('all');
   const [uploadStates, setUploadStates] = useState<Record<string, UploadState>>({});
+  // Thu gọn danh sách bài của một khóa để trang không dài khi có nhiều khóa.
+  const [collapsedCourses, setCollapsedCourses] = useState<Record<string, boolean>>({});
 
   const loadMaterials = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -163,7 +167,7 @@ export default function InstructorMaterialsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 pb-16 font-sans sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl space-y-4 px-4 py-5 pb-14 font-sans sm:px-6 lg:px-8">
       {/* ── HEADER ── */}
       <PageHeader
         badges={[
@@ -209,7 +213,7 @@ export default function InstructorMaterialsPage() {
             <select
               value={courseFilter}
               onChange={(e) => setCourseFilter(e.target.value)}
-              className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-9 rounded-lg border border-input bg-background px-3 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="all">Tất cả khóa học ({data.courses.length})</option>
               {data.courses.map((course) => (
@@ -226,7 +230,7 @@ export default function InstructorMaterialsPage() {
       {loading ? (
         <div className="space-y-5">
           {[...Array(2)].map((_, i) => (
-            <Card key={i} className="rounded-3xl">
+            <Card key={i} className="rounded-lg">
               <div className="space-y-3 border-b border-border bg-muted/50 p-5">
                 <Skeleton className="h-4 w-2/3" />
                 <Skeleton className="h-3 w-1/2" />
@@ -234,7 +238,7 @@ export default function InstructorMaterialsPage() {
               <div className="divide-y divide-border">
                 {[...Array(3)].map((_, j) => (
                   <div key={j} className="flex items-center gap-3 p-4 sm:p-5">
-                    <Skeleton className="h-8 w-8 rounded-xl" />
+                    <Skeleton className="h-8 w-8 rounded-lg" />
                     <div className="min-w-0 flex-1 space-y-2">
                       <Skeleton className="h-4 w-1/3" />
                       <Skeleton className="h-3 w-1/2" />
@@ -271,11 +275,11 @@ export default function InstructorMaterialsPage() {
           description="Thử đổi từ khóa tìm kiếm hoặc bộ lọc khóa học."
         />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-4">
           {filteredCourses.map((course) => (
-            <Card key={course.id} className="overflow-hidden rounded-3xl">
+            <Card key={course.id} className="overflow-hidden rounded-lg">
               {/* Course header */}
-              <div className="flex flex-col justify-between gap-3 border-b border-border bg-muted/50 p-5 sm:flex-row sm:items-center">
+              <div className="flex flex-col justify-between gap-2 border-b border-border bg-muted/50 p-3.5 sm:flex-row sm:items-center">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="info" className="rounded-md text-[10px] font-bold">
@@ -288,7 +292,7 @@ export default function InstructorMaterialsPage() {
                       {course.status === 'published' ? 'Đã xuất bản' : 'Bản nháp'}
                     </Badge>
                   </div>
-                  <h2 className="mt-1.5 truncate text-sm font-extrabold text-foreground">
+                  <h2 className="mt-1.5 truncate text-sm font-semibold text-foreground">
                     {course.title}
                   </h2>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -296,11 +300,32 @@ export default function InstructorMaterialsPage() {
                   </p>
                 </div>
 
-                <Button asChild variant="outline" size="sm" className="shrink-0 text-primary">
-                  <Link href={`/courses/${course.id}/manage`}>
-                    <Settings className="h-3.5 w-3.5" /> Quản lý bài giảng
-                  </Link>
-                </Button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setCollapsedCourses((prev) => ({
+                        ...prev,
+                        [course.id]: !prev[course.id],
+                      }))
+                    }
+                    aria-expanded={!collapsedCourses[course.id]}
+                    title={collapsedCourses[course.id] ? 'Hiện danh sách bài' : 'Thu gọn danh sách bài'}
+                  >
+                    {collapsedCourses[course.id] ? (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    )}
+                    {collapsedCourses[course.id] ? 'Hiện bài' : 'Thu gọn'}
+                  </Button>
+                  <Button asChild variant="outline" size="sm" className="shrink-0 text-primary">
+                    <Link href={`/courses/${course.id}/manage`}>
+                      <Settings className="h-3.5 w-3.5" /> Quản lý bài giảng
+                    </Link>
+                  </Button>
+                </div>
               </div>
 
               {/* Lessons */}
@@ -315,7 +340,7 @@ export default function InstructorMaterialsPage() {
                   </Link>{' '}
                   để thêm chương &amp; bài học mới.
                 </div>
-              ) : (
+              ) : collapsedCourses[course.id] ? null : (
                 <div className="divide-y divide-border">
                   {course.lessons.map((lesson, idx) => {
                     const key = `${course.id}:${lesson.id}`;
@@ -323,17 +348,17 @@ export default function InstructorMaterialsPage() {
                     return (
                       <div
                         key={lesson.id}
-                        className="flex flex-col justify-between gap-3 p-4 lg:flex-row lg:items-center sm:p-5"
+                        className="flex flex-col justify-between gap-2.5 p-3 lg:flex-row lg:items-center sm:p-3.5"
                       >
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
+                          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
                             {idx + 1}
                           </div>
                           <div className="min-w-0">
                             <h3 className="text-xs font-bold leading-snug text-foreground sm:text-sm">
                               {lesson.title}
                             </h3>
-                            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
                               <span className="flex items-center gap-1 text-muted-foreground">
                                 <Clock className="h-3 w-3 text-muted-foreground/70" />
                                 {lesson.duration ? `${Math.round(lesson.duration / 60)} phút` : 'Chưa đặt'}
@@ -365,7 +390,7 @@ export default function InstructorMaterialsPage() {
                               {lesson.resourcesUrl && (
                                 <Badge
                                   variant="info"
-                                  className="max-w-[220px] rounded-md px-2 py-0.5 text-[10px] font-medium"
+                                  className="max-w-[180px] rounded-md px-2 py-0.5 text-[10px] font-medium"
                                 >
                                   <FileText className="h-3 w-3 shrink-0" />
                                   <span className="truncate">{lesson.resourcesUrl}</span>
@@ -417,7 +442,14 @@ export default function InstructorMaterialsPage() {
                               disabled={state?.status === 'uploading'}
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
-                                if (file) void handleUpload(course.id, lesson.id, file);
+                                if (
+                                  file &&
+                                  confirm(
+                                    `Tải "${file.name}" sẽ THAY THẾ toàn bộ tri thức AI hiện có của bài học này.\nBạn có muốn tiếp tục?`,
+                                  )
+                                ) {
+                                  void handleUpload(course.id, lesson.id, file);
+                                }
                                 e.currentTarget.value = '';
                               }}
                             />

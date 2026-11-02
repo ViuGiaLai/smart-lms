@@ -7,8 +7,8 @@ import { cn } from '@/lib/utils';
 
 const accentStyles = {
   primary: 'bg-primary/10 text-primary',
-  violet: 'bg-violet-100 text-violet-700',
-  purple: 'bg-purple-100 text-purple-700',
+  violet: 'bg-clay-100 text-clay-700',
+  purple: 'bg-clay-100 text-clay-700',
   emerald: 'bg-emerald-100 text-emerald-700',
   amber: 'bg-amber-100 text-amber-700',
 } as const;
@@ -34,7 +34,7 @@ export function StatCard({
     <Card className={cn('flex items-center gap-3 p-4 sm:p-5', className)}>
       <span
         className={cn(
-          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+          'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
           accentStyles[accent],
         )}
       >
@@ -47,7 +47,7 @@ export function StatCard({
         {loading ? (
           <Skeleton className="mt-1 h-6 w-16" />
         ) : (
-          <p className="text-xl font-extrabold leading-tight text-foreground">{value}</p>
+          <p className="text-xl font-semibold leading-tight text-foreground">{value}</p>
         )}
       </div>
     </Card>

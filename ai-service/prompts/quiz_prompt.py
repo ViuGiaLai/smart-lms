@@ -3,6 +3,8 @@ Prompts cho AI Quiz Generator (Smart LMS)
 Sinh ngân hàng câu hỏi trắc nghiệm chất lượng cao từ tài liệu học tập.
 """
 
+from typing import Optional
+
 QUIZ_SYSTEM_PROMPT = """Bạn là chuyên gia sư phạm và khảo thí tự động thuộc hệ thống Smart LMS.
 Nhiệm vụ của bạn là đọc hiểu tài liệu học tập (slide, giáo trình, transcript) và xây dựng bộ câu hỏi trắc nghiệm khách quan 4 lựa chọn (A, B, C, D).
 
@@ -15,8 +17,34 @@ YÊU CẦU CHẤT LƯỢNG ĐỀ THI:
 4. Đầu ra phải tuân thủ nghiêm ngặt định dạng JSON theo schema đã chỉ định.
 """
 
-def build_quiz_prompt(content: str, num_questions: int = 5, difficulty: str = "Medium", language: str = "vi") -> str:
+BLOOM_LEVELS = {
+    "remember": "Nhớ (Remember) – nhận biết, định nghĩa, liệt kê, gọi tên khái niệm.",
+    "understand": "Hiểu (Understand) – giải thích, so sánh, tóm tắt, phân biệt khái niệm.",
+    "apply": "Vận dụng (Apply) – áp dụng công thức/quy trình vào tình huống cụ thể, tính toán.",
+    "analyze": "Phân tích (Analyze) – tìm lỗi sai, phân rã quan hệ nguyên nhân - kết quả, suy luận nhiều bước.",
+    "evaluate": "Đánh giá (Evaluate) – nhận xét, chọn phương án tối ưu, phản biện lập luận.",
+    "create": "Sáng tạo (Create) – thiết kế, đề xuất phương án mới, xây dựng quy trình.",
+}
+
+
+def build_quiz_prompt(
+    content: str,
+    num_questions: int = 5,
+    difficulty: str = "Medium",
+    language: str = "vi",
+    bloom_level: Optional[str] = None,
+) -> str:
     lang_str = "Tiếng Việt" if language == "vi" else "Tiếng Anh"
+    bloom_key = (bloom_level or "mixed").strip().lower()
+    if bloom_key != "mixed" and bloom_key not in BLOOM_LEVELS:
+        bloom_key = "mixed"
+    if bloom_key == "mixed":
+        bloom_line = (
+            "Phân bố câu hỏi trải đều 6 mức Bloom (Nhớ, Hiểu, Vận dụng, Phân tích, Đánh giá, Sáng tạo); "
+            "mỗi câu ghi mức Bloom tương ứng vào trường 'topic' dạng 'Bloom: <mức> – <chủ đề>'."
+        )
+    else:
+        bloom_line = f"Toàn bộ câu hỏi ở mức Bloom: {BLOOM_LEVELS[bloom_key]}"
     return f"""{QUIZ_SYSTEM_PROMPT}
 
 [NỘI DUNG TÀI LIỆU BÀI GIẢNG]:
@@ -26,6 +54,7 @@ def build_quiz_prompt(content: str, num_questions: int = 5, difficulty: str = "M
 - Số lượng câu hỏi: {num_questions}
 - Mức độ khó: {difficulty} (Easy / Medium / Hard)
 - Ngôn ngữ: {lang_str}
+- Mức Bloom: {bloom_line}
 
 BẠN PHẢI TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON THEO ĐỊNH DẠNG SAU:
 {{

@@ -41,6 +41,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     if (pathname.includes('/manage')) return 'Quản lý khóa học';
     if (pathname.includes('/quiz/generate')) return 'Sinh đề thi trắc nghiệm AI (Bloom)';
     if (pathname.includes('/quiz/bank')) return 'Ngân hàng đề thi';
+    if (pathname.includes('/youtube-import')) return 'Nhập học liệu YouTube';
     if (pathname.includes('/my-courses')) return 'Khóa học của tôi';
     if (pathname.includes('/results')) return 'Kết quả học tập';
     if (pathname.includes('/progress')) return 'Tiến độ học tập';
@@ -51,14 +52,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800">
+      <div className="flex min-h-screen bg-background font-sans text-foreground">
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/90 px-4 sm:px-6 flex items-center justify-between shadow-2xs">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="animate-pulse">
-                <div className="w-8 h-8 bg-slate-200 rounded" />
-              </div>
-              <div className="w-32 h-4 bg-slate-200 rounded animate-pulse" />
+          <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur sm:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="h-8 w-8 animate-pulse rounded bg-muted" />
+              <div className="h-4 w-32 animate-pulse rounded bg-muted" />
             </div>
           </header>
           <main className="flex-1 pb-16" />
@@ -68,7 +67,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800">
+    <div className="flex min-h-screen bg-background font-sans text-foreground">
       {/* ── Left Sidebar ── */}
       <DashboardSidebar
         mobileOpen={mobileSidebarOpen}
@@ -84,32 +83,32 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         }`}
       >
         {/* Top Header inside Dashboard */}
-        <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/90 px-4 sm:px-6 flex items-center justify-between shadow-2xs">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/90 px-4 backdrop-blur sm:px-6">
           <div className="flex items-center gap-3 min-w-0">
             {/* Mobile Hamburger Button */}
             <button
               onClick={() => setMobileSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition"
+              className="rounded-md p-2 text-muted-foreground transition hover:bg-secondary hover:text-foreground lg:hidden"
               title="Mở menu quản lý"
             >
               <Menu className="w-5 h-5" />
             </button>
 
             {/* Breadcrumb Navigation */}
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 min-w-0">
-              <Link href="/" className="hover:text-indigo-600 transition hidden sm:inline-flex items-center gap-1">
+            <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Link href="/" className="hidden items-center gap-1 transition hover:text-foreground sm:inline-flex">
                 <Home className="w-3.5 h-3.5" />
                 <span>Trang chủ</span>
               </Link>
-              <ChevronRight className="w-3 h-3 text-slate-300 hidden sm:inline" />
+              <ChevronRight className="hidden h-3 w-3 text-border sm:inline" />
               <Link
                 href={isAdmin ? '/admin-dashboard' : isInstructor ? '/instructor-dashboard' : '/dashboard'}
-                className="hover:text-indigo-600 transition truncate"
+                className="truncate transition hover:text-foreground"
               >
                 {isAdmin ? 'Quản trị viên' : isInstructor ? 'Giảng viên' : 'Học viên'}
               </Link>
-              <ChevronRight className="w-3 h-3 text-slate-300" />
-              <span className="text-slate-900 font-bold truncate">
+              <ChevronRight className="h-3 w-3 text-border" />
+              <span className="truncate font-medium text-foreground">
                 {getBreadcrumbTitle()}
               </span>
             </div>
@@ -133,12 +132,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     <Link href={`/courses/${manageId}/learn?preview=true`} target="_blank">
                       <Eye className="h-3.5 w-3.5 text-primary" />
                       <span className="hidden sm:inline">Xem trước bài giảng</span>
-                      <Badge
-                        variant="info"
-                        className="rounded px-1 py-0 text-[10px] font-black"
-                      >
-                        Preview
-                      </Badge>
                     </Link>
                   </Button>
                 );
@@ -157,10 +150,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             )}
 
             {isAdmin && (
-              <Badge variant="purple" className="gap-1 text-[11px] font-bold">
+              <span className="hidden items-center gap-1.5 border-l border-border pl-3 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground sm:flex">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Super Admin</span>
-              </Badge>
+                Quản trị
+              </span>
             )}
           </div>
         </header>

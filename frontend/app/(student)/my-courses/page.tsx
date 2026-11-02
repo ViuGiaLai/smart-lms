@@ -1,15 +1,30 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, Play, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowRight,
+  Award,
+  BookOpen,
+  CheckCircle2,
+  GraduationCap,
+  Play,
+  RefreshCw,
+  Search,
+  TrendingUp,
+} from 'lucide-react';
 import { coursesApi } from '@/lib/api';
 import { Enrollment } from '@/types';
 import { useAuth } from '@/lib/auth-context';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatCard } from '@/components/ui/stat-card';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState, ErrorState } from '@/components/ui/empty-state';
 import { ProgressBar } from '@/components/course/ProgressBar';
 import { PageSkeleton } from '@/components/ui/page-skeleton';
 
@@ -19,6 +34,7 @@ export default function MyCoursesPage() {
   const [items, setItems] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
 
   const loadCourses = async () => {
     setLoading(true);
@@ -37,6 +53,39 @@ export default function MyCoursesPage() {
     if (isAuthorized && !authLoading) void loadCourses();
   }, [authLoading, isAuthorized]);
 
+  const sortedItems = useMemo(
+    () =>
+      [...items].sort((a, b) => {
+        // Khóa đang học dở lên trước, đã xong xuống cuối, cùng nhóm thì tiến độ cao trước.
+        const rank = (value: number) => (value >= 100 ? 2 : value > 0 ? 0 : 1);
+        const diff = rank(a.progress || 0) - rank(b.progress || 0);
+        return diff !== 0 ? diff : (b.progress || 0) - (a.progress || 0);
+      }),
+    [items],
+  );
+
+  const visibleItems = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return sortedItems;
+    return sortedItems.filter((item) =>
+      `${item.course?.title || ''} ${item.course?.category?.name || ''}`
+        .toLowerCase()
+        .includes(keyword),
+    );
+  }, [sortedItems, search]);
+
+  const summary = useMemo(() => {
+    const completed = items.filter((item) => (item.progress || 0) >= 100).length;
+    const inProgress = items.filter(
+      (item) => (item.progress || 0) > 0 && (item.progress || 0) < 100,
+    ).length;
+    const average =
+      items.length > 0
+        ? Math.round(items.reduce((acc, item) => acc + (item.progress || 0), 0) / items.length)
+        : 0;
+    return { completed, inProgress, average };
+  }, [items]);
+
   if (!isAuthorized || authLoading) {
     return <PageSkeleton />;
   }
@@ -44,17 +93,18 @@ export default function MyCoursesPage() {
   return (
     <main className="px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-black text-foreground">Khóa học của tôi</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Các khóa học bạn đã đăng ký và tiến độ thực tế.
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => void loadCourses()}>
-            <RefreshCw className="h-4 w-4" /> Làm mới
-          </Button>
-        </header>
+        <PageHeader
+          title="Khóa học của tôi"
+          description="Các khóa học bạn đã ghi danh, tiến độ thực tế và chứng chỉ hoàn thành khóa học."
+          actions={[
+            { label: 'Khám phá khóa học', icon: <Search className="h-3.5 w-3.5" />, href: '/courses' },
+            {
+              label: 'Làm mới',
+              icon: <RefreshCw className="h-3.5 w-3.5" />,
+              onClick: () => void loadCourses(),
+            },
+          ]}
+        />
 
         {loading && (
           <div className="grid gap-4 md:grid-cols-2">
@@ -70,49 +120,135 @@ export default function MyCoursesPage() {
         )}
 
         {!loading && error && (
-          <Card className="border-destructive/30 bg-destructive/10 shadow-none">
-            <CardContent className="p-5">
-              <p className="text-sm text-destructive">{error}</p>
-            </CardContent>
-          </Card>
+          <ErrorState message={error} actionLabel="Thử lại" onAction={() => void loadCourses()} />
         )}
 
         {!loading && !error && items.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-border bg-card p-12 text-center">
-            <BookOpen className="mx-auto h-10 w-10 text-muted-foreground/40" />
-            <h2 className="mt-3 font-bold text-foreground">Bạn chưa có khóa học nào</h2>
-            <Button asChild variant="default" size="sm" className="mt-4">
+          <EmptyState
+            icon={<BookOpen className="h-6 w-6" />}
+            title="Bạn chưa có khóa học nào"
+            description="Ghi danh một khóa học để bắt đầu xem bài giảng, hỏi đáp cùng Trợ lý AI và làm bài kiểm tra."
+          >
+            <Button asChild size="sm" className="mt-1">
               <Link href="/courses">Khám phá khóa học</Link>
             </Button>
-          </div>
+          </EmptyState>
         )}
 
         {!loading && !error && items.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2">
-            {items.map((item) => (
-              <Card key={item.id}>
-                <CardContent className="p-5">
-                  <h2 className="text-base font-bold text-foreground">
-                    {item.course?.title || `Khóa học #${item.courseId}`}
-                  </h2>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {item.completedLessons || 0}/{item.totalLessons || 0} bài học đã hoàn thành
-                  </p>
-                  <div className="mt-3">
-                    <ProgressBar value={Math.min(100, item.progress || 0)} size="sm" />
-                  </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-sm font-bold text-primary">{item.progress || 0}%</span>
-                    <Button asChild variant="outline" size="sm" className="text-primary hover:bg-primary/10">
-                      <Link href={`/courses/${item.courseId}/learn`}>
-                        <Play className="h-3.5 w-3.5" /> Tiếp tục học
-                      </Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard icon={BookOpen} label="Đã ghi danh" value={`${items.length} khóa`} accent="primary" />
+              <StatCard icon={TrendingUp} label="Đang học dở" value={`${summary.inProgress} khóa`} accent="violet" />
+              <StatCard icon={CheckCircle2} label="Đã hoàn thành" value={`${summary.completed} khóa`} accent="emerald" />
+              <StatCard icon={GraduationCap} label="Tiến độ trung bình" value={`${summary.average}%`} accent="amber" />
+            </div>
+
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Tìm khóa học của bạn..."
+                className="h-9 pl-9 text-xs"
+                aria-label="Tìm khóa học của tôi"
+              />
+            </div>
+
+            {visibleItems.length === 0 ? (
+              <EmptyState
+                icon={<Search className="h-6 w-6" />}
+                title="Không tìm thấy khóa học phù hợp"
+                description="Thử một từ khóa khác trong danh sách khóa học của bạn."
+              >
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-1"
+                  onClick={() => setSearch('')}
+                >
+                  Xóa tìm kiếm
+                </Button>
+              </EmptyState>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {visibleItems.map((item) => {
+                  const progress = Math.min(100, item.progress || 0);
+                  const isCompleted = progress >= 100;
+                  const totalLessons = item.totalLessons || 0;
+                  const completedLessons = item.completedLessons || 0;
+                  return (
+                    <Card key={item.id} className="flex flex-col">
+                      <CardContent className="flex flex-1 flex-col p-5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h2 className="line-clamp-2 font-bold text-foreground">
+                              {item.course?.title || `Khóa học #${item.courseId}`}
+                            </h2>
+                            {item.course?.category?.name && (
+                              <p className="mt-1 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                {item.course.category.name}
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant={isCompleted ? 'success' : progress > 0 ? 'info' : 'secondary'} className="shrink-0">
+                            {isCompleted ? (
+                              <>
+                                <CheckCircle2 className="h-3 w-3" />
+                                Hoàn thành
+                              </>
+                            ) : progress > 0 ? (
+                              'Đang học'
+                            ) : (
+                              'Chưa bắt đầu'
+                            )}
+                          </Badge>
+                        </div>
+
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          {completedLessons}/{totalLessons} bài học đã hoàn thành
+                        </p>
+
+                        <div className="mt-2 flex items-center gap-3">
+                          <ProgressBar value={progress} size="sm" className="flex-1" />
+                          <span className="w-10 shrink-0 text-right text-xs font-bold text-primary">
+                            {progress}%
+                          </span>
+                        </div>
+
+                        <div className="mt-auto flex items-center justify-between gap-2 pt-4">
+                          <Button asChild variant="outline" size="sm" className="text-primary hover:bg-primary/10">
+                            <Link href={`/courses/${item.courseId}/learn`}>
+                              <Play className="h-3.5 w-3.5" />
+                              {progress >= 100 ? 'Học lại' : progress > 0 ? 'Tiếp tục học' : 'Bắt đầu học'}
+                            </Link>
+                          </Button>
+
+                          {isCompleted ? (
+                            <Button asChild variant="default" size="sm">
+                              <Link href={`/certificates/${item.courseId}`}>
+                                <Award className="h-3.5 w-3.5" />
+                                Chứng chỉ
+                              </Link>
+                            </Button>
+                          ) : (
+                            <Link
+                              href={`/courses/${item.courseId}`}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground transition hover:text-primary"
+                            >
+                              Chi tiết khóa học
+                              <ArrowRight className="h-3 w-3" />
+                            </Link>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
     </main>

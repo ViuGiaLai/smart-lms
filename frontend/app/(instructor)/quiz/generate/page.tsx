@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { instructorApi } from '@/lib/api';
 import {
@@ -14,6 +14,11 @@ import {
   Check,
   AlertCircle,
   ExternalLink,
+  FileUp,
+  UploadCloud,
+  FileText,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +64,10 @@ export default function AIQuizGeneratePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [generatedQuiz, setGeneratedQuiz] = useState<GeneratedQuizSet | null>(null);
   const [coursesList, setCoursesList] = useState<{ id: string; title: string; description: string }[]>([]);
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+  const [uploadInfo, setUploadInfo] = useState<{ filename: string; pages: number; chunks: number } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -103,7 +112,8 @@ export default function AIQuizGeneratePage() {
             setLessonId(
               requestedLessonId && preferredLessons.some((lesson) => lesson.id === requestedLessonId)
                 ? requestedLessonId
-                : '',
+                : // Mặc định gắn đề với bài học đầu tiên để đề luôn hiện đúng trong Focus Player.
+                  preferredLessons[0]?.id || '',
             );
           } catch (err) {
             console.error('Lỗi khi tải danh sách bài học:', err);
@@ -115,6 +125,51 @@ export default function AIQuizGeneratePage() {
     };
     fetchCourses();
   }, []);
+
+  /**
+   * Tải tài liệu bài giảng (PDF/DOCX/PPTX) lên AI Service: bóc tách văn bản,
+   * nhúng vào pgvector của bài học và điền sẵn nội dung cho bước sinh đề.
+   * Đúng đặc tả: "Giáo viên upload PDF/DOCX → AI tạo câu hỏi".
+   */
+  const handleDocumentUpload = async (file: File) => {
+    setUploadError(null);
+    setUploadInfo(null);
+    if (!courseId) {
+      setUploadError('Hãy chọn khóa học trước khi tải tài liệu.');
+      return;
+    }
+    if (!lessonId) {
+      setUploadError('Hãy chọn "Bài học liên kết" để tài liệu được nhúng đúng bài học (pgvector).');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setUploadError('Tệp vượt quá 50MB. Vui lòng chia nhỏ tài liệu.');
+      return;
+    }
+
+    setUploadState('uploading');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await instructorApi.uploadLessonDocument(courseId, lessonId, formData);
+      const data = res.data ?? {};
+      setUploadInfo({
+        filename: data.filename || file.name,
+        pages: Number(data.total_pages) || 1,
+        chunks: Number(data.total_chunks) || 0,
+      });
+      if (typeof data.text_preview === 'string' && data.text_preview.trim()) {
+        setContent(data.text_preview.trim());
+      }
+      setUploadState('done');
+    } catch (err: any) {
+      setUploadState('error');
+      setUploadError(
+        err?.response?.data?.detail ||
+          'Không tải được tài liệu. Vui lòng kiểm tra AI Service (port 8001).',
+      );
+    }
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,6 +269,14 @@ export default function AIQuizGeneratePage() {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      // Đề gắn bài học thì đặt tiêu đề theo bài để Ngân hàng đề thi đọc được ngay;
+      // không gắn bài thì giữ tiêu đề AI sinh ra.
+      const linkedLesson = (lessonsByCourse[courseId] || []).find(
+        (lesson) => String(lesson.id) === String(lessonId),
+      );
+      const quizTitle = linkedLesson
+        ? `Trắc nghiệm ôn tập: ${linkedLesson.title}`
+        : generatedQuiz.title;
       const res = await fetch(`${apiUrl}/api/v1/courses/${courseId}/quizzes`, {
         method: 'POST',
         headers: {
@@ -222,8 +285,10 @@ export default function AIQuizGeneratePage() {
         },
         body: JSON.stringify({
           lesson_id: lessonId ? Number(lessonId) : null,
-          title: generatedQuiz.title,
-          description: `Đề thi trắc nghiệm AI độ khó ${generatedQuiz.difficulty_level}`,
+          title: quizTitle,
+          description: linkedLesson
+            ? `Bộ đề củng cố kiến thức bài giảng "${linkedLesson.title}" (AI · độ khó ${generatedQuiz.difficulty_level})`
+            : `Đề thi trắc nghiệm AI độ khó ${generatedQuiz.difficulty_level}`,
           time_limit: 600,
           pass_score: 0.6,
           questions: generatedQuiz.questions.map((q, idx) => ({
@@ -275,15 +340,15 @@ export default function AIQuizGeneratePage() {
         </div>
 
         {/* ── Form Section ── */}
-        <Card className="rounded-3xl">
+        <Card className="rounded-lg">
           <CardContent className="space-y-6 p-6 sm:p-8">
             <div className="flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-center">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-lg">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <Sparkles className="h-6 w-6" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
+                  <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
                     AI Quiz Generator (Tự động sinh đề trắc nghiệm)
                   </h1>
                   <p className="mt-0.5 text-xs text-muted-foreground">
@@ -300,7 +365,7 @@ export default function AIQuizGeneratePage() {
             </div>
 
             {errorMessage && (
-              <div className="flex items-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-xs font-medium text-destructive">
+              <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-xs font-medium text-destructive">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
@@ -318,6 +383,8 @@ export default function AIQuizGeneratePage() {
                     type="button"
                     onClick={() => {
                       setCourseId(c.id);
+                      // Đổi khóa học → gắn lại bài học đầu tiên để đề luôn thuộc một bài cụ thể.
+                      setLessonId(lessonsByCourse[c.id]?.[0]?.id || '');
                       if (c.description) setContent(c.description);
                     }}
                     className={cn(
@@ -333,6 +400,98 @@ export default function AIQuizGeneratePage() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Tải tài liệu bài giảng → AI bóc tách & nhúng pgvector */}
+            <div className="rounded-lg border border-dashed border-brand-200 bg-brand-50/50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-brand-100 bg-white text-brand-600 shadow-sm">
+                    <FileUp className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-foreground">
+                      Tải tài liệu bài giảng (PDF / DOCX / PPTX)
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                      AI bóc tách văn bản, nhúng vào <code className="text-brand-700">pgvector</code> của bài học
+                      và điền sẵn nội dung bên dưới để sinh đề bám sát tài liệu thật.
+                    </p>
+                    <p className="mt-1 text-[11px] font-medium text-amber-700">
+                      Lưu ý: tài liệu mới sẽ thay thế toàn bộ tri thức AI hiện có của bài học này.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.pptx"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleDocumentUpload(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadState === 'uploading' || !lessonId}
+                    title={lessonId ? 'Chọn tệp PDF/DOCX/PPTX' : 'Chọn Bài học liên kết trước'}
+                  >
+                    {uploadState === 'uploading' ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang số hóa...
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="h-3.5 w-3.5" /> Chọn tệp
+                      </>
+                    )}
+                  </Button>
+                  {uploadInfo && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadInfo(null);
+                        setUploadState('idle');
+                      }}
+                      className="rounded-lg p-1.5 text-stone-400 transition hover:bg-white hover:text-stone-600"
+                      aria-label="Bỏ thông tin tệp vừa tải"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {uploadInfo && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  <span className="min-w-0 break-all">
+                    <FileText className="mr-1 inline h-3 w-3 align-text-bottom" />
+                    <strong>{uploadInfo.filename}</strong> · {uploadInfo.pages} trang ·{' '}
+                    {uploadInfo.chunks} đoạn vector đã lưu cho bài học này.
+                  </span>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+
+              {!lessonId && (
+                <p className="mt-2 text-[11px] font-medium text-amber-700">
+                  Chọn “Bài học liên kết” ở bên dưới để bật tải tài liệu (tài liệu luôn thuộc một bài học cụ thể).
+                </p>
+              )}
             </div>
 
             <form onSubmit={handleGenerate} className="space-y-5">
@@ -361,7 +520,7 @@ export default function AIQuizGeneratePage() {
                   <select
                     value={numQuestions}
                     onChange={(e) => setNumQuestions(Number(e.target.value))}
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3.5 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-10 w-full rounded-lg border border-input bg-background px-3.5 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <option value={3}>3 câu hỏi (Khảo sát nhanh)</option>
                     <option value={5}>5 câu hỏi (Củng cố bài học)</option>
@@ -376,7 +535,7 @@ export default function AIQuizGeneratePage() {
                   <select
                     value={difficulty}
                     onChange={(e) => setDifficulty(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3.5 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-10 w-full rounded-lg border border-input bg-background px-3.5 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <option value="Mixed">Hỗn hợp (Nhận biết - Thông hiểu - Vận dụng)</option>
                     <option value="Easy">Dễ (Nhận biết &amp; Nhớ lại)</option>
@@ -393,13 +552,14 @@ export default function AIQuizGeneratePage() {
                     value={courseId}
                     onChange={(e) => {
                       setCourseId(e.target.value);
-                      setLessonId('');
+                      // Đổi khóa học → chọn bài học đầu tiên của khóa đó (thay vì bỏ trống).
+                      setLessonId(lessonsByCourse[e.target.value]?.[0]?.id || '');
                       const selected = coursesList.find((c) => c.id === e.target.value);
                       if (selected && selected.description && !content.trim()) {
                         setContent(selected.description);
                       }
                     }}
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3.5 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-10 w-full rounded-lg border border-input bg-background px-3.5 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {coursesList.length === 0 ? (
                       <option value="">Chưa có khóa học nào</option>
@@ -415,24 +575,28 @@ export default function AIQuizGeneratePage() {
 
                 <div>
                   <label className="mb-1.5 block text-xs font-bold text-foreground">
-                    Bài học liên kết (tùy chọn)
+                    Bài học liên kết
                   </label>
                   <select
                     value={lessonId}
                     onChange={(e) => setLessonId(e.target.value)}
                     disabled={!courseId || !(lessonsByCourse[courseId]?.length)}
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3.5 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-10 w-full rounded-lg border border-input bg-background px-3.5 text-xs font-medium text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="">Không gắn bài học cụ thể</option>
                     {(lessonsByCourse[courseId] || []).map((lesson) => (
                       <option key={lesson.id} value={lesson.id}>
-                        {lesson.order ? `Bài ${lesson.order}: ` : ''}
+                        {lesson.order && !/^bài\s*\d+/i.test(lesson.title || '')
+                          ? `Bài ${lesson.order}: `
+                          : ''}
                         {lesson.title}
                       </option>
                     ))}
                   </select>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    Gắn đề với bài học để học viên thấy đúng bài trắc nghiệm khi đang học.
+                    {lessonId
+                      ? 'Đề sẽ gắn đúng bài học này (quizzes.lesson_id) và hiện ở tab “Quiz ôn tập” khi học viên mở bài.'
+                      : 'Chưa gắn bài học: đề vẫn lưu vào khóa nhưng học viên sẽ không thấy trong tab “Quiz ôn tập”.'}
                   </p>
                 </div>
               </div>
@@ -463,7 +627,7 @@ export default function AIQuizGeneratePage() {
 
         {/* ── Generated Quiz Result Section ── */}
         {generatedQuiz && (
-          <Card className="space-y-6 rounded-3xl shadow-md">
+          <Card className="space-y-6 rounded-lg shadow-md">
             <CardContent className="space-y-6 p-6 sm:p-8">
               {/* Header Result */}
               <div className="flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-center">
@@ -475,7 +639,7 @@ export default function AIQuizGeneratePage() {
                     <span className="text-xs text-muted-foreground">• {generatedQuiz.total_questions} câu hỏi</span>
                     <span className="text-xs text-muted-foreground">• Cấp độ: {generatedQuiz.difficulty_level}</span>
                   </div>
-                  <h2 className="text-lg font-extrabold text-foreground">{generatedQuiz.title}</h2>
+                  <h2 className="text-lg font-semibold text-foreground">{generatedQuiz.title}</h2>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -507,9 +671,9 @@ export default function AIQuizGeneratePage() {
 
               {/* Banner Thông báo Lưu Thành Công vào Ngân Hàng Đề Thi */}
               {savedSuccess && (
-                <div className="flex flex-col justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 sm:flex-row sm:items-center">
+                <div className="flex flex-col justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 sm:flex-row sm:items-center">
                   <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white">
                       <CheckCircle2 className="h-4 w-4" />
                     </div>
                     <div>
@@ -546,7 +710,7 @@ export default function AIQuizGeneratePage() {
                 {generatedQuiz.questions.map((q) => (
                   <div
                     key={q.question_number}
-                    className="space-y-3.5 rounded-2xl border border-border/80 bg-muted/40 p-5"
+                    className="space-y-3.5 rounded-lg border border-border/80 bg-muted/40 p-5"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2.5">
@@ -572,7 +736,7 @@ export default function AIQuizGeneratePage() {
                         return (
                           <div
                             key={opt.key}
-                            className={`flex items-center justify-between rounded-xl border p-3 text-xs transition ${
+                            className={`flex items-center justify-between rounded-lg border p-3 text-xs transition ${
                               isCorrect
                                 ? 'border-emerald-500/40 bg-emerald-500/10 font-semibold text-emerald-900'
                                 : 'border-border bg-card text-foreground/80'
@@ -605,7 +769,7 @@ export default function AIQuizGeneratePage() {
                     </div>
 
                     {/* Explanation */}
-                    <div className="space-y-1 rounded-xl border border-border bg-card p-3 text-xs text-muted-foreground">
+                    <div className="space-y-1 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1 text-[11px] font-bold text-primary">
                         <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
                         Giải thích sư phạm chi tiết:

@@ -130,13 +130,19 @@ def _normalize_ai_questions(ai_data: dict[str, Any]) -> list[dict[str, Any]]:
     return normalized
 
 
-async def _request_ai_quiz(topic: str, num_questions: int, difficulty: str) -> dict[str, Any]:
+async def _request_ai_quiz(
+    topic: str,
+    num_questions: int,
+    difficulty: str,
+    bloom_level: str = "mixed",
+) -> dict[str, Any]:
     """Gọi AI Service đúng một nơi để preview và lưu DB luôn đồng bộ."""
     ai_url = f"{settings.AI_SERVICE_URL}/api/v1/quiz/generate"
     ai_payload = {
         "content": topic,
         "num_questions": num_questions,
         "difficulty": difficulty,
+        "bloom_level": bloom_level,
     }
     try:
         async with httpx.AsyncClient(timeout=settings.AI_SERVICE_TIMEOUT) as client:
@@ -171,12 +177,15 @@ async def preview_ai_quiz(
             detail="Chỉ giảng viên hoặc quản trị viên mới có quyền sinh đề AI",
         )
 
-    ai_data = await _request_ai_quiz(payload.topic, payload.num_questions, payload.difficulty)
+    ai_data = await _request_ai_quiz(
+        payload.topic, payload.num_questions, payload.difficulty, payload.bloom_level
+    )
     questions = _normalize_ai_questions(ai_data)
 
     return {
         "title": ai_data.get("title") or f"Bộ đề trắc nghiệm AI: {payload.topic[:60]}",
         "difficulty_level": payload.difficulty,
+        "bloom_level": payload.bloom_level,
         "total_questions": len(questions),
         "questions": questions,
     }
@@ -203,28 +212,44 @@ async def generate_quiz(
     if role_str != "admin" and course.instructor_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không thể tạo đề thi cho khóa học của giảng viên khác")
 
+    lesson_obj: Lesson | None = None
     if payload.lesson_id is not None:
         lesson_res = await db.execute(
-            select(Lesson.id).where(
+            select(Lesson).where(
                 Lesson.id == payload.lesson_id,
                 Lesson.course_id == payload.course_id,
             )
         )
-        if lesson_res.scalar_one_or_none() is None:
+        lesson_obj = lesson_res.scalar_one_or_none()
+        if lesson_obj is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Bài học không thuộc khóa học này",
             )
 
-    ai_data = await _request_ai_quiz(payload.topic, payload.num_questions, payload.difficulty)
+    ai_data = await _request_ai_quiz(
+        payload.topic, payload.num_questions, payload.difficulty, payload.bloom_level
+    )
     questions = _normalize_ai_questions(ai_data)
+
+    # Tiêu đề đề thi: ưu tiên tên bài học để Ngân hàng đề thi đọc được ngay
+    # đề nào thuộc bài nào (thay vì tiêu đề chung "Bài kiểm tra trắc nghiệm").
+    ai_title = (ai_data.get("title") or "").strip()
+    if lesson_obj is not None:
+        quiz_title = f"Trắc nghiệm ôn tập: {lesson_obj.title}"
+    else:
+        quiz_title = ai_title or f"AI Quiz: {payload.topic[:80]}"
 
     # Persist quiz + questions
     quiz = Quiz(
         course_id=payload.course_id,
         lesson_id=payload.lesson_id,
-        title=ai_data.get("title") or f"AI Quiz: {payload.topic[:80]}",
-        description=f"Đề trắc nghiệm sinh tự động cho '{payload.topic}' ({payload.difficulty})",
+        title=quiz_title,
+        description=(
+            f"Đề trắc nghiệm sinh tự động cho bài học '{lesson_obj.title}' ({payload.difficulty} · Bloom {payload.bloom_level})"
+            if lesson_obj is not None
+            else f"Đề trắc nghiệm sinh tự động cho '{payload.topic}' ({payload.difficulty} · Bloom {payload.bloom_level})"
+        ),
         is_ai_generated=True,
     )
     db.add(quiz)
