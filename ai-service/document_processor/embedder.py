@@ -1,8 +1,8 @@
 """
 Smart LMS - Embedder
 Tạo vector embeddings cho text chunks.
-Primary: Google text-embedding-004 (1536 dims)
-Fallback: OpenAI text-embedding-3-small (1536 dims) hoặc SentenceTransformers
+Chính: Google models/gemini-embedding-001 (768 chiều)
+Dự phòng: OpenAI text-embedding-3-small (1536 chiều) hoặc SentenceTransformers
 """
 
 import asyncio
@@ -30,7 +30,7 @@ EMBEDDING_DIMENSIONS = {
 
 class GeminiEmbedder:
     """
-    Tạo embeddings dùng Google text-embedding-004.
+    Tạo embeddings dùng Google models/gemini-embedding-001 (768 chiều).
     Hỗ trợ task types để tối ưu chất lượng embedding:
     - RETRIEVAL_DOCUMENT: cho documents cần index
     - RETRIEVAL_QUERY: cho câu hỏi tìm kiếm
@@ -171,7 +171,7 @@ class OpenAIEmbedder:
         from openai import AsyncOpenAI
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.model_name = settings.OPENAI_EMBEDDING_MODEL
-        self.dimension = EMBEDDING_DIMENSIONS.get(self.model_name, 1536)
+        self.dimension = EMBEDDING_DIMENSIONS.get(self.model_name, 768)
         logger.info("OpenAIEmbedder initialized", model=self.model_name)
 
     async def embed_text(self, text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> List[float]:

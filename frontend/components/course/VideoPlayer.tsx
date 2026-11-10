@@ -15,6 +15,8 @@ interface VideoPlayerProps {
   seekRequest?: { seconds: number; token: number };
   onProgress?: (progressPercent: number) => void;
   onEnded?: () => void;
+  /** Bắt đầu phát video (dùng cho phân tích học tập, không ảnh hưởng phát). */
+  onPlay?: () => void;
 }
 
 /**
@@ -38,6 +40,7 @@ export default function VideoPlayer({
   seekRequest,
   onProgress,
   onEnded,
+  onPlay,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const youtubeId = getYouTubeVideoId(videoUrl);
@@ -123,6 +126,7 @@ export default function VideoPlayer({
           controls
           className="w-full h-full object-contain"
           onTimeUpdate={handleTimeUpdate}
+          onPlay={onPlay}
           onEnded={onEnded}
         />
       ) : (

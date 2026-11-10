@@ -156,10 +156,18 @@ async def get_instructor_courses(
         )
         student_counts = {course_id: count for course_id, count in count_res.all()}
 
+    from app.services.review_service import rating_stats_by_course
+    rating_stats = await rating_stats_by_course(db, course_ids)
+
     return {
         "success": True,
         "data": [
-            _format_course_dict(c, total_students=student_counts.get(c.id, 0))
+            _format_course_dict(
+                c,
+                total_students=student_counts.get(c.id, 0),
+                rating_average=rating_stats.get(c.id, (None, 0))[0],
+                rating_count=rating_stats.get(c.id, (None, 0))[1],
+            )
             for c in courses
         ],
     }

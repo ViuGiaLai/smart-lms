@@ -1,0 +1,123 @@
+@startuml Activity_Diagrams_Smart_LMS
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 12
+skinparam roundCorner 8
+skinparam shadowing false
+
+skinparam activity {
+  BackgroundColor #FFFFFF
+  BorderColor #2C3E50
+  BorderThickness 1.2
+  FontColor #1C2833
+  ArrowColor #2980B9
+  ArrowThickness 1.2
+}
+
+skinparam condition {
+  BackgroundColor #FEF9E7
+  BorderColor #B7950B
+  FontColor #7D6608
+}
+
+' ========================================================
+' LUỒNG 1: ĐĂNG NHẬP & XÁC THỰC JWT
+' ========================================================
+partition "1. Xác thực & Đăng nhập JWT" {
+  start
+  :Người dùng nhập Email & Mật khẩu trên Next.js;
+  :Gửi POST /api/v1/auth/login;
+  if (Email tồn tại trong DB?) then (Có)
+    if (Mật khẩu khớp băm Bcrypt?) then (Đúng)
+      if (Tài khoản đang hoạt động?) then (Active)
+        :Tạo JWT Access Token & Refresh Token\n(kèm token_version để hỗ trợ thu hồi);
+        :Lưu Refresh Token vào Cookie / Client State;
+        :Chuyển hướng vào Dashboard theo Role;
+        detach
+      else (Bị khóa)
+        :Trả về 403 Forbidden\n(Tài khoản đã bị vô hiệu hóa);
+        stop
+      endif
+    else (Sai)
+      :Trả về 401 Unauthorized\n(Mật khẩu không chính xác);
+      stop
+    endif
+  else (Không)
+    :Trả về 401 Unauthorized\n(Tài khoản không tồn tại);
+    stop
+  endif
+}
+
+' ========================================================
+' LUỒNG 2: CHAT TRỢ LÝ AI TUTOR RAG (LESSON-BOUNDED)
+' ========================================================
+partition "2. Chat Trợ lý AI Tutor RAG" {
+  start
+  :Học viên đặt câu hỏi tại màn hình bài học (lesson_id);
+  :Next.js gửi POST /api/v1/ai-tutor/chat;
+  :Backend kiểm tra quyền Enrollment & Hạn mức Quota ngày;
+  if (Đã ghi danh & Còn Quota?) then (Hợp lệ)
+    :AI Service nhúng (Embed) câu hỏi thành vector 768 chiều;
+    :Truy vấn pgvector (giới hạn chặt trong lesson_id);
+    if (Độ tương đồng >= 0.5?) then (Có nội dung liên quan)
+      :Lấy các chunk tài liệu kèm mốc video (start/end seconds);
+      :Ghép ngữ cảnh vào System Prompt;
+      :Gọi Gemini API sinh câu trả lời;
+      :Truyền luồng dữ liệu (Stream SSE) về trình duyệt;
+      :Lưu tin nhắn vào chat_messages & ghi nhận token vào ai_usage_logs;
+      stop
+    else (Ngoài phạm vi)
+      :Stream thông báo từ chối:\n"Bài học này chưa đề cập đến nội dung bạn hỏi";
+      stop
+    endif
+  else (Không hợp lệ)
+    :Trả về lỗi 403 (Chưa ghi danh) hoặc 429 (Hết hạn mức ngày);
+    stop
+  endif
+}
+
+' ========================================================
+' LUỒNG 3: LÀM VÀ NỘP BÀI QUIZ
+' ========================================================
+partition "3. Làm và Nộp bài Quiz" {
+  start
+  :Học viên chọn bài Quiz và bấm Bắt đầu làm bài;
+  :Next.js tải danh sách câu hỏi (đáp án đúng được bảo mật);
+  :Bộ đếm ngược thời gian (Timer) bắt đầu chạy;
+  repeat
+    :Học viên chọn phương án trả lời cho từng câu hỏi;
+  repeat while (Còn câu hỏi & Còn thời gian?) is (Có)
+  :Học viên bấm Nộp bài hoặc Hết giờ tự động nộp;
+  :Gửi danh sách câu trả lời lên Backend;
+  :Backend đối chiếu đáp án với bảng quiz_questions;
+  :Tính tổng điểm và tỷ lệ % câu trả lời đúng;
+  if (Điểm số >= pass_score?) then (Đạt)
+    :Ghi nhận passed = TRUE;
+  else (Chưa đạt)
+    :Ghi nhận passed = FALSE;
+  endif
+  :Lưu kết quả chi tiết vào bảng quiz_submissions;
+  :Cập nhật độ thành thạo vào student_topic_mastery;
+  :Hiển thị bảng điểm, đáp án đúng và giải thích chi tiết;
+  stop
+}
+
+' ========================================================
+' LUỒNG 4: CHẤM BÀI TỰ LUẬN BẰNG AI THEO RUBRIC
+' ========================================================
+partition "4. Chấm bài tự luận bằng AI theo Rubric" {
+  start
+  :Giảng viên nhập bài làm học sinh, đáp án mẫu & bảng tiêu chí Rubric;
+  :Gửi POST /api/v1/grading/evaluate;
+  :Backend kiểm tra quyền Giảng viên & Quota AI;
+  :AI Service gửi yêu cầu chấm có cấu trúc sang Gemini;
+  :Gemini phân tích đối chiếu bài làm với từng tiêu chí Rubric;
+  :Gemini trả về JSON: điểm từng tiêu chí, điểm tổng, nhận xét điểm mạnh/yếu;
+  :Backend lưu bản ghi vào bảng essay_gradings;
+  :Ghi nhận token tiêu thụ vào ai_usage_logs;
+  :Hiển thị kết quả chấm để Giảng viên xem lại và xuất phản hồi;
+  stop
+}
+
+@enduml

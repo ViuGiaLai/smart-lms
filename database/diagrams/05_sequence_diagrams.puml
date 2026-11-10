@@ -1,0 +1,158 @@
+@startuml Sequence_Diagrams_Smart_LMS
+!theme plain
+autonumber "<b>[00]</b>"
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 12
+skinparam roundCorner 8
+skinparam shadowing false
+
+skinparam sequence {
+  ArrowColor #2980B9
+  ArrowThickness 1.2
+  LifeLineBorderColor #34495E
+  LifeLineBackgroundColor #EBF5FB
+  ParticipantBorderColor #2C3E50
+  ParticipantBackgroundColor #EAEDED
+  ParticipantFontStyle bold
+  ParticipantFontColor #1A5276
+  ActorBorderColor #117864
+  ActorBackgroundColor #E8F8F5
+  ActorFontStyle bold
+  ActorFontColor #0E6251
+  BoxBackgroundColor #F8F9F9
+  BoxBorderColor #BDC3C7
+}
+
+' ========================================================
+' 1. SEQUENCE: XÁC THỰC VÀ CẤP PHÁT JWT LOGIN
+' ========================================================
+== 1. Xác thực & Đăng nhập JWT ==
+
+actor "Người dùng" as User
+participant "Next.js Frontend\n(:3000)" as FE
+participant "FastAPI Backend\n(:8000)" as BE
+database "PostgreSQL\n(Supabase)" as DB
+
+User -> FE : Nhập email & mật khẩu, bấm Đăng nhập
+activate FE
+FE -> BE : POST /api/v1/auth/login {email, password}
+activate BE
+
+BE -> DB : SELECT * FROM users WHERE email = ?
+activate DB
+DB --> BE : Bản ghi User (hashed_password, role, token_version)
+deactivate DB
+
+BE -> BE : verify_password(password, hashed_password)
+alt Mật khẩu đúng & is_active == True
+    BE -> BE : Tạo Access Token (JWT) & Refresh Token
+    BE --> FE : 200 OK {access_token, refresh_token}
+    FE --> User : Điều hướng vào Dashboard theo Role
+else Sai thông tin hoặc tài khoản bị khóa
+    BE --> FE : 401 Unauthorized / 403 Forbidden
+    FE --> User : Hiển thị thông báo lỗi
+end
+deactivate BE
+deactivate FE
+
+' ========================================================
+' 2. SEQUENCE: HỎI ĐÁP AI TUTOR QUA STREAMING SSE
+' ========================================================
+== 2. Hỏi đáp AI Tutor qua Streaming SSE ==
+
+actor "Học viên" as Student
+participant "AI Service\n(:8001)" as AIS
+participant "Google Gemini API\n(LLM)" as LLM
+
+Student -> FE : Gửi câu hỏi tại bài học (lesson_id)
+activate FE
+FE -> BE : POST /api/v1/ai-tutor/chat {lesson_id, question}
+activate BE
+
+BE -> DB : Kiểm tra ghi danh (Enrollment) & Quota ngày
+activate DB
+DB --> BE : Hợp lệ
+deactivate DB
+
+BE -> AIS : POST /rag/stream (lesson_id, question)
+activate AIS
+
+AIS -> LLM : Embed câu hỏi (768 chiều)
+activate LLM
+LLM --> AIS : Vector embedding
+deactivate LLM
+
+AIS -> DB : similarity_search(lesson_id, threshold >= 0.5)
+activate DB
+DB --> AIS : Chunks tài liệu + mốc video (start/end)
+deactivate DB
+
+AIS -> LLM : Prompt RAG kèm System Instructions + Chunks
+activate LLM
+LLM --> AIS : Luồng dữ liệu phản hồi (Stream)
+deactivate LLM
+
+AIS --> BE : Stream SSE
+deactivate AIS
+
+BE --> FE : Server-Sent Events (SSE) Stream
+FE --> Student : Hiển thị chữ chạy theo thời gian thực (Typing effect)
+
+BE -> DB : INSERT INTO chat_messages & ai_usage_logs
+activate DB
+DB --> BE : Hoàn tất lưu trữ
+deactivate DB
+
+deactivate BE
+deactivate FE
+
+' ========================================================
+' 3. SEQUENCE: GIẢNG VIÊN TẠO ĐỀ THI TRẮC NGHIỆM BẰNG AI
+' ========================================================
+== 3. Giảng viên Tạo đề thi Trắc nghiệm bằng AI ==
+
+actor "Giảng viên" as GV
+
+GV -> FE : Chọn bài học, cấu hình số câu & độ khó
+activate FE
+FE -> BE : POST /api/v1/ai-quiz-gen/preview {lesson_id, num_questions}
+activate BE
+
+BE -> DB : Lấy Transcript & Học liệu của bài học
+activate DB
+DB --> BE : Nội dung bài học
+deactivate DB
+
+BE -> AIS : POST /quiz/generate (content, num_questions)
+activate AIS
+
+AIS -> LLM : Prompt sinh câu hỏi trắc nghiệm (JSON Schema A, B, C, D)
+activate LLM
+LLM --> AIS : Mảng JSON câu hỏi + đáp án + giải thích
+deactivate LLM
+
+AIS --> BE : Danh sách câu hỏi có cấu trúc
+deactivate AIS
+
+BE --> FE : Trả về bản Preview
+deactivate BE
+
+FE --> GV : Hiển thị xem trước & Giảng viên chỉnh sửa câu hỏi
+GV -> FE : Bấm "Lưu vào ngân hàng đề"
+FE -> BE : POST /api/v1/ai-quiz-gen/generate {quiz_data, questions}
+activate BE
+
+BE -> DB : INSERT INTO quizzes (title, pass_score, is_ai_generated=TRUE)
+activate DB
+DB --> BE : quiz_id mới
+BE -> DB : INSERT INTO quiz_questions (quiz_id, options, correct_answer)
+DB --> BE : Hoàn tất lưu
+deactivate DB
+
+BE --> FE : 201 Created (Tạo đề thành công)
+deactivate BE
+FE --> GV : Thông báo thành công và chuyển về trang quản lý Quiz
+deactivate FE
+
+@enduml

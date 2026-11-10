@@ -123,6 +123,23 @@ class Settings(BaseSettings):
     # De rong neu AI Service khong bat kiem tra (dev cuc bo).
     AI_SERVICE_INTERNAL_KEY: str = ""
 
+    # ── Hạn mức AI theo người dùng/ngày ─────
+    # Đếm số lượt đã ghi trong ai_usage_logs. Đặt 0 để tắt giới hạn cho tính năng đó.
+    # Đây là hạn mức vận hành (chống lạm dụng/kiểm soát chi phí), không phải
+    # giới hạn học thuật của học viên.
+    AI_TUTOR_DAILY_LIMIT: int = 80
+    AI_QUIZ_DAILY_LIMIT: int = 40
+    AI_GRADING_DAILY_LIMIT: int = 60
+    AI_SUMMARIZER_DAILY_LIMIT: int = 50
+
+    # ── Lưu trữ học liệu ─────
+    # URL tải học liệu có chữ ký (R2) chỉ sống trong khoảng này để tránh lộ
+    # vĩnh viễn tài liệu của khóa học trả phí.
+    R2_SIGNED_URL_EXPIRE_SECONDS: int = 3600
+    # Tác vụ xử lý học liệu chạy nền quá thời gian này được coi là kẹt và
+    # chuyển sang failed khi khởi động lại backend.
+    MATERIAL_STUCK_MINUTES: int = 45
+
     # ── Quen mat khau / gui email ─────
     # Dung de tao link dat lai mat khau trong email.
     FRONTEND_URL: str = "http://localhost:3000"

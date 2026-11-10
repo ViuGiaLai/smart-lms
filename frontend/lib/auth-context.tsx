@@ -83,6 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('accessToken', accessToken)
       localStorage.setItem('refreshToken', refreshToken)
       localStorage.setItem('currentUser', JSON.stringify(userData))
+      // Ghi cookie để Next.js middleware có thể đọc và bảo vệ route ở server-side
+      document.cookie = `accessToken=${accessToken}; path=/; max-age=${
+        60 * 60 * 24 * 7
+      }; SameSite=Lax`
       window.dispatchEvent(new Event(AUTH_CHANGE_EVENT))
     },
     []
@@ -100,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('currentUser')
+    document.cookie = 'accessToken=; path=/; max-age=0'
     window.dispatchEvent(new Event(AUTH_CHANGE_EVENT))
   }, [])
 

@@ -22,6 +22,89 @@ interface UseAIChatReturn {
 
 const MAX_SAVED_MESSAGES = 40;
 
+function getApiBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+}
+
+function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem('accessToken');
+  } catch {
+    return null;
+  }
+}
+
+interface ServerChatMessage {
+  id?: unknown;
+  role?: unknown;
+  content?: unknown;
+  sources?: unknown;
+  timestamp?: unknown;
+  feedback?: unknown;
+}
+
+/**
+ * Tải hội thoại đã lưu ở backend (nguồn chính thức). Trả về `null` khi không
+ * gọi được API để hook còn biết dùng bộ nhớ đệm localStorage.
+ */
+async function fetchServerHistory(
+  courseId: string,
+  lessonId: number,
+  signal: AbortSignal,
+): Promise<ChatMessage[] | null> {
+  const token = getAccessToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(
+      `${getApiBaseUrl()}/api/v1/ai-tutor/history?lesson_id=${lessonId}&limit=${MAX_SAVED_MESSAGES}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+      },
+    );
+    if (!res.ok) return null;
+    const payload = await res.json();
+    const rows: ServerChatMessage[] = Array.isArray(payload?.data) ? payload.data : [];
+    return rows
+      .filter(
+        (row) =>
+          row &&
+          (row.role === 'user' || row.role === 'assistant') &&
+          typeof row.content === 'string' &&
+          row.content.trim().length > 0,
+      )
+      .map((row, index) => {
+        const sources = Array.isArray(row.sources)
+          ? (row.sources.filter((item) => item !== null && item !== undefined) as Array<
+              string | ChatSourceRef
+            >)
+          : [];
+        return {
+          id: typeof row.id === 'string' && row.id ? row.id : `server-${lessonId}-${index}`,
+          serverId:
+            typeof row.id === 'string' && row.id.startsWith('db-') ? row.id : undefined,
+          role: row.role as 'user' | 'assistant',
+          content: row.content as string,
+          timestamp:
+            typeof row.timestamp === 'string' && row.timestamp
+              ? row.timestamp
+              : new Date().toISOString(),
+          isStreaming: false,
+          feedback:
+            row.feedback === 'up' || row.feedback === 'down' ? row.feedback : null,
+          metadata:
+            sources.length > 0
+              ? { courseId, lessonId: String(lessonId), sources }
+              : { courseId, lessonId: String(lessonId) },
+        };
+      });
+  } catch {
+    return null;
+  }
+}
+
+
 /**
  * Phiên trò chuyện thuộc về đúng người dùng, khóa học và bài học. Không dùng
  * session id ngẫu nhiên để việc đóng/mở panel vẫn khôi phục được hội thoại.
@@ -95,14 +178,34 @@ export function useAIChat({
   const [historyReady, setHistoryReady] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const storageKeyRef = useRef<string | null>(null);
+  // Đánh dấu người dùng đã thao tác (gửi/xóa) để phản hồi lịch sử đến muộn
+  // không ghi đè nội dung đang hiển thị.
+  const hasLocalActivityRef = useRef(false);
 
   // Khôi phục sau hydration để không tạo khác biệt HTML giữa server và client.
+  // PostgreSQL là nguồn chính; localStorage chỉ dùng khi API không phản hồi.
   useEffect(() => {
     const storageKey = getHistoryStorageKey(courseId, lessonId);
     storageKeyRef.current = storageKey;
     setHistoryReady(false);
     setMessages(readSavedMessages(storageKey));
     setHistoryReady(true);
+
+    const numericLessonId = Number(lessonId);
+    if (!Number.isInteger(numericLessonId) || numericLessonId <= 0) return;
+
+    hasLocalActivityRef.current = false;
+    const controller = new AbortController();
+    void fetchServerHistory(courseId, numericLessonId, controller.signal).then((serverMessages) => {
+      if (controller.signal.aborted || hasLocalActivityRef.current) return;
+      // Nếu server hoàn toàn chưa có dữ liệu (hội thoại cũ trước khi lưu DB)
+      // thì giữ bộ nhớ đệm để người học không mất nội dung đã xem.
+      if (serverMessages && serverMessages.length > 0) {
+        setMessages(serverMessages);
+      }
+    });
+
+    return () => controller.abort();
   }, [courseId, lessonId]);
 
   // Lưu tối đa 40 tin nhắn, chỉ sau khi AI hoàn thành. Không ghi token đang
@@ -131,6 +234,7 @@ export function useAIChat({
   }, [historyReady, messages]);
 
   const clearMessages = useCallback(() => {
+    hasLocalActivityRef.current = true;
     setMessages([]);
     setError(null);
     try {
@@ -140,7 +244,21 @@ export function useAIChat({
     } catch {
       // Trạng thái trên màn hình vẫn được xóa kể cả khi storage bị chặn.
     }
-  }, []);
+
+    // Xóa cả bản lưu ở backend để lần mở sau không khôi phục lại hội thoại.
+    const numericLessonId = Number(lessonId);
+    const token = getAccessToken();
+    if (!Number.isInteger(numericLessonId) || numericLessonId <= 0 || !token) return;
+    void fetch(
+      `${getApiBaseUrl()}/api/v1/ai-tutor/history?lesson_id=${numericLessonId}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    ).catch(() => {
+      // Mất mạng thì bản trên màn hình vẫn đã được xóa; lần sau mở sẽ thử lại.
+    });
+  }, [lessonId]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -155,6 +273,7 @@ export function useAIChat({
         abortControllerRef.current.abort();
       }
       abortControllerRef.current = new AbortController();
+      hasLocalActivityRef.current = true;
 
       setIsLoading(true);
       setError(null);
@@ -248,6 +367,17 @@ export function useAIChat({
             if (parsed.type === 'error' || parsed.error) {
               streamError = String(parsed.error || 'Trợ lý AI gặp lỗi không xác định.');
               responseHandled = true;
+              return;
+            }
+            if (parsed.type === 'message_saved' && typeof parsed.id === 'string') {
+              // Backend lưu câu trả lời xong mới trả ID thật; gắn vào tin nhắn
+              // để nút đánh giá hữu ích/không hữu ích gọi đúng bản ghi.
+              const savedId = parsed.id;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMessageId ? { ...m, serverId: savedId } : m,
+                ),
+              );
               return;
             }
             if (parsed.type === 'sources') {

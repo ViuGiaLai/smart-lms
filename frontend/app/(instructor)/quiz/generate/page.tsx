@@ -74,11 +74,18 @@ export default function AIQuizGeneratePage() {
       try {
         const res = await instructorApi.getCourses();
         if (res.data?.data && res.data.data.length > 0) {
-          const mapped: { id: string; title: string; description: string }[] = res.data.data.map((c: any) => ({
-            id: String(c.id),
-            title: c.title,
-            description: c.shortDescription || c.description || '',
-          }));
+          const seenCourseTitles = new Set<string>();
+          const mapped: { id: string; title: string; description: string }[] = res.data.data
+            .map((c: any) => ({
+              id: String(c.id),
+              title: c.title,
+              description: c.shortDescription || c.description || '',
+            }))
+            .filter((c: { id: string; title: string; description: string }) => {
+              if (seenCourseTitles.has(c.title)) return false;
+              seenCourseTitles.add(c.title);
+              return true;
+            });
           setCoursesList(mapped);
           const requestedCourseId =
             typeof window !== 'undefined'

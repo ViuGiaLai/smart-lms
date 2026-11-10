@@ -1,0 +1,40 @@
+﻿id,title,has_material,has_transcript,has_enrollment,reason
+3,Xây dựng Ứng dụng Web Hiện đại với Next.js 14 & Tailwind CSS,False,False,False,không có học liệu/bài giảng thật
+4,Kiến trúc Hệ thống Cloud & Triển khai DevOps Thực chiến,False,False,False,không có học liệu/bài giảng thật
+31,Tiếng Anh A2 – Ngữ pháp nền tảng,False,False,False,không có học liệu/bài giảng thật
+32,Tiếng Nhật N5 – Nhập môn,False,False,False,không có học liệu/bài giảng thật
+33,Python cơ bản cho người mới,False,False,False,không có học liệu/bài giảng thật
+34,"Web Frontend – HTML, CSS và JavaScript",False,False,False,không có học liệu/bài giảng thật
+35,SQL và cơ sở dữ liệu quan hệ,False,False,False,không có học liệu/bài giảng thật
+37,Giải tích 1 – Giới hạn và đạo hàm,False,False,False,không có học liệu/bài giảng thật
+38,Kinh tế vi mô – Cung cầu và thị trường,False,False,False,không có học liệu/bài giảng thật
+39,Nhập môn Luật học – Hệ thống pháp luật Việt Nam,False,False,False,không có học liệu/bài giảng thật
+40,Kế toán tài chính – Đọc báo cáo tài chính,False,False,False,không có học liệu/bài giảng thật
+41,Excel từ cơ bản đến phân tích dữ liệu,False,False,False,không có học liệu/bài giảng thật
+42,Digital Marketing nền tảng,False,False,False,không có học liệu/bài giảng thật
+43,Quản lý dự án Agile và Scrum,False,False,False,không có học liệu/bài giảng thật
+44,Quản lý tài chính cá nhân,False,False,False,không có học liệu/bài giảng thật
+45,Tư duy phản biện và giải quyết vấn đề,False,False,False,không có học liệu/bài giảng thật
+46,Thiên văn học nhập môn,False,False,False,không có học liệu/bài giảng thật
+47,Môi trường và biến đổi khí hậu,False,False,False,không có học liệu/bài giảng thật
+48,Nhạc lý cơ bản,False,False,False,không có học liệu/bài giảng thật
+49,Lịch sử mỹ thuật nhập môn,False,False,False,không có học liệu/bài giảng thật
+50,Nhiếp ảnh cơ bản,False,False,False,không có học liệu/bài giảng thật
+51,Tiếng Trung HSK 1 – Nhập môn,False,False,False,không có học liệu/bài giảng thật
+52,Tiếng Hàn TOPIK 1 – Hangul và mẫu câu đầu tiên,False,False,False,không có học liệu/bài giảng thật
+53,Tiếng Pháp A1 – Nhập môn,False,False,False,không có học liệu/bài giảng thật
+54,Thiết kế đồ hoạ nền tảng,False,False,False,không có học liệu/bài giảng thật
+55,Tài chính doanh nghiệp nhập môn,False,False,False,không có học liệu/bài giảng thật
+56,Marketing căn bản và nghiên cứu thị trường,False,False,False,không có học liệu/bài giảng thật
+57,Quản trị dự án công nghệ,False,False,False,không có học liệu/bài giảng thật
+60,Giao tiếp và Thuyết trình hiệu quả,False,False,False,không có học liệu/bài giảng thật
+61,CNTT nhập môn: hệ thống thông tin,False,False,False,không có học liệu/bài giảng thật
+63,Khoa học ứng dụng: từ thí nghiệm đến sản phẩm,False,False,False,không có học liệu/bài giảng thật
+64,Kinh doanh và khởi nghiệp căn bản,False,False,False,không có học liệu/bài giảng thật
+1,Lập trình Python Nâng cao & Ứng dụng Trí tuệ Nhân tạo,False,True,True,
+2,Thiết kế RESTful API Chuẩn Quốc tế với FastAPI & PostgreSQL,False,False,True,có học viên đã ghi danh — giữ nguyên
+14,ZZ AI Tutor nâng cao,False,True,False,
+36,Nhập môn AI và Machine Learning,False,False,True,có học viên đã ghi danh — giữ nguyên
+62,Kỹ thuật cơ sở và vật liệu,False,True,False,
+80,Thiết kế Website thương mại điện tử với React.js,True,True,True,
+81,Phân tích và trực quan hóa dữ liệu với Microsoft Power BI,True,True,True,

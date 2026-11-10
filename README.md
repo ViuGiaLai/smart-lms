@@ -1,52 +1,71 @@
-# 🎓 Smart LMS (Hệ thống Quản lý Đào tạo Trực tuyến với Trợ lý Gia sư AI)
+# Smart LMS — Hệ thống Quản lý Đào tạo Trực tuyến với Trợ lý Gia sư AI
 
-Dự án nghiên cứu và phát triển nền tảng học tập trực tuyến thông minh (Smart LMS) tích hợp Trợ lý Gia sư ảo theo ngữ cảnh (Contextual AI Tutor) và bộ công cụ tự động sinh đề thi trắc nghiệm (AI Quiz Generator) bám sát tài liệu bài giảng.
+Nền tảng học tập trực tuyến tích hợp **Gia sư AI theo ngữ cảnh bài học** (Lesson-bounded RAG), **sinh đề trắc nghiệm** và **chấm tự luận theo rubric** dựa trên tài liệu của đúng bài giảng.
 
----
-
-## 🏛️ Kiến trúc Hệ thống
-
-- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, shadcn/ui, TanStack Query, Lucide icons.
-- **Backend Core**: Python 3.11+ FastAPI (Asynchronous), SQLAlchemy 2.0 Async, Alembic, JWT Authentication (RBAC).
-- **AI Service Engine**: FastAPI, LangChain, Google Gemini API / OpenAI, Whisper (Speech-to-Text), Pydantic Structured Outputs.
-- **Database & Vector Store**: PostgreSQL 16 tích hợp extension `pgvector` (lưu trữ đồng nhất dữ liệu quan hệ và vector embeddings).
-- **Cache & Realtime**: Redis, SSE (Server-Sent Events) streaming cho AI Chat.
+> Tài liệu mô tả kỹ thuật chi tiết: [`Smart_LMS.md`](./Smart_LMS.md)
+> Phân tích thuyết minh và hướng triển khai: [`PHAN_TICH_THUYET_MINH_VA_HUONG_TRIEN_KHAI.md`](./PHAN_TICH_THUYET_MINH_VA_HUONG_TRIEN_KHAI.md)
+> Hướng dẫn chạy: [`HUONG_DAN_CHAY.md`](./HUONG_DAN_CHAY.md)
 
 ---
 
-## 🚀 HƯỚNG DẪN KHỞI CHẠY (Chi tiết xem tại [HUONG_DAN_CHAY.md](./HUONG_DAN_CHAY.md))
+## Kiến trúc
 
-### Cách 1: Khởi chạy bằng Docker Compose (Khuyên dùng)
+- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS, Radix/shadcn, TanStack Query.
+- **Backend**: Python FastAPI, SQLAlchemy 2.0 async, Alembic, JWT + phân quyền 3 vai trò.
+- **AI Service**: FastAPI riêng, gọi trực tiếp Google Generative AI SDK (Gemini), fallback Groq. **Không dùng LangChain/LlamaIndex trong pipeline.**
+- **Database & Vector Store**: PostgreSQL 16 + `pgvector` trên Supabase, vector 768 chiều, khoảng cách Cosine.
+- **Streaming**: SSE cho câu trả lời của Gia sư AI.
+- **Lưu trữ**: ảnh/thumbnail trên Cloudinary (`smart-lms/courses`), tài liệu/video trên Cloudflare R2 (signed URL 1 giờ).
 
-> ⚠️ **LƯU Ý:** Bạn cần bật ứng dụng **Docker Desktop** trên Windows trước, chờ biểu tượng cá voi chuyển sang **màu xanh lá cây (Running)** rồi mới chạy lệnh:
+---
+
+## Chạy hệ thống
+
+Chạy **3 service riêng**, không dùng Docker:
 
 ```powershell
-cd D:\all_my_project\smart-lms
+# Backend — cổng 8000
+cd backend
+.\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-# Khởi chạy toàn bộ hệ thống ở chế độ nền
-docker compose up -d
-```
+# AI Service — cổng 8001
+cd ai-service
+.\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8001
 
-- **Giao diện Web học tập:** `http://localhost:3000`
-- **Màn hình Học & Chat AI:** `http://localhost:3000/courses/1/learn`
-- **AI Sinh đề trắc nghiệm:** `http://localhost:3000/quiz/generate`
-- **Backend API Docs (Swagger):** `http://localhost:8000/api/v1/docs`
-- **AI Engine API Docs (Swagger):** khi chạy Docker, AI Service chỉ truy cập **nội bộ** từ Backend (không publish port 8001 ra host). Chạy AI Service trực tiếp (Cách 2 trong HUONG_DAN_CHAY.md) nếu cần mở `http://localhost:8001/docs`.
-
----
-
-### Cách 2: Khởi chạy trực tiếp Giao diện Web (Next.js)
-```powershell
-cd D:\all_my_project\smart-lms\frontend
-npm install
+# Frontend — cổng 3000
+cd frontend
 npm run dev
 ```
-Truy cập ngay vào `http://localhost:3000`.
+
+- Giao diện: `http://127.0.0.1:3000`
+- Backend API docs: `http://127.0.0.1:8000/api/v1/docs`
+- AI Service docs: `http://127.0.0.1:8001/docs`
+
+Cài đặt, biến môi trường, migration và script vận hành: xem [`HUONG_DAN_CHAY.md`](./HUONG_DAN_CHAY.md).
 
 ---
 
-## 🎯 Điểm nổi bật về Kỹ thuật
-1. **Lesson-Bounded RAG**: Chatbot giới hạn ngữ cảnh trong từng slide/bài học đang mở, trích dẫn số trang/thời gian, triệt tiêu ảo giác (Hallucination).
-2. **Pydantic Structured Output**: Tự động sinh trắc nghiệm với JSON schema chuẩn hóa 100%, chống lỗi cú pháp khi lưu DB.
-3. **SSE Real-time Streaming**: Trải nghiệm nhận câu trả lời dạng gõ máy chữ thời gian thực siêu mượt mà.
-4. **Evaluation Benchmark**: Kèm script `ai-service/evaluate_rag.py` tự động đo lường Hit Rate @ K và Latency cho báo cáo khoa học.
+## Điểm kỹ thuật chính
+
+1. **Lesson-bounded RAG**: chỉ tìm trong `document_chunks` của bài đang mở; lọc bằng chứng theo similarity + trùng từ khóa; không có bằng chứng thì từ chối thay vì suy đoán; khi có bằng chứng thì mở rộng ±1 chunk lân cận cùng tài liệu.
+2. **Trích dẫn nguồn**: trả `filename`, `document_title`, `start_seconds`/`end_seconds` cho phụ đề; `page` khi tài liệu PDF có metadata.
+3. **Structured Output**: sinh trắc nghiệm qua Pydantic schema + `response_mime_type=application/json`, backend chuẩn hóa lại 4 phương án và đáp án trước khi lưu.
+4. **SSE streaming**: backend chuyển tiếp từng dòng từ AI Service và lưu câu trả lời hoàn chỉnh vào `chat_messages`.
+5. **Kiểm soát chi phí AI**: hạn mức theo người/ngày (tutor 80, sinh đề 40, chấm bài 60), trả `429` + `Retry-After`; token ghi vào `ai_usage_logs` kèm `is_estimated`.
+6. **Đo lường**: `learning_events` theo lô, feedback hữu ích/không hữu ích cho câu trả lời AI, analytics giảng viên (`/instructor/analytics`) và admin.
+7. **Đánh giá RAG**: `ai-service/evaluate_rag_v2.py` đo Hit Rate, Context Precision, Citation Rate, Refusal Accuracy, Faithfulness proxy.
+
+Kết quả eval v2 trên bộ pilot 8 câu (05/11/2026): Hit Rate@4 100 %, Context Precision@4 55 %, Citation Rate 100 %, Refusal Accuracy 100 %, Faithfulness proxy 53,06 %. Đây là **benchmark kỹ thuật**, chưa phải đánh giá khoa học — xem [`ai-service/BENCHMARK_RAG_V2.md`](./ai-service/BENCHMARK_RAG_V2.md).
+
+---
+
+## Trạng thái dữ liệu
+
+Hệ thống **chưa có người dùng thật**. Dữ liệu hiện tại là seed/demo:
+
+- 10 tài khoản (2 admin, 5 giảng viên, 3 học viên), 42 khóa (7 published, 35 draft).
+- 595 chunk/119 bài, provenance 100 % (document 318, youtube_subtitle 267, transcript 10).
+- 3 học liệu tải lên ở 2 bài: 1 video `ready`, 2 tài liệu sai chủ đề đã bị cách ly (`failed`).
+- 0 đánh giá khóa học; 23 lượt gọi AI; 6 sự kiện học tập (gồm `login` test).
+
+Không dùng các số liệu này để tuyên bố "đã thử nghiệm với sinh viên" khi chưa chạy pilot thật.

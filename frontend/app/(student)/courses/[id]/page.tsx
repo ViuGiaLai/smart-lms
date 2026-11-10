@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
@@ -21,9 +21,14 @@ import {
   Share2,
   Eye,
   GraduationCap,
+  MessageSquare,
+  Trash2,
+  Pencil,
+  Send,
 } from 'lucide-react';
 import { coursesApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import type { CourseReviewItem, CourseReviewsPayload } from '@/types';
 
 interface LessonDetail {
   id: string | number;
@@ -41,6 +46,63 @@ function formatLessonDuration(lesson: LessonDetail): string {
     return minutes > 0 ? `${minutes} phút` : '0 phút';
   }
   return lesson.duration || 'Chưa cập nhật';
+}
+
+function formatReviewDate(value?: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function StarRow({
+  value,
+  size = 'w-4 h-4',
+  interactive = false,
+  hoverValue = 0,
+  onSelect,
+  onHover,
+  label,
+}: {
+  value: number;
+  size?: string;
+  interactive?: boolean;
+  hoverValue?: number;
+  onSelect?: (rating: number) => void;
+  onHover?: (rating: number) => void;
+  label?: string;
+}) {
+  const active = hoverValue || value;
+  return (
+    <div
+      className={`flex items-center gap-0.5 ${interactive ? '' : 'pointer-events-none'}`}
+      role={interactive ? 'radiogroup' : undefined}
+      aria-label={label}
+      onMouseLeave={() => interactive && onHover?.(0)}
+    >
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={!interactive}
+          role={interactive ? 'radio' : undefined}
+          aria-checked={interactive ? value === star : undefined}
+          aria-label={interactive ? `${star} sao` : undefined}
+          onClick={() => interactive && onSelect?.(star)}
+          onMouseEnter={() => interactive && onHover?.(star)}
+          className={interactive ? 'p-0.5 rounded transition hover:scale-110' : 'p-0'}
+        >
+          <Star
+            className={`${size} ${
+              star <= active
+                ? 'fill-amber-400 text-amber-400'
+                : 'fill-transparent text-stone-300'
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  );
 }
 
 interface CourseDetail {
@@ -62,6 +124,7 @@ interface CourseDetail {
   };
   level?: string;
   rating?: number;
+  totalReviews?: number;
   outcomes?: string[];
   prerequisites?: string[];
   lessons?: LessonDetail[];
@@ -77,8 +140,22 @@ export default function CourseDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [enrollmentLoading, setEnrollmentLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [enrollError, setEnrollError] = useState('');
+
+  // Đánh giá khóa học
+  const [reviewsData, setReviewsData] = useState<CourseReviewsPayload | null>(null);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState('');
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewHover, setReviewHover] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewFormError, setReviewFormError] = useState('');
+  const [reviewNotice, setReviewNotice] = useState('');
+  const [reviewDeleting, setReviewDeleting] = useState(false);
 
   const isOwner = Boolean(
     currentUser?.id &&
@@ -90,8 +167,12 @@ export default function CourseDetailPage() {
 
   // Học viên phải có bản ghi ghi danh thì mới được ghi tiến độ / nhận chứng chỉ.
   useEffect(() => {
-    if (!isStudent) return;
+    if (!isStudent) {
+      setEnrollmentLoading(false);
+      return;
+    }
     let isMounted = true;
+    setEnrollmentLoading(true);
     coursesApi
       .getEnrolled()
       .then((res) => {
@@ -103,6 +184,9 @@ export default function CourseDetailPage() {
       })
       .catch(() => {
         // Không chặn trang nếu không đọc được trạng thái ghi danh.
+      })
+      .finally(() => {
+        if (isMounted) setEnrollmentLoading(false);
       });
     return () => {
       isMounted = false;
@@ -158,6 +242,7 @@ export default function CourseDetailPage() {
             category: apiCourse.category || { name: 'Chưa phân loại' },
             level: apiCourse.level || 'Chưa phân loại',
             rating: apiCourse.rating ?? undefined,
+            totalReviews: apiCourse.totalReviews ?? 0,
             outcomes: apiCourse.outcomes || [],
             prerequisites: apiCourse.prerequisites || [],
             lessons: apiCourse.lessons || [],
@@ -176,6 +261,101 @@ export default function CourseDetailPage() {
       isMounted = false;
     };
   }, [courseId]);
+
+  const reviewsCourseId = course?.id;
+
+  const loadReviews = useCallback(
+    async (pageNumber = 1, append = false) => {
+      if (!reviewsCourseId) return;
+      setReviewsLoading(true);
+      setReviewsError('');
+      try {
+        const res = await coursesApi.getReviews(reviewsCourseId, { page: pageNumber, limit: 10 });
+        const payload = res.data?.data as CourseReviewsPayload | undefined;
+        if (!payload) {
+          setReviewsError('Không đọc được dữ liệu đánh giá.');
+          return;
+        }
+        setReviewPage(pageNumber);
+        setReviewsData((prev) =>
+          append && prev
+            ? { ...payload, items: [...prev.items, ...payload.items] }
+            : payload
+        );
+        if (pageNumber === 1) {
+          setReviewRating(payload.myReview?.rating ?? 0);
+          setReviewComment(payload.myReview?.comment ?? '');
+          setCourse((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  rating: payload.summary.totalReviews > 0 ? payload.summary.averageRating : undefined,
+                  totalReviews: payload.summary.totalReviews,
+                }
+              : prev
+          );
+        }
+      } catch {
+        setReviewsError('Không tải được đánh giá của khóa học. Vui lòng thử lại.');
+      } finally {
+        setReviewsLoading(false);
+      }
+    },
+    [reviewsCourseId]
+  );
+
+  // Tải lại khi đổi khóa học hoặc khi trạng thái đăng nhập thay đổi (để biết đánh giá của tôi).
+  useEffect(() => {
+    void loadReviews(1, false);
+  }, [loadReviews, currentUser?.id]);
+
+  const handleSubmitReview = async () => {
+    if (!course) return;
+    setReviewFormError('');
+    setReviewNotice('');
+    if (!currentUser) {
+      router.push('/login');
+      return;
+    }
+    if (reviewRating < 1 || reviewRating > 5) {
+      setReviewFormError('Vui lòng chọn số sao trước khi gửi đánh giá.');
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      await coursesApi.submitReview(course.id, {
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+      });
+      setReviewNotice('Đã lưu đánh giá của bạn. Cảm ơn phản hồi!');
+      await loadReviews(1, false);
+    } catch (err: any) {
+      setReviewFormError(
+        err?.response?.data?.detail || 'Không gửi được đánh giá. Vui lòng thử lại.'
+      );
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  const handleDeleteReview = async (review: CourseReviewItem) => {
+    if (!course) return;
+    if (typeof window !== 'undefined' && !window.confirm('Xóa đánh giá này?')) return;
+    setReviewDeleting(true);
+    setReviewFormError('');
+    setReviewNotice('');
+    try {
+      await coursesApi.deleteReview(course.id, review.id);
+      setReviewRating(0);
+      setReviewComment('');
+      setReviewNotice('Đã xóa đánh giá.');
+      await loadReviews(1, false);
+    } catch (err: any) {
+      setReviewFormError(err?.response?.data?.detail || 'Không xóa được đánh giá.');
+    } finally {
+      setReviewDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -202,6 +382,14 @@ export default function CourseDetailPage() {
   }
 
   const firstLessonId = course.lessons && course.lessons.length > 0 ? course.lessons[0].id : '1';
+
+  const reviewSummary = reviewsData?.summary;
+  const reviewAverage = reviewSummary?.totalReviews
+    ? reviewSummary.averageRating
+    : course.rating || 0;
+  const reviewTotal = reviewSummary?.totalReviews ?? course.totalReviews ?? 0;
+  const reviewItems = reviewsData?.items ?? [];
+  const myReview = reviewsData?.myReview ?? null;
 
   return (
     <div className="min-h-screen bg-stone-50 font-sans pb-36 md:pb-16">
@@ -272,6 +460,9 @@ export default function CourseDetailPage() {
                   <div className="flex items-center gap-1.5 text-amber-600 font-bold">
                     <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
                     <span>{course.rating.toFixed(1)} / 5.0</span>
+                    {course.totalReviews ? (
+                      <span className="text-stone-400 font-medium">({course.totalReviews})</span>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5 text-stone-400">
@@ -532,6 +723,298 @@ export default function CourseDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* ── Đánh giá & nhận xét khóa học ── */}
+        <section className="bg-white rounded-lg p-6 sm:p-8 border border-stone-200/90 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-stone-100 pb-5">
+            <div>
+              <h2 className="text-base font-semibold text-stone-900 uppercase tracking-wider flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-brand-600" />
+                Đánh giá &amp; nhận xét
+              </h2>
+              <p className="text-xs text-stone-500 mt-1">
+                Chia sẻ trải nghiệm học tập để giúp học viên khác chọn đúng khóa học.
+                Chỉ học viên đã ghi danh mới có thể đánh giá.
+              </p>
+            </div>
+            <div className="flex items-center gap-4 sm:text-right shrink-0">
+              <div>
+                <div className="flex items-baseline gap-1 sm:justify-end">
+                  <span className="text-3xl font-semibold text-stone-900">
+                    {reviewAverage ? reviewAverage.toFixed(1) : '—'}
+                  </span>
+                  <span className="text-xs text-stone-500">/ 5</span>
+                </div>
+                <div className="sm:flex sm:justify-end mt-1">
+                  <StarRow value={Math.round(reviewAverage)} size="w-3.5 h-3.5" />
+                </div>
+                <p className="text-[11px] text-stone-500 mt-1">
+                  {reviewTotal > 0 ? `${reviewTotal} lượt đánh giá` : 'Chưa có đánh giá'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Cột trái: phân bố sao + form đánh giá */}
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                  Phân bố số sao
+                </p>
+                {[5, 4, 3, 2, 1].map((star) => {
+                  const count =
+                    reviewSummary?.distribution?.[
+                      String(star) as '1' | '2' | '3' | '4' | '5'
+                    ] ?? 0;
+                  const percent = reviewTotal ? Math.round((count / reviewTotal) * 100) : 0;
+                  return (
+                    <div key={star} className="flex items-center gap-2 text-[11px] text-stone-500">
+                      <span className="w-3 text-right font-semibold text-stone-600">{star}</span>
+                      <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                      <div className="flex-1 h-1.5 rounded-full bg-stone-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-amber-400 transition-all"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                      <span className="w-8 text-right tabular-nums">{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-lg border border-stone-200 bg-stone-50/60 p-4 space-y-3">
+                {!currentUser ? (
+                  <>
+                    <p className="text-xs font-semibold text-stone-800">Bạn đã học khóa này?</p>
+                    <p className="text-[11px] text-stone-500 leading-relaxed">
+                      Đăng nhập bằng tài khoản học viên đã ghi danh để gửi đánh giá.
+                    </p>
+                    <Link
+                      href={`/login?next=${encodeURIComponent(`/courses/${course.id}`)}`}
+                      className="inline-flex items-center justify-center gap-1.5 w-full rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold py-2.5 transition"
+                    >
+                      Đăng nhập để đánh giá
+                    </Link>
+                  </>
+                ) : !isStudent ? (
+                  <p className="text-[11px] text-stone-500 leading-relaxed">
+                    Tài khoản giảng viên/quản trị viên không gửi đánh giá khóa học. Bạn vẫn có thể
+                    kiểm duyệt và xóa nhận xét không phù hợp bên cạnh.
+                  </p>
+                ) : enrollmentLoading ? (
+                  <p className="text-[11px] text-stone-500">Đang kiểm tra trạng thái ghi danh...</p>
+                ) : !isEnrolled ? (
+                  <>
+                    <p className="text-xs font-semibold text-stone-800">Chưa thể đánh giá</p>
+                    <p className="text-[11px] text-stone-500 leading-relaxed">
+                      Bạn cần ghi danh khóa học trước khi gửi đánh giá.
+                    </p>
+                  </>
+                ) : (
+                  <form
+                    className="space-y-3"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleSubmitReview();
+                    }}
+                  >
+                    <div>
+                      <p className="text-xs font-semibold text-stone-800">
+                        {myReview ? 'Đánh giá của bạn' : 'Viết đánh giá'}
+                      </p>
+                      <p className="text-[11px] text-stone-500 mt-0.5">
+                        {reviewRating > 0 ? `Bạn chọn ${reviewRating} sao` : 'Chọn số sao để bắt đầu'}
+                      </p>
+                      <div className="mt-2">
+                        <StarRow
+                          value={reviewRating}
+                          hoverValue={reviewHover}
+                          interactive
+                          size="w-7 h-7"
+                          onSelect={setReviewRating}
+                          onHover={setReviewHover}
+                          label="Chọn số sao đánh giá"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="review-comment"
+                        className="text-[11px] font-semibold text-stone-600"
+                      >
+                        Nhận xét (không bắt buộc)
+                      </label>
+                      <textarea
+                        id="review-comment"
+                        value={reviewComment}
+                        onChange={(event) => setReviewComment(event.target.value)}
+                        maxLength={2000}
+                        rows={4}
+                        placeholder="Điều bạn thấy hữu ích, nội dung bài giảng, giảng viên..."
+                        className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 resize-y"
+                      />
+                      <p className="text-[10px] text-stone-400 text-right mt-0.5">
+                        {reviewComment.length}/2000
+                      </p>
+                    </div>
+
+                    {reviewFormError && (
+                      <p role="alert" className="text-[11px] font-medium text-rose-600">
+                        {reviewFormError}
+                      </p>
+                    )}
+                    {reviewNotice && (
+                      <p role="status" className="text-[11px] font-medium text-emerald-700">
+                        {reviewNotice}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="submit"
+                        disabled={reviewSubmitting || reviewRating < 1}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold py-2.5 transition"
+                      >
+                        {myReview ? <Pencil className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+                        {reviewSubmitting
+                          ? 'Đang lưu...'
+                          : myReview
+                            ? 'Cập nhật đánh giá'
+                            : 'Gửi đánh giá'}
+                      </button>
+                      {myReview && (
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteReview(myReview)}
+                          disabled={reviewDeleting}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-stone-300 bg-white hover:bg-rose-50 hover:border-rose-200 text-stone-600 hover:text-rose-600 disabled:opacity-50 text-xs font-bold px-3 py-2.5 transition"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Xóa
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+
+            {/* Cột phải: danh sách nhận xét */}
+            <div className="lg:col-span-2 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold text-stone-500 uppercase tracking-wider">
+                  Nhận xét từ học viên ({reviewTotal})
+                </p>
+              </div>
+
+              {reviewsLoading && reviewItems.length === 0 && (
+                <div className="space-y-3">
+                  {[1, 2].map((item) => (
+                    <div key={item} className="animate-pulse rounded-lg border border-stone-200 p-4 space-y-2">
+                      <div className="h-3 w-32 rounded bg-stone-200" />
+                      <div className="h-3 w-full rounded bg-stone-100" />
+                      <div className="h-3 w-3/4 rounded bg-stone-100" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {reviewsError && (
+                <p role="alert" className="text-[11px] text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+                  {reviewsError}
+                </p>
+              )}
+
+              {!reviewsLoading && reviewItems.length === 0 && !reviewsError && (
+                <div className="p-8 rounded-lg bg-stone-50 border border-stone-200 text-center space-y-2">
+                  <MessageSquare className="w-8 h-8 text-stone-400 mx-auto" />
+                  <p className="text-sm font-semibold text-stone-700">Chưa có nhận xét nào</p>
+                  <p className="text-xs text-stone-500">
+                    Hãy là học viên đầu tiên chia sẻ trải nghiệm về khóa học này.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {reviewItems.map((item) => {
+                  const initial = (item.user?.fullName || 'H').trim().charAt(0).toUpperCase();
+                  const canDelete = item.isMine || isAdmin;
+                  return (
+                    <article
+                      key={item.id}
+                      className={`rounded-lg border p-4 space-y-2 ${
+                        item.isMine
+                          ? 'border-brand-200 bg-brand-50/40'
+                          : 'border-stone-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-full bg-brand-100 text-brand-700 text-xs font-bold flex items-center justify-center shrink-0">
+                            {initial}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-xs font-bold text-stone-800 truncate">
+                                {item.user?.fullName || 'Học viên'}
+                              </p>
+                              {item.isMine && (
+                                <span className="text-[10px] font-semibold text-brand-700 bg-brand-100 rounded px-1.5 py-0.5">
+                                  Của bạn
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <StarRow value={item.rating} size="w-3 h-3" />
+                              <span className="text-[10px] text-stone-400">
+                                {formatReviewDate(item.updatedAt || item.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteReview(item)}
+                            disabled={reviewDeleting}
+                            title="Xóa đánh giá"
+                            aria-label="Xóa đánh giá"
+                            className="p-1.5 rounded-md text-stone-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 transition shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {item.comment ? (
+                        <p className="text-xs text-stone-700 leading-relaxed whitespace-pre-line pl-11">
+                          {item.comment}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-stone-400 italic pl-11">
+                          Học viên chỉ chấm điểm, không để lại nhận xét.
+                        </p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+
+              {reviewsData && reviewsData.totalPages > reviewPage && (
+                <button
+                  type="button"
+                  onClick={() => void loadReviews(reviewPage + 1, true)}
+                  disabled={reviewsLoading}
+                  className="w-full rounded-lg border border-stone-300 bg-white hover:bg-stone-50 disabled:opacity-50 text-xs font-bold text-stone-700 py-2.5 transition"
+                >
+                  {reviewsLoading ? 'Đang tải...' : 'Xem thêm đánh giá'}
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
       </main>
 
       {/* ── Mobile Sticky Bottom Enrollment Bar ── */}

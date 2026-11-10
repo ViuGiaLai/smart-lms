@@ -26,7 +26,38 @@ type ServiceStatus = 'online' | 'offline';
 interface Stats { totalUsers: number; totalStudents: number; totalInstructors: number; totalCourses: number; publishedCourses: number; totalLessons: number; totalQuizSubmissions: number; totalIndexedChunks: number }
 interface UserItem { id: string; name: string; email: string; role: string; isActive: boolean; createdAt: string }
 interface CourseItem { id: string; title: string; instructor: { fullName: string }; level: string; totalLessons: number; status: 'draft' | 'published' | 'archived' }
-interface Monitoring { backend: { status: ServiceStatus; version?: string }; database: { status: ServiceStatus; vectorChunks: number; indexedLessons: number }; aiService: { status: ServiceStatus; provider?: string | null; model?: string | null; version?: string | null } }
+interface UsageByFeature { feature: string; tokens: number; requests: number }
+interface UsageSummary {
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  requests: number;
+  last7DaysTokens: number;
+  /** Tỉ lệ 0–1 số lần gọi không có usage metadata thật, phải ước lượng. */
+  estimatedShare: number;
+  byFeature: UsageByFeature[];
+}
+interface Monitoring {
+  backend: { status: ServiceStatus; version?: string };
+  database: { status: ServiceStatus; vectorChunks: number; indexedLessons: number };
+  aiService: { status: ServiceStatus; provider?: string | null; model?: string | null; version?: string | null };
+  usage?: UsageSummary;
+}
+
+const FEATURE_LABELS: Record<string, string> = {
+  tutor: 'Gia sư AI',
+  quiz: 'Sinh đề trắc nghiệm',
+  grader: 'Chấm bài tự luận',
+  summarizer: 'Tóm tắt bài giảng',
+  discovery: 'Khám phá học liệu',
+};
+
+function formatTokens(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(Math.round(value));
+}
 
 const emptyStats: Stats = { totalUsers: 0, totalStudents: 0, totalInstructors: 0, totalCourses: 0, publishedCourses: 0, totalLessons: 0, totalQuizSubmissions: 0, totalIndexedChunks: 0 };
 
@@ -334,6 +365,10 @@ function AiPanel({ monitoring }: { monitoring: Monitoring | null }) {
     );
   }
   const services = [[Server, 'Backend API', monitoring.backend.status, `Phiên bản ${monitoring.backend.version || 'không xác định'}`], [Database, 'PostgreSQL + pgvector', monitoring.database.status, `${monitoring.database.vectorChunks} đoạn vector · ${monitoring.database.indexedLessons} bài học đã lập chỉ mục`], [Bot, 'AI Service', monitoring.aiService.status, monitoring.aiService.status === 'online' ? `${monitoring.aiService.provider || 'AI'} · ${monitoring.aiService.model || 'mô hình không công bố'}` : 'Không nhận được phản hồi từ AI Service']] as const;
+  const usage = monitoring.usage;
+  const featureRows = usage?.byFeature ?? [];
+  const maxFeatureTokens = featureRows.reduce((max, row) => Math.max(max, row.tokens), 0);
+  const estimatedPercent = Math.round((usage?.estimatedShare ?? 0) * 100);
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-3">
@@ -352,6 +387,79 @@ function AiPanel({ monitoring }: { monitoring: Monitoring | null }) {
           </Card>
         ))}
       </div>
+      <Card>
+        <CardContent className="space-y-5 p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-primary" />
+              <div>
+                <h2 className="font-bold text-foreground">Lượng token AI đã dùng</h2>
+                <p className="text-xs text-muted-foreground">
+                  Số liệu ghi tại bảng <code className="rounded bg-muted px-1 py-0.5 text-[11px]">ai_usage_logs</code> sau mỗi lượt gọi mô hình.
+                </p>
+              </div>
+            </div>
+            <Badge variant="secondary" className="text-[11px] font-semibold">
+              {usage?.requests ?? 0} lượt gọi
+            </Badge>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-xs font-medium text-muted-foreground">Tổng token</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">
+                {formatTokens(usage?.totalTokens ?? 0)}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {formatTokens(usage?.promptTokens ?? 0)} đầu vào · {formatTokens(usage?.completionTokens ?? 0)} đầu ra
+              </p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-xs font-medium text-muted-foreground">7 ngày gần nhất</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">
+                {formatTokens(usage?.last7DaysTokens ?? 0)}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Token tiêu thụ trong tuần</p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-xs font-medium text-muted-foreground">Số liệu ước lượng</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">{estimatedPercent}%</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {estimatedPercent > 0
+                  ? 'Phần còn lại là số thật do nhà cung cấp trả về'
+                  : 'Toàn bộ đều là số thật do nhà cung cấp trả về'}
+              </p>
+            </div>
+          </div>
+
+          {featureRows.length > 0 ? (
+            <div className="space-y-2.5">
+              {featureRows.map((row) => {
+                const width = maxFeatureTokens > 0 ? Math.max(4, Math.round((row.tokens / maxFeatureTokens) * 100)) : 0;
+                return (
+                  <div key={row.feature} className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="font-medium text-foreground">
+                        {FEATURE_LABELS[row.feature] || row.feature}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {formatTokens(row.tokens)} token · {row.requests} lượt
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="rounded-lg bg-muted/60 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+              Chưa có lượt gọi AI nào được ghi nhận. Số liệu sẽ xuất hiện sau khi học viên hỏi gia sư AI, giảng viên sinh đề hoặc chấm bài tự luận.
+            </p>
+          )}
+        </CardContent>
+      </Card>
       <Card>
         <CardContent className="flex gap-3 p-6">
           <ShieldCheck className="h-5 w-5 shrink-0 text-primary" />

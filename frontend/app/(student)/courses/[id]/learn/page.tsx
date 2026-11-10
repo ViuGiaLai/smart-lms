@@ -26,11 +26,13 @@ import {
   Eye,
   GraduationCap,
   Edit3,
+  RefreshCw,
 } from 'lucide-react';
 import VideoPlayer from '@/components/course/VideoPlayer';
 import ProgressBar from '@/components/course/ProgressBar';
 import ChatBox from '@/components/ai-tutor/ChatBox';
 import { coursesApi } from '@/lib/api';
+import { trackLearningEvent } from '@/lib/analytics';
 
 interface LessonItem {
   id: string | number;
@@ -46,6 +48,36 @@ interface LessonItem {
   subtitleLanguage?: string | null;
   description?: string;
   resources_url?: string;
+}
+
+/** Bản ghi trong bảng lesson_materials (file PDF/DOCX/PPTX/video đã lưu cloud). */
+interface LessonMaterialItem {
+  id: string | number;
+  kind: 'document' | 'video' | string;
+  title: string;
+  file_url?: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  status?: string;
+  error_message?: string | null;
+}
+
+function formatFileSize(bytes?: number | null): string {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Nhãn loại tệp thân thiện thay vì hiển thị MIME type thô. */
+function materialTypeLabel(material: LessonMaterialItem): string {
+  const name = (material.title || '').toLowerCase();
+  if (name.endsWith('.pdf')) return 'PDF';
+  if (name.endsWith('.docx') || name.endsWith('.doc')) return 'Word';
+  if (name.endsWith('.pptx') || name.endsWith('.ppt')) return 'Slide';
+  if (material.mime_type?.includes('pdf')) return 'PDF';
+  if (material.mime_type?.includes('word')) return 'Word';
+  if (material.mime_type?.includes('presentation')) return 'Slide';
+  return 'Tài liệu';
 }
 
 /** Rút gọn URL nguồn học liệu thành tên miền (giữ URL đầy đủ ở tooltip). */
@@ -93,7 +125,21 @@ export default function LearnPage() {
   const [progress, setProgress] = useState(0);
   const [lessonProgress, setLessonProgress] = useState(0);
   const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'materials' | 'quiz' | 'chat'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'materials' | 'quiz' | 'chat' | 'summary'>('overview');
+  const [summaryData, setSummaryData] = useState<
+    Record<
+      string,
+      {
+        summary: string;
+        key_points: string[];
+        flashcards: Array<{ question: string; answer: string; topic?: string }>;
+        keywords: string[];
+      }
+    >
+  >({});
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState('');
+  const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [mobilePlaylistOpen, setMobilePlaylistOpen] = useState(false);
@@ -101,6 +147,9 @@ export default function LearnPage() {
   const [inTabAnswers, setInTabAnswers] = useState<Record<number, string>>({});
   const [inTabSubmitted, setInTabSubmitted] = useState(false);
   const [courseQuizzes, setCourseQuizzes] = useState<any[]>([]);
+  const [lessonMaterials, setLessonMaterials] = useState<LessonMaterialItem[]>([]);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialsError, setMaterialsError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [completeState, setCompleteState] = useState<'idle' | 'saving' | 'error'>('idle');
   const [resourceNotice, setResourceNotice] = useState('');
@@ -238,9 +287,62 @@ export default function LearnPage() {
   const currentLesson =
     lessons.find((l) => String(l.id) === String(activeLessonId)) || lessons[0];
 
+  // Ghi nhận lượt mở bài học (chỉ học viên, tránh nhiễu số liệu bởi giảng viên).
+  const lastTrackedLessonRef = useRef('');
+  useEffect(() => {
+    if (isStaff || !resolvedCourseId || !currentLesson?.id) return;
+    const key = `${resolvedCourseId}:${currentLesson.id}`;
+    if (lastTrackedLessonRef.current === key) return;
+    lastTrackedLessonRef.current = key;
+    trackLearningEvent({
+      event_type: 'lesson_view',
+      course_id: resolvedCourseId,
+      lesson_id: currentLesson.id,
+    });
+  }, [resolvedCourseId, currentLesson?.id, isStaff]);
+
   const currentIndex = lessons.findIndex((l) => String(l.id) === String(activeLessonId));
   const hasNextLesson = currentIndex >= 0 && currentIndex < lessons.length - 1;
   const nextLessonId = hasNextLesson ? lessons[currentIndex + 1].id : null;
+
+  // Học liệu đính kèm thật từ bảng lesson_materials (PDF/DOCX/PPTX tải lên cloud).
+  // `resources_url` cũ chỉ là fallback cho dữ liệu trước khi có bảng học liệu.
+  useEffect(() => {
+    const lessonId = currentLesson?.id;
+    if (!resolvedCourseId || lessonId === undefined || lessonId === null) {
+      setLessonMaterials([]);
+      setMaterialsError('');
+      return;
+    }
+    let isMounted = true;
+    setMaterialsLoading(true);
+    setMaterialsError('');
+    coursesApi
+      .getLessonMaterials(resolvedCourseId, lessonId)
+      .then((res) => {
+        if (!isMounted) return;
+        const payload = res.data?.data ?? res.data;
+        const items: LessonMaterialItem[] = Array.isArray(payload) ? payload : [];
+        setLessonMaterials(items.filter((item) => item.kind !== 'video' && Boolean(item.file_url)));
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setLessonMaterials([]);
+        setMaterialsError('Không tải được danh sách học liệu của bài học.');
+        console.warn('Không tải được học liệu bài học:', err);
+      })
+      .finally(() => {
+        if (isMounted) setMaterialsLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [resolvedCourseId, currentLesson?.id]);
+
+  // `resources_url` là dữ liệu cũ; chỉ hiển thị khi không trùng tệp đã có trong lesson_materials.
+  const resourceUrl = currentLesson?.resources_url || '';
+  const showResourceFallback =
+    Boolean(resourceUrl) && !lessonMaterials.some((item) => item.file_url === resourceUrl);
 
   /**
    * Chọn đề ôn tập ĐÚNG bài học đang mở (đặc tả: quizzes.lesson_id).
@@ -343,7 +445,34 @@ export default function LearnPage() {
     setMobilePlaylistOpen(false);
     setShowFullTranscript(false);
     setShowFullDescription(false);
+    setSummaryError('');
+    setFlippedCards({});
   };
+
+  const handleFetchSummary = useCallback(
+    async (targetLessonId?: string | number) => {
+      const lid = String(targetLessonId || activeLessonId || currentLesson?.id || '');
+      if (!lid) return;
+      const targetCourseId = resolvedCourseId || courseId;
+      if (!targetCourseId) return;
+
+      setSummaryLoading(true);
+      setSummaryError('');
+      try {
+        const res = await coursesApi.summarizeLesson(targetCourseId, lid);
+        const result = res.data?.data || res.data;
+        setSummaryData((prev) => ({ ...prev, [lid]: result }));
+        setFlippedCards({});
+      } catch (err: any) {
+        setSummaryError(
+          err?.response?.data?.detail || 'Không thể tạo tóm tắt bằng AI. Vui lòng thử lại sau.'
+        );
+      } finally {
+        setSummaryLoading(false);
+      }
+    },
+    [activeLessonId, currentLesson, resolvedCourseId, courseId],
+  );
 
   // Đóng các drawer mobile bằng Esc và khóa cuộn nền khi đang mở.
   useEffect(() => {
@@ -686,6 +815,14 @@ export default function LearnPage() {
                 startSeconds={startSeconds}
                 seekRequest={seekRequest ?? undefined}
                 title={currentLesson.title}
+                onPlay={() => {
+                  if (isStaff || !resolvedCourseId) return;
+                  trackLearningEvent({
+                    event_type: 'video_play',
+                    course_id: resolvedCourseId,
+                    lesson_id: currentLesson.id,
+                  });
+                }}
                 onProgress={(p) => {
                   setLessonProgress((prev) => (p > prev ? p : prev));
                   persistLessonProgress(p);
@@ -702,6 +839,12 @@ export default function LearnPage() {
                   }
                   const dur = typeof currentLesson.duration === 'number' ? currentLesson.duration : 0;
                   if (!resolvedCourseId) return;
+                  trackLearningEvent({
+                    event_type: 'video_complete',
+                    course_id: resolvedCourseId,
+                    lesson_id: currentLesson.id,
+                    duration_seconds: dur,
+                  });
                   coursesApi.markLessonComplete(resolvedCourseId, String(currentLesson.id), dur).catch((err) => {
                     console.warn('Lỗi ghi nhận tiến độ vào PostgreSQL:', err);
                   });
@@ -830,6 +973,25 @@ export default function LearnPage() {
                   >
                     Quiz ôn tập
                   </button>
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === 'summary'}
+                    onClick={() => {
+                      setActiveTab('summary');
+                      const lid = String(currentLesson?.id || activeLessonId || '');
+                      if (lid && !summaryData[lid] && !summaryLoading) {
+                        void handleFetchSummary(lid);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition shrink-0 flex items-center gap-1.5 ${
+                      activeTab === 'summary'
+                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm'
+                        : 'text-purple-400 hover:text-purple-200'
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-300" />
+                    Tóm tắt &amp; Flashcards
+                  </button>
                   {/* Tab Chatbot trực tiếp trên Mobile */}
                   <button
                     role="tab"
@@ -941,11 +1103,66 @@ export default function LearnPage() {
 
                 {activeTab === 'materials' && (
                   <div className="space-y-3">
-                    <h3 className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">
-                      Học liệu &amp; Slide bài giảng đính kèm
-                    </h3>
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                        Học liệu &amp; Slide bài giảng đính kèm
+                      </h3>
+                      {materialsLoading && (
+                        <span className="text-[11px] text-stone-500">Đang tải...</span>
+                      )}
+                    </div>
 
-                    {currentLesson.resources_url ? (
+                    {lessonMaterials.map((material) => {
+                      const meta = [materialTypeLabel(material), formatFileSize(material.size_bytes)]
+                        .filter(Boolean)
+                        .join(' · ');
+                      return (
+                        <div
+                          key={material.id}
+                          className="p-2.5 rounded-lg bg-stone-950 border border-stone-800 flex items-center justify-between gap-3 hover:border-brand-500/40 transition group"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-brand-500/10 text-brand-400 flex items-center justify-center shrink-0">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <p
+                                className="text-xs font-bold text-white group-hover:text-brand-300 transition truncate"
+                                title={material.title}
+                              >
+                                {material.title}
+                              </p>
+                              <p className="text-[11px] text-stone-500 truncate">
+                                {meta ? `${meta} · Tài liệu đính kèm của bài giảng` : 'Tài liệu đính kèm của bài giảng'}
+                              </p>
+                            </div>
+                          </div>
+                          <a
+                            href={material.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => {
+                              if (isStaff || !resolvedCourseId || !currentLesson) return;
+                              trackLearningEvent({
+                                event_type: 'material_open',
+                                course_id: resolvedCourseId,
+                                lesson_id: currentLesson.id,
+                                metadata: {
+                                  material_id: material.id,
+                                  kind: material.kind,
+                                  title: material.title.slice(0, 160),
+                                },
+                              });
+                            }}
+                            className="text-xs text-brand-400 hover:text-white bg-brand-500/10 hover:bg-brand-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 shrink-0"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Mở tài liệu
+                          </a>
+                        </div>
+                      );
+                    })}
+
+                    {showResourceFallback ? (
                       <div className="p-2.5 rounded-lg bg-stone-950 border border-stone-800 flex items-center justify-between gap-3 hover:border-brand-500/40 transition group">
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="w-8 h-8 rounded-lg bg-brand-500/10 text-brand-400 flex items-center justify-center shrink-0">
@@ -954,18 +1171,18 @@ export default function LearnPage() {
                           <div className="min-w-0">
                             <p
                               className="text-xs font-bold text-white group-hover:text-brand-300 transition truncate"
-                              title={currentLesson.resources_url}
+                              title={resourceUrl}
                             >
-                              {sourceLabel(currentLesson.resources_url)}
+                              {sourceLabel(resourceUrl)}
                             </p>
                             <p className="text-[11px] text-stone-500 truncate">
                               Tài liệu học tập chính thức của bài giảng
                             </p>
                           </div>
                         </div>
-                        {currentLesson.resources_url.startsWith('http') ? (
+                        {resourceUrl.startsWith('http') ? (
                           <a
-                            href={currentLesson.resources_url}
+                            href={resourceUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs text-brand-400 hover:text-white bg-brand-500/10 hover:bg-brand-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 shrink-0"
@@ -977,7 +1194,7 @@ export default function LearnPage() {
                             type="button"
                             onClick={() =>
                               setResourceNotice(
-                                `Học liệu “${currentLesson.resources_url}” đã được số hóa và dùng cho Tra cứu AI RAG.`
+                                `Học liệu “${resourceUrl}” đã được số hóa và dùng cho Tra cứu AI RAG.`
                               )
                             }
                             className="text-xs text-brand-400 hover:text-white bg-brand-500/10 hover:bg-brand-600 px-3.5 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 shrink-0"
@@ -988,7 +1205,7 @@ export default function LearnPage() {
                       </div>
                     ) : null}
 
-                    {currentLesson.resources_url && resourceNotice && (
+                    {showResourceFallback && resourceNotice && (
                       <p
                         role="status"
                         className="text-[11px] leading-relaxed text-brand-300 bg-brand-500/10 border border-brand-500/20 rounded-lg px-3 py-2"
@@ -997,13 +1214,24 @@ export default function LearnPage() {
                       </p>
                     )}
 
-                    {!currentLesson.resources_url && (
-                      <div className="p-8 rounded-lg bg-stone-900/60 border border-stone-800 text-center space-y-2">
-                        <FileText className="w-8 h-8 text-stone-500 mx-auto" />
-                        <p className="text-sm font-semibold text-stone-300">Chưa có tài liệu đính kèm cho bài học này</p>
-                        <p className="text-xs text-stone-500">Giảng viên có thể tải lên slide bài giảng hoặc file PDF từ trang Quản lý bài học.</p>
-                      </div>
+                    {materialsError && (
+                      <p
+                        role="alert"
+                        className="text-[11px] leading-relaxed text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2"
+                      >
+                        {materialsError}
+                      </p>
                     )}
+
+                    {!materialsLoading &&
+                      lessonMaterials.length === 0 &&
+                      !showResourceFallback && (
+                        <div className="p-8 rounded-lg bg-stone-900/60 border border-stone-800 text-center space-y-2">
+                          <FileText className="w-8 h-8 text-stone-500 mx-auto" />
+                          <p className="text-sm font-semibold text-stone-300">Chưa có tài liệu đính kèm cho bài học này</p>
+                          <p className="text-xs text-stone-500">Giảng viên có thể tải lên slide bài giảng hoặc file PDF từ trang Quản lý bài học.</p>
+                        </div>
+                      )}
                   </div>
                 )}
 
@@ -1229,6 +1457,229 @@ export default function LearnPage() {
                           </Link>
                         )}
                       </div>
+                    </div>
+                  );
+                })()}
+
+                {activeTab === 'summary' && (() => {
+                  const currentLid = String(currentLesson?.id || activeLessonId || '');
+                  const currentSummary = summaryData[currentLid];
+
+                  return (
+                    <div className="space-y-5">
+                      {/* Tiêu đề & Công cụ tóm tắt */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-gradient-to-r from-purple-950/40 via-indigo-950/30 to-stone-900 border border-purple-800/30">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center shrink-0">
+                            <Sparkles className="w-5 h-5 text-amber-300" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                              Tóm tắt bài học &amp; Flashcards AI
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                Gemini Flash
+                              </span>
+                            </h3>
+                            <p className="text-[11px] text-stone-400">
+                              Được AI tự động trích xuất từ video transcript và tài liệu của bài học này.
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={summaryLoading}
+                          onClick={() => handleFetchSummary(currentLid)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition shadow-sm disabled:opacity-50"
+                        >
+                          {summaryLoading ? (
+                            <>
+                              <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                              <span>Đang phân tích...</span>
+                            </>
+                          ) : currentSummary ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>Tóm tắt lại</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>Tạo tóm tắt ngay</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Trạng thái lỗi */}
+                      {summaryError && (
+                        <div className="p-3.5 rounded-lg bg-red-950/30 border border-red-500/40 text-red-200 text-xs flex items-start justify-between gap-3">
+                          <p className="leading-relaxed">{summaryError}</p>
+                          <button
+                            type="button"
+                            onClick={() => handleFetchSummary(currentLid)}
+                            className="shrink-0 text-white font-bold underline hover:text-red-100"
+                          >
+                            Thử lại
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Trạng thái Loading */}
+                      {summaryLoading && (
+                        <div className="p-8 rounded-xl bg-stone-900/40 border border-stone-800 text-center space-y-3">
+                          <div className="w-10 h-10 mx-auto rounded-full bg-purple-500/10 border border-purple-500/30 flex items-center justify-center">
+                            <span className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                          <p className="text-xs font-semibold text-stone-200">
+                            AI đang đọc nội dung bài giảng và trích xuất kiến thức trọng tâm...
+                          </p>
+                          <p className="text-[11px] text-stone-500 max-w-md mx-auto">
+                            Quá trình này tổng hợp transcript video, slide bài giảng và cấu trúc thành các thẻ flashcard ghi nhớ.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Trạng thái Chưa có dữ liệu & Chưa load */}
+                      {!summaryLoading && !currentSummary && !summaryError && (
+                        <div className="p-8 rounded-xl bg-stone-900/40 border border-dashed border-stone-800 text-center space-y-3">
+                          <BookOpen className="w-9 h-9 text-purple-400/60 mx-auto" />
+                          <p className="text-xs font-semibold text-stone-300">
+                            Chưa có bản tóm tắt nào được tạo cho bài học này.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleFetchSummary(currentLid)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md transition"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Tạo tóm tắt &amp; Flashcards ôn tập bằng AI
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Nội dung kết quả tóm tắt */}
+                      {!summaryLoading && currentSummary && (
+                        <div className="space-y-6">
+                          {/* 1. Tóm tắt súc tích */}
+                          <div className="p-4 rounded-xl bg-purple-950/15 border border-purple-900/40 space-y-2">
+                            <h4 className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-2">
+                              <BookOpen className="w-4 h-4 text-purple-400" />
+                              Tóm tắt bài giảng
+                            </h4>
+                            <p className="text-xs sm:text-sm text-stone-200 leading-relaxed">
+                              {currentSummary.summary}
+                            </p>
+                          </div>
+
+                          {/* 2. Các điểm kiến thức cốt lõi */}
+                          {currentSummary.key_points && currentSummary.key_points.length > 0 && (
+                            <div className="p-4 rounded-xl bg-stone-900/60 border border-stone-800 space-y-3">
+                              <h4 className="text-xs font-bold text-stone-300 uppercase tracking-wider flex items-center gap-2">
+                                <CheckCircle className="w-4 h-4 text-emerald-400" />
+                                Điểm kiến thức cốt lõi ({currentSummary.key_points.length})
+                              </h4>
+                              <div className="grid grid-cols-1 gap-2">
+                                {currentSummary.key_points.map((point, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="p-2.5 rounded-lg bg-stone-950/80 border border-stone-800/80 flex items-start gap-2.5"
+                                  >
+                                    <span className="w-5 h-5 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                      {idx + 1}
+                                    </span>
+                                    <p className="text-xs text-stone-300 leading-relaxed">
+                                      {point}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 3. Flashcards ôn tập */}
+                          {currentSummary.flashcards && currentSummary.flashcards.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-xs font-bold text-stone-300 uppercase tracking-wider flex items-center gap-2">
+                                  <GraduationCap className="w-4 h-4 text-amber-400" />
+                                  Flashcards ôn tập nhanh ({currentSummary.flashcards.length})
+                                </h4>
+                                <span className="text-[11px] text-stone-500">
+                                  Bấm vào thẻ để lật xem đáp án
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {currentSummary.flashcards.map((fc, idx) => {
+                                  const isFlipped = !!flippedCards[idx];
+                                  return (
+                                    <div
+                                      key={idx}
+                                      onClick={() =>
+                                        setFlippedCards((prev) => ({
+                                          ...prev,
+                                          [idx]: !prev[idx],
+                                        }))
+                                      }
+                                      className={`cursor-pointer p-4 rounded-xl border transition-all duration-200 select-none flex flex-col justify-between min-h-[140px] ${
+                                        isFlipped
+                                          ? 'bg-emerald-950/20 border-emerald-500/40 shadow-sm'
+                                          : 'bg-stone-900/80 border-stone-800 hover:border-purple-500/50 hover:bg-stone-900'
+                                      }`}
+                                    >
+                                      <div>
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-stone-800 text-stone-400">
+                                            {fc.topic || `Thẻ #${idx + 1}`}
+                                          </span>
+                                          <span
+                                            className={`text-[10px] font-semibold ${
+                                              isFlipped ? 'text-emerald-400' : 'text-purple-400'
+                                            }`}
+                                          >
+                                            {isFlipped ? 'Đáp án (Click lật lại)' : 'Câu hỏi (Click xem đáp án)'}
+                                          </span>
+                                        </div>
+
+                                        <p className="text-xs sm:text-sm font-semibold text-white leading-relaxed">
+                                          {isFlipped ? fc.answer : fc.question}
+                                        </p>
+                                      </div>
+
+                                      <div className="pt-3 mt-3 border-t border-stone-800/60 flex items-center justify-between text-[11px] text-stone-500">
+                                        <span>{isFlipped ? '✅ Lời giải chi tiết' : '❓ Tự trả lời trước'}</span>
+                                        <span className="text-purple-400 text-[10px] font-bold">
+                                          {isFlipped ? 'Xem lại câu hỏi ↺' : 'Lật xem giải đáp ➔'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 4. Từ khóa trọng tâm */}
+                          {currentSummary.keywords && currentSummary.keywords.length > 0 && (
+                            <div className="p-3.5 rounded-xl bg-stone-900/40 border border-stone-800 space-y-2">
+                              <h4 className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">
+                                Từ khóa trọng tâm bài học
+                              </h4>
+                              <div className="flex flex-wrap gap-1.5">
+                                {currentSummary.keywords.map((kw, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="px-2.5 py-1 rounded-lg bg-stone-800/90 hover:bg-purple-900/30 text-stone-300 hover:text-purple-200 border border-stone-700/60 text-xs font-medium transition cursor-default"
+                                  >
+                                    #{kw}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

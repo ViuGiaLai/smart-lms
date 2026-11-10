@@ -18,6 +18,7 @@ import structlog
 import google.generativeai as genai
 
 from core.config import settings
+from core.usage import estimate_tokens, record_usage, usage_from_metadata
 from schemas.quiz_schema import QuizQuestion, QuizSet, DifficultyLevel
 from prompts.quiz_prompt import build_quiz_prompt
 
@@ -58,6 +59,7 @@ class QuizGenerator:
         bloom_level: Optional[str] = None,
         lesson_id: Optional[int] = None,
         language: str = "vi",
+        user_id: Optional[int] = None,
     ) -> QuizSet:
         """
         Sinh câu hỏi trắc nghiệm từ nội dung với cơ chế đa mô hình dự phòng (Cascading Multi-Model Fallback).
@@ -94,6 +96,8 @@ class QuizGenerator:
             content=content,
             num_questions=num_questions,
             difficulty=str(difficulty.value if hasattr(difficulty, "value") else difficulty),
+            user_id=user_id,
+            lesson_id=lesson_id,
         )
 
         # Parse và validate với Pydantic
@@ -113,6 +117,8 @@ class QuizGenerator:
         content: str,
         num_questions: int = 5,
         difficulty: str = "medium",
+        user_id: Optional[int] = None,
+        lesson_id: Optional[int] = None,
     ) -> str:
         """
         Gọi Gemini với cơ chế luân chuyển nhiều mô hình (Cascading Models).
@@ -153,6 +159,23 @@ class QuizGenerator:
                 )
                 if response and response.text and response.text.strip():
                     logger.info("Gemini generation succeeded with model", model=model_name)
+                    prompt_tokens, completion_tokens, total_tokens, is_real = usage_from_metadata(
+                        getattr(response, "usage_metadata", None)
+                    )
+                    if not is_real:
+                        prompt_tokens = estimate_tokens(prompt)
+                        completion_tokens = estimate_tokens(response.text)
+                        total_tokens = prompt_tokens + completion_tokens
+                    await record_usage(
+                        feature="quiz",
+                        model=model_name,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                        is_estimated=not is_real,
+                        user_id=user_id,
+                        lesson_id=lesson_id,
+                    )
                     return response.text
 
             except Exception as e:

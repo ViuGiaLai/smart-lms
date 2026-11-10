@@ -1,0 +1,7 @@
+lesson_id,lesson_title,question,expected_keywords,scope,notes
+186,,Vì sao cùng một lực nhưng ứng suất lại khác nhau?,diện tích;lực,in_scope,Mẫu câu có thể trả lời từ bài; thay bằng câu hỏi thật của lớp
+186,,Ứng suất được tính bằng công thức nào?,ứng suất;diện tích;lực,in_scope,
+187,,Bài giảng giải thích hiện tượng gì?,hiện tượng;giải thích,in_scope,
+233,,Tài liệu trình bày nội dung gì?,nội dung;tài liệu,in_scope,
+232,,Tài liệu hướng dẫn nội dung gì?,nội dung;hướng dẫn,in_scope,
+186,,Giá vàng hôm nay là bao nhiêu?,giá vàng,out_of_scope,Câu ngoài phạm vi bài giảng — kỳ vọng từ chối

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Optional
 
 import boto3
 from botocore.client import Config
@@ -49,6 +50,29 @@ async def store_object(key: str, content: bytes, content_type: str | None) -> st
     target.parent.mkdir(parents=True, exist_ok=True)
     await asyncio.to_thread(target.write_bytes, content)
     return f"{settings.API_PUBLIC_URL.rstrip('/')}/media/{key}"
+
+
+async def presign_download(key: str, expires_in: int | None = None) -> Optional[str]:
+    """Tạo URL tải có chữ ký cho một đối tượng trên R2.
+
+    Trả ``None`` khi R2 chưa cấu hình hoặc không ký được; nơi gọi sẽ dùng URL
+    công khai/đường dẫn nội bộ làm phương án dự phòng.
+    """
+    if not key or not r2_enabled():
+        return None
+    ttl = expires_in or settings.R2_SIGNED_URL_EXPIRE_SECONDS
+
+    def sign() -> str:
+        return _client().generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.R2_BUCKET, "Key": key},
+            ExpiresIn=max(60, int(ttl)),
+        )
+
+    try:
+        return await asyncio.to_thread(sign)
+    except Exception:
+        return None
 
 
 async def delete_object(key: str) -> None:

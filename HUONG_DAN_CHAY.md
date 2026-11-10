@@ -1,161 +1,216 @@
-# 🚀 HƯỚNG DẪN KHỞI CHẠY HỆ THỐNG SMART LMS
+# Hướng dẫn khởi chạy Smart LMS
 
-Hệ thống Quản lý Đào tạo Trực tuyến với Trợ lý Gia sư Thông minh (Smart LMS) hỗ trợ 2 cách khởi chạy:
-1. **Cách 1: Khởi chạy toàn bộ hệ thống bằng Docker (Khuyên dùng)**
-2. **Cách 2: Khởi chạy trực tiếp từng thành phần (Frontend, Backend, AI Engine)**
+Hệ thống chạy **3 service riêng**, không dùng Docker:
+
+| Service | Cổng | Thư mục |
+|---|---|---|
+| Frontend (Next.js 14) | `3000` | `frontend` |
+| Backend (FastAPI) | `8000` | `backend` |
+| AI Service (FastAPI) | `8001` | `ai-service` |
+
+Cơ sở dữ liệu là **PostgreSQL + pgvector trên Supabase (remote)**, không cần chạy PostgreSQL local. Redis là tùy chọn; nếu không có, backend vẫn chạy.
 
 ---
 
-## 📌 CÁCH 1: KHỞI CHẠY BẰNG DOCKER COMPOSE (ĐƠN GIẢN NHẤT)
+## 1. Chuẩn bị biến môi trường
 
-### Bước 1: Mở Docker Desktop
-> ⚠️ **LƯU Ý QUAN TRỌNG:** Trước khi gõ lệnh trong terminal, bạn **bắt buộc phải mở Docker Desktop trên Windows**:
-1. Bấm phím **Windows** (hoặc mở Start Menu), gõ tìm `Docker Desktop` và nhấp mở.
-2. Chờ khoảng **15 - 30 giây** cho đến khi góc dưới bên trái của cửa sổ Docker Desktop hiện biểu tượng **màu xanh lá cây (Docker Engine running)**.
-
-### Bước 2: Điền khóa Google Gemini API
-Mở tệp `ai-service\.env` (tại `D:\all_my_project\smart-lms\ai-service\.env`) và điền API key miễn phí của bạn:
+### `backend/.env`
 ```env
-GOOGLE_API_KEY=your_gemini_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-```
-*(Lấy API Key miễn phí tại: https://aistudio.google.com/app/apikey)*
+DATABASE_URL=postgresql+asyncpg://<user>:<password>@<host>:5432/<database>
+SECRET_KEY=<chuỗi bí mật>
+AI_SERVICE_URL=http://127.0.0.1:8001
+AI_SERVICE_INTERNAL_KEY=<khớp INTERNAL_API_KEY của AI service>
 
-### Bước 3: Chạy lệnh Docker Compose
-Mở PowerShell tại thư mục dự án và thực hiện:
-```powershell
-cd D:\all_my_project\smart-lms
+CLOUDINARY_CLOUD_NAME=<cloud name>
+CLOUDINARY_API_KEY=<api key>
+CLOUDINARY_API_SECRET=<api secret>
 
-# Khởi động toàn bộ các container (Postgres pgvector, Redis, Backend, AI Service, Frontend)
-docker compose up -d
+R2_ENDPOINT=<endpoint S3-compatible>
+R2_BUCKET=<bucket>
+R2_ACCESS_KEY_ID=<access key>
+R2_SECRET_ACCESS_KEY=<secret key>
+R2_PUBLIC_BASE_URL=<base url công khai>
+R2_SIGNED_URL_EXPIRE_SECONDS=3600
+
+# Hạn mức AI theo người/ngày (đặt 0 để tắt)
+AI_TUTOR_DAILY_LIMIT=80
+AI_QUIZ_DAILY_LIMIT=40
+AI_GRADING_DAILY_LIMIT=60
+
+# Tự chuyển học liệu kẹt queued/processing quá hạn sang failed khi khởi động
+MATERIAL_STUCK_MINUTES=45
 ```
 
-### Bước 4: Kiểm tra trạng thái
-```powershell
-docker compose ps
+### `ai-service/.env`
+```env
+DATABASE_URL=postgresql+asyncpg://<user>:<password>@<host>:5432/<database>
+GOOGLE_API_KEY=<Gemini API key>
+GEMINI_API_KEY=<Gemini API key>
+GROQ_API_KEY=<tùy chọn, dùng khi Gemini lỗi>
+INTERNAL_API_KEY=<khớp AI_SERVICE_INTERNAL_KEY của backend>
+
+RAG_CONTEXT_NEIGHBORS=1
+RAG_MAX_CONTEXT_CHUNKS=9
 ```
-Nếu muốn xem log hoạt động thời gian thực:
-```powershell
-docker compose logs -f
+
+### `frontend/.env.local`
+```env
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api/v1
 ```
 
 ---
 
-## 📌 CÁCH 2: KHỞI CHẠY TRỰC TIẾP TỪNG PHẦN (DEVELOPMENT MODE)
+## 2. Cài đặt lần đầu
 
-Nếu bạn muốn debug trực tiếp hoặc xem ngay giao diện Web:
-
-### 1. Khởi chạy Giao diện Frontend (Next.js 14)
-Máy tính của bạn đã có sẵn Node.js và npm. Mở một cửa sổ PowerShell:
 ```powershell
+# Backend
+cd D:\all_my_project\smart-lms\backend
+python -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m alembic upgrade head
+
+# AI Service
+cd D:\all_my_project\smart-lms\ai-service
+python -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# Frontend
 cd D:\all_my_project\smart-lms\frontend
-
-# Cài đặt các thư viện (chỉ cần chạy lần đầu)
 npm install
-
-# Khởi động máy chủ giao diện Web
-npm run dev
-```
-👉 Truy cập ngay vào: **`http://localhost:3000`**
-
----
-
-### 2. Khởi chạy Cơ sở dữ liệu (PostgreSQL + pgvector)
-Nếu không chạy toàn bộ docker compose, bạn có thể chỉ bật container Database:
-```powershell
-docker run -d --name smart_lms_db `
-  -e POSTGRES_USER=postgres `
-  -e POSTGRES_PASSWORD=postgrespassword `
-  -e POSTGRES_DB=smart_lms `
-  -p 5432:5432 `
-  pgvector/pgvector:pg16
 ```
 
 ---
 
-### 3. Khởi chạy Backend Core (FastAPI - Port 8000)
-Mở một cửa sổ PowerShell mới:
+## 3. Khởi chạy (3 cửa sổ PowerShell)
+
+### Backend — cổng 8000
 ```powershell
 cd D:\all_my_project\smart-lms\backend
-
-# Tạo môi trường ảo Python
-python -m venv venv
-.\venv\Scripts\activate
-
-# Cài đặt thư viện
-pip install -r requirements.txt
-
-# Chạy server API
-uvicorn app.main:app --reload --port 8000
+.\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
-👉 Xem tài liệu Swagger API tại: **`http://localhost:8000/api/v1/docs`**
+- Swagger: `http://127.0.0.1:8000/api/v1/docs`
+- Health: `http://127.0.0.1:8000/health`
 
----
-
-### 4. Khởi chạy AI Engine (Port 8001)
-Mở một cửa sổ PowerShell mới:
+### AI Service — cổng 8001
 ```powershell
 cd D:\all_my_project\smart-lms\ai-service
-
-# Tạo môi trường ảo Python
-python -m venv venv
-.\venv\Scripts\activate
-
-# Cài đặt thư viện
-pip install -r requirements.txt
-
-# Chạy server AI Service
-uvicorn main:app --reload --port 8001
+.\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8001
 ```
-👉 Xem tài liệu Swagger AI tại: **`http://localhost:8001/docs`**
+- Health: `http://127.0.0.1:8001/health`
+
+### Frontend — cổng 3000
+```powershell
+cd D:\all_my_project\smart-lms\frontend
+npm run dev
+```
+- Giao diện: `http://127.0.0.1:3000`
+
+Chạy production sau khi build:
+```powershell
+npm run build
+npm run start
+```
 
 ---
 
-## 🌐 DANH SÁCH ĐƯỜNG DẪN TRUY CẬP HỆ THỐNG
+## 4. Đường dẫn chính
 
-| Dịch vụ | Đường dẫn URL | Mô tả chức năng |
-| :--- | :--- | :--- |
-| **Giao diện Học tập (Frontend)** | `http://localhost:3000` | Trang chủ, danh mục khóa học, Focus Player, chat gia sư ảo, làm bài trắc nghiệm |
-| **Màn hình Học tập & AI Chat** | `http://localhost:3000/courses/1/learn` | Trải nghiệm trực tiếp Focus Player + AI Tutor SSE Streaming |
-| **Công cụ AI Sinh Đề Trắc Nghiệm** | `http://localhost:3000/quiz/generate` | Giảng viên tải lên slide/bài giảng để AI sinh đề trắc nghiệm chuẩn Pydantic Schema |
-| **Bàn làm việc Giảng viên** | `http://localhost:3000/instructor-dashboard` | Quản lý khóa học và đề thi |
-| **Tổng quan Học viên** | `http://localhost:3000/dashboard` | Lộ trình học, tiến độ và thông báo |
-| **Quản trị viên (Admin)** | `http://localhost:3000/admin-dashboard` | Giám sát tài nguyên, token AI tiêu thụ |
-| **API Backend Swagger** | `http://localhost:8000/api/v1/docs` | Đầy đủ API: Auth (JWT), Courses, Lessons, Quizzes, Progress |
-| **API AI Engine Swagger** | Chỉ **nội bộ** khi chạy Docker (không publish port 8001). Chạy AI Service trực tiếp (mục 4 bên dưới) nếu cần `http://localhost:8001/docs` | API RAG Streaming, Quiz Generator, Essay Grader, Document Ingestion |
+| Màn hình | URL |
+|---|---|
+| Trang chủ / danh mục khóa học | `http://127.0.0.1:3000` |
+| Đăng nhập | `http://127.0.0.1:3000/login` |
+| Học bài + Gia sư AI | `http://127.0.0.1:3000/courses/<id>/learn` |
+| Bàn làm việc giảng viên | `http://127.0.0.1:3000/instructor-dashboard` |
+| Phân tích học tập (giảng viên) | `http://127.0.0.1:3000/instructor/analytics` |
+| Sinh đề trắc nghiệm | `http://127.0.0.1:3000/quiz/generate` |
+| Quản trị | `http://127.0.0.1:3000/admin-dashboard` |
+| API Backend | `http://127.0.0.1:8000/api/v1/docs` |
+| API AI Service | `http://127.0.0.1:8001/docs` |
 
 ---
 
-## 🗄️ CƠ SỞ DỮ LIỆU & MIGRATION (ALEMBIC)
-
-Backend tự động tạo bảng khi khởi động (tiện cho môi trường dev), nhưng vẫn có sẵn migration chuẩn trong `backend/alembic/versions`.
+## 5. Migration
 
 ```powershell
 cd D:\all_my_project\smart-lms\backend
 
-# Xem revision hiện tại của database
-alembic current
+# Xem revision hiện tại
+.\venv\Scripts\python.exe -m alembic current
 
-# Database TRỐNG (chưa có bảng): tạo toàn bộ schema
-alembic upgrade head
+# Database trống: tạo toàn bộ schema
+.\venv\Scripts\python.exe -m alembic upgrade head
 
-# Database ĐÃ có bảng từ trước: đánh dấu là đã áp dụng baseline, tránh lỗi "table already exists"
-alembic stamp head
+# Database đã có bảng từ trước: đánh dấu baseline
+.\venv\Scripts\python.exe -m alembic stamp head
 
-# Sinh migration mới khi thay đổi model
-alembic revision --autogenerate -m "mô tả thay đổi"
-alembic upgrade head
+# Sinh migration mới
+.\venv\Scripts\python.exe -m alembic revision --autogenerate -m "mô tả thay đổi"
+.\venv\Scripts\python.exe -m alembic upgrade head
 ```
 
-> ℹ️ Revision `0001_initial_schema` là baseline: 7 bảng `users`, `courses`, `lessons`, `quizzes`, `quiz_questions`, `quiz_submissions`, `progress`.
-> Bảng `document_chunks` (vector store) do AI Service quản lý nên được loại khỏi migration của backend.
+Migration hiện tại: `0017_learning_events_ai_feedback`.
+Bảng `document_chunks` (vector store) do AI Service quản lý nên không nằm trong migration của backend.
 
 ---
 
-## 🛑 LỆNH TẮT HỆ THỐNG (KHI DÙNG DOCKER)
-Khi không sử dụng nữa, bạn có thể tắt các container để giải phóng RAM:
+## 6. Script vận hành
+
+Chạy trong `backend`:
+
 ```powershell
-cd D:\all_my_project\smart-lms
-docker compose down
+# Import lớp từ CSV (chạy không có --apply là chế độ xem trước)
+.\venv\Scripts\python.exe -m scripts.import_class --csv danh_sach.csv --course-id 81
+.\venv\Scripts\python.exe -m scripts.import_class --csv danh_sach.csv --course-id 81 --apply
+
+# Chuyển khóa demo sang draft (chạy không có --apply là chế độ xem trước)
+.\venv\Scripts\python.exe -m scripts.mark_demo_courses
+.\venv\Scripts\python.exe -m scripts.mark_demo_courses --apply
+
+# Phục hồi học liệu kẹt queued/processing
+.\venv\Scripts\python.exe -m scripts.recover_stuck_materials
+
+# Cách ly học liệu sai chủ đề, gỡ khỏi kho tri thức AI
+.\venv\Scripts\python.exe -m scripts.quarantine_materials --material-id 2 --reason "Tệp không khớp bài học"
+.\venv\Scripts\python.exe -m scripts.quarantine_materials --material-id 2 --reason "Tệp không khớp bài học" --apply
 ```
-*(Dữ liệu khóa học, người dùng và vector embedding vẫn được lưu an toàn trong Docker Volume).*
+
+Chạy trong `ai-service`:
+
+```powershell
+# Kiểm tra provenance toàn bộ chunk
+.\venv\Scripts\python.exe check_provenance.py
+
+# Nạp transcript bài giảng còn thiếu vào pgvector
+.\venv\Scripts\python.exe ingest_lesson_transcript.py --lesson-id 232 --apply
+.\venv\Scripts\python.exe ingest_lesson_transcript.py --missing-only --apply
+
+# Đánh giá RAG
+.\venv\Scripts\python.exe evaluate_rag_v2.py --dataset eval_dataset_pilot.csv --top-k 4 --out BENCHMARK_RAG_V2.md
+```
+
+---
+
+## 7. Kiểm tra nhanh sau khi khởi động
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8001/health
+Invoke-WebRequest http://127.0.0.1:3000 -UseBasicParsing | Select-Object StatusCode
+```
+
+Kỳ vọng: backend `{"status":"ok"}`, AI service `{"status":"healthy"}`, frontend `200`.
+
+Nếu Gemini hết hạn mức ngày, pipeline tự chuyển sang Groq (khi có `GROQ_API_KEY`); log sẽ có `429` từ Gemini nhưng câu trả lời vẫn trả về.
+
+---
+
+## 8. Lỗi thường gặp
+
+| Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
+|---|---|---|
+| Backend báo lỗi kết nối DB | `DATABASE_URL` sai hoặc Supabase chặn IP | Kiểm tra chuỗi kết nối, thêm IP vào allowlist |
+| Gia sư AI trả lời "chưa có nội dung" | Bài chưa có chunk trong `document_chunks` | Chạy `ingest_lesson_transcript.py --lesson-id <id> --apply` hoặc tải tài liệu đúng |
+| Học liệu mới tải mãi `queued/processing` | Tác vụ nền bị ngắt | Khởi động lại backend để `recover_stuck_materials` chuyển sang `failed`, rồi tải lại |
+| `429` khi đăng nhập | Rate limit 10 request/phút/IP | Chờ 60 giây rồi thử lại |
+| `429` khi gọi AI | Hết hạn mức ngày của người dùng | Chờ 00:00 UTC hoặc tăng biến `AI_*_DAILY_LIMIT` |
+| Link học liệu hết hạn | Signed URL chỉ sống 1 giờ | Tải lại danh sách học liệu để lấy URL mới |

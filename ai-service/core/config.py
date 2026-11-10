@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     RAG_MAX_HISTORY_TURNS: int = 6
     # Loại nguồn có điểm thấp hơn nhiều so với nguồn tốt nhất để giảm nhiễu trích dẫn.
     RAG_RELATIVE_SCORE_CUTOFF: float = 0.75
+    # Mở rộng ngữ cảnh sang chunk liền trước/sau trong cùng tài liệu. Giúp câu
+    # hỏi tổng quan không bị cắt ý khi thông tin nằm vắt qua hai chunk.
+    RAG_CONTEXT_NEIGHBORS: int = 1
+    RAG_MAX_CONTEXT_CHUNKS: int = 9
 
     # ---- Whisper (Speech-to-Text) ----
     WHISPER_MODEL: str = "base"  # tiny | base | small | medium | large

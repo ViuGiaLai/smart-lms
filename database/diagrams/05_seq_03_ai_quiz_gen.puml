@@ -1,0 +1,66 @@
+@startuml Sequence_03_AI_Quiz_Generator
+!theme plain
+autonumber "<b>[00]</b>"
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 12
+skinparam roundCorner 8
+skinparam shadowing false
+
+skinparam sequence {
+  ArrowColor #2980B9
+  ArrowThickness 1.2
+  LifeLineBorderColor #34495E
+  LifeLineBackgroundColor #EBF5FB
+  ParticipantBorderColor #2C3E50
+  ParticipantBackgroundColor #EAEDED
+  ParticipantFontStyle bold
+  ParticipantFontColor #1A5276
+  ActorBorderColor #B7950B
+  ActorBackgroundColor #FEF9E7
+  ActorFontStyle bold
+  ActorFontColor #7D6608
+}
+
+actor "Giảng viên" as GV
+participant "Frontend\n(Next.js :3000)" as FE
+participant "Backend\n(FastAPI :8000)" as BE
+participant "AI Service\n(:8001)" as AIS
+database "Database\n(Supabase)" as DB
+participant "Gemini API\n(LLM)" as LLM
+
+GV -> FE : 1. Chọn bài học & số lượng câu hỏi, bấm "Tạo đề AI"
+activate FE
+FE -> BE : 2. POST /api/v1/ai-quiz-gen/preview {lesson_id}
+activate BE
+
+BE -> DB : 3. Lấy nội dung transcript / học liệu của bài
+activate DB
+DB --> BE : 4. Trả văn bản bài giảng
+deactivate DB
+
+BE -> AIS : 5. Yêu cầu sinh bộ câu hỏi trắc nghiệm
+activate AIS
+AIS -> LLM : 6. Sinh câu hỏi trắc nghiệm JSON chuẩn A-D
+activate LLM
+LLM --> AIS : 7. Danh sách câu hỏi + đáp án đúng + giải thích
+deactivate LLM
+AIS --> BE : 8. Trả mảng JSON câu hỏi
+deactivate AIS
+
+BE --> FE : 9. Trả bản Preview
+deactivate BE
+FE --> GV : 10. Hiển thị đề thi xem trước để Giảng viên chỉnh sửa
+
+GV -> FE : 11. Bấm "Lưu vào ngân hàng đề"
+FE -> BE : 12. POST /quizzes (Lưu bộ câu hỏi đã duyệt)
+activate BE
+BE -> DB : 13. INSERT INTO quizzes & quiz_questions
+activate DB
+DB --> BE : 14. Đã lưu thành công
+deactivate DB
+BE --> FE : 15. 201 Created
+deactivate BE
+FE --> GV : 16. Thông báo lưu đề thi thành công
+deactivate FE
+@enduml

@@ -18,13 +18,15 @@ from typing import AsyncGenerator, Iterable, List, Optional
 
 import google.generativeai as genai
 import structlog
+from sqlalchemy import select
 
 from core.config import settings
 from core.database import AsyncSessionLocal
 from core.groq_client import groq_generate, groq_stream, has_valid_groq_key
+from core.usage import estimate_tokens, record_usage, usage_from_metadata
 from document_processor.embedder import get_embedder
 from prompts.tutor_prompt import build_rag_user_prompt, build_tutor_system_prompt
-from vector_store.pgvector_store import PgVectorStore
+from vector_store.pgvector_store import DocumentChunk, PgVectorStore
 
 logger = structlog.get_logger(__name__)
 
@@ -287,7 +289,91 @@ class RAGPipeline:
                 "Không thể truy xuất kho học liệu vector của bài học. Vui lòng thử lại sau."
             ) from e
 
-        return self._select_evidence(candidates, retrieval_query, question)
+        selected = self._select_evidence(candidates, retrieval_query, question)
+        return await self._expand_neighbors(selected, lesson_id)
+
+    async def _expand_neighbors(
+        self, selected: List[dict], lesson_id: int
+    ) -> List[dict]:
+        """Mở rộng ngữ cảnh sang chunk liền trước/sau trong cùng tài liệu.
+
+        Câu hỏi tổng quan thường cần đoạn kế tiếp mới đủ ý (ví dụ danh sách chủ
+        đề bị cắt giữa hai chunk). Chỉ mở rộng khi đã có bằng chứng, nên câu
+        ngoài phạm vi vẫn không có ngữ cảnh để trả lời.
+        """
+        window = max(0, int(settings.RAG_CONTEXT_NEIGHBORS))
+        if window == 0 or not selected:
+            return selected
+
+        existing_ids = {str(chunk.get("id")) for chunk in selected if chunk.get("id")}
+        added: list[dict] = []
+
+        async with AsyncSessionLocal() as db:
+            for chunk in selected:
+                document_id = chunk.get("document_id")
+                index = chunk.get("chunk_index")
+                if not document_id or not isinstance(index, int):
+                    continue
+                rows = (
+                    await db.execute(
+                        select(
+                            DocumentChunk.id,
+                            DocumentChunk.lesson_id,
+                            DocumentChunk.document_id,
+                            DocumentChunk.content,
+                            DocumentChunk.chunk_index,
+                            DocumentChunk.chunk_metadata,
+                        ).where(
+                            DocumentChunk.lesson_id == lesson_id,
+                            DocumentChunk.document_id == document_id,
+                            DocumentChunk.chunk_index.between(
+                                max(0, index - window), index + window
+                            ),
+                        )
+                    )
+                ).all()
+                for row in rows:
+                    key = str(row.id)
+                    if key in existing_ids:
+                        continue
+                    existing_ids.add(key)
+                    added.append(
+                        {
+                            "id": key,
+                            "lesson_id": row.lesson_id,
+                            "document_id": row.document_id,
+                            "content": row.content,
+                            "chunk_index": row.chunk_index,
+                            "metadata": row.chunk_metadata or {},
+                            "similarity": None,
+                            # Đánh dấu để prompt biết đây là ngữ cảnh bổ sung
+                            # quanh đoạn khớp trực tiếp, không phải nguồn hạng nhất.
+                            "neighbor": True,
+                        }
+                    )
+
+        if not added:
+            return selected
+
+        merged = selected + added
+        # Luôn giữ đủ các đoạn khớp trực tiếp; chỉ cắt bớt phần ngữ cảnh lân
+        # cận nếu vượt trần, tránh việc mở rộng lấn át bằng chứng chính.
+        max_total = max(len(selected), int(settings.RAG_MAX_CONTEXT_CHUNKS))
+        if len(merged) > max_total:
+            selected_ids = {str(chunk.get("id")) for chunk in selected}
+            keep = [chunk for chunk in merged if str(chunk.get("id")) in selected_ids]
+            extras = [
+                chunk for chunk in merged if str(chunk.get("id")) not in selected_ids
+            ][: max(0, max_total - len(keep))]
+            merged = keep + extras
+        merged.sort(
+            key=lambda item: (
+                str(item.get("document_id") or ""),
+                int(item.get("chunk_index") or 0),
+            )
+        )
+        cap = max(len(selected), int(settings.RAG_MAX_CONTEXT_CHUNKS))
+        return merged[:cap]
 
     async def ask(
         self,
@@ -302,6 +388,7 @@ class RAGPipeline:
         target_audience: Optional[str] = None,
         language: Optional[str] = None,
         tutor_mode: Optional[str] = "socratic",
+        user_id: Optional[int] = None,
     ) -> dict:
         """RAG không streaming; trả lời thật hoặc nói rõ chưa có trong bài."""
         if not has_valid_google_key():
@@ -354,8 +441,34 @@ class RAGPipeline:
                 lesson_title=lesson_title,
                 course_level=course_level,
             )
+            await record_usage(
+                feature="tutor",
+                provider="groq",
+                prompt_tokens=estimate_tokens(full_prompt),
+                completion_tokens=estimate_tokens(answer),
+                is_estimated=True,
+                user_id=user_id,
+                lesson_id=lesson_id,
+            )
         else:
             answer = (response.text or "").strip() if response else ""
+            prompt_tokens, completion_tokens, total_tokens, is_real = usage_from_metadata(
+                getattr(response, "usage_metadata", None)
+            )
+            if not is_real:
+                prompt_tokens = estimate_tokens(full_prompt)
+                completion_tokens = estimate_tokens(answer)
+                total_tokens = prompt_tokens + completion_tokens
+            await record_usage(
+                feature="tutor",
+                model=settings.GEMINI_MODEL,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                is_estimated=not is_real,
+                user_id=user_id,
+                lesson_id=lesson_id,
+            )
             if not answer:
                 logger.warning("Gemini returned empty content; switching to Groq fallback")
                 answer = await call_groq_fallback(
@@ -388,6 +501,7 @@ class RAGPipeline:
         target_audience: Optional[str] = None,
         language: Optional[str] = None,
         tutor_mode: Optional[str] = "socratic",
+        user_id: Optional[int] = None,
     ) -> AsyncGenerator[str, None]:
         """Stream SSE; sources được gửi trước khi sinh câu trả lời."""
 
@@ -451,6 +565,8 @@ class RAGPipeline:
 
         streamed_any = False
         gemini_error = None
+        response_usage = None
+        streamed_chars = 0
         try:
             stream_response = await asyncio.get_running_loop().run_in_executor(
                 None,
@@ -458,15 +574,20 @@ class RAGPipeline:
             )
 
             for chunk in stream_response:
+                if getattr(chunk, "usage_metadata", None):
+                    response_usage = chunk.usage_metadata
                 if chunk.text:
                     streamed_any = True
+                    streamed_chars += len(chunk.text)
                     yield sse({"type": "chunk", "content": chunk.text, "token": chunk.text})
                     await asyncio.sleep(0.01)
         except Exception as e:
             gemini_error = e
             logger.warning("Gemini streaming failed; switching to Groq fallback", error=str(e))
 
+        used_provider = "gemini"
         if not streamed_any:
+            used_provider = "groq"
             if has_valid_groq_key():
                 logger.info("Streaming qua Groq fallback", lesson_id=lesson_id)
                 try:
@@ -475,6 +596,7 @@ class RAGPipeline:
                     ):
                         if chunk_text:
                             streamed_any = True
+                            streamed_chars += len(chunk_text)
                             yield sse(
                                 {"type": "chunk", "content": chunk_text, "token": chunk_text}
                             )
@@ -499,6 +621,27 @@ class RAGPipeline:
                 yield sse({"type": "done", "done": True})
                 return
 
+        if streamed_any:
+            prompt_tokens, completion_tokens, total_tokens, is_real = usage_from_metadata(
+                response_usage
+            )
+            if used_provider != "gemini" or not is_real:
+                prompt_tokens = estimate_tokens(full_prompt)
+                completion_tokens = max(1, streamed_chars // 4)
+                total_tokens = prompt_tokens + completion_tokens
+                is_real = False
+            await record_usage(
+                feature="tutor",
+                provider=used_provider,
+                model=settings.GEMINI_MODEL if used_provider == "gemini" else None,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                is_estimated=not is_real,
+                user_id=user_id,
+                lesson_id=lesson_id,
+            )
+
         yield sse({"type": "done", "done": True})
 
     @staticmethod
@@ -511,6 +654,16 @@ class RAGPipeline:
         metadata = chunk.get("metadata") or {}
         start = metadata.get("start_seconds")
         end = metadata.get("end_seconds")
+        source_type = metadata.get("source_type")
+        if not source_type:
+            # Tương thích chunk cũ chưa có source_type: suy ra từ dấu hiệu
+            # thời gian/trang thay vì để trống trong trích dẫn.
+            if isinstance(start, (int, float)):
+                source_type = "youtube_subtitle"
+            elif metadata.get("page"):
+                source_type = "document"
+            else:
+                source_type = "transcript" if chunk.get("document_id") else "document"
         return {
             "lesson_title": lesson_title,
             "content": (chunk.get("content") or "")[:200] + "...",
@@ -525,7 +678,7 @@ class RAGPipeline:
             "course_id": metadata.get("course_id"),
             "youtube_video_id": metadata.get("youtube_video_id"),
             "video_title": metadata.get("video_title"),
-            "source_type": metadata.get("source_type"),
+            "source_type": source_type,
             "start_seconds": start if isinstance(start, (int, float)) else None,
             "end_seconds": end if isinstance(end, (int, float)) else None,
             "start_timestamp": metadata.get("start_timestamp"),

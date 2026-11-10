@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 const SORT_OPTIONS = [
   { value: 'popularity', label: 'Phổ biến nhất' },
   { value: 'newest', label: 'Mới nhất' },
+  { value: 'rating', label: 'Đánh giá cao nhất' },
   { value: 'price', label: 'Học phí: Thấp đến Cao' },
 ]
 
@@ -104,7 +105,7 @@ function CourseCard({
           </div>
 
           <div>
-            <div className="mb-3 flex items-center gap-3 border-t border-border pt-2 text-xs text-muted-foreground">
+            <div className="mb-3 flex flex-wrap items-center gap-3 border-t border-border pt-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground/70" />
                 {formatDuration(course.duration || 3600)}
@@ -117,6 +118,18 @@ function CourseCard({
                 <Users className="h-3.5 w-3.5 text-muted-foreground/70" />
                 {course.totalStudents ? course.totalStudents.toLocaleString() : '0'} học viên
               </span>
+              {course.rating ? (
+                <span
+                  className="flex items-center gap-1 font-semibold text-amber-600"
+                  title={`${course.totalReviews ?? 0} lượt đánh giá`}
+                >
+                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                  {course.rating.toFixed(1)}
+                  <span className="font-normal text-muted-foreground">
+                    ({course.totalReviews ?? 0})
+                  </span>
+                </span>
+              ) : null}
             </div>
 
             <div className="flex items-center justify-between pt-1">

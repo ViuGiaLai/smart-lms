@@ -45,10 +45,30 @@ def fetch(stmt: str) -> list[tuple]:
 
 
 # ── §IV: Lesson.source_type ──
-def test_migration_head_is_0012() -> None:
+def _alembic_heads() -> set[str]:
+    """Đọc danh sách revision head hiện tại từ thư mục migration.
+
+    Không hardcode số revision: mỗi lần thêm migration mới, test này vẫn đúng
+    miễn là database đã được nâng lên head.
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    backend_dir = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    return set(ScriptDirectory.from_config(config).get_heads())
+
+
+def test_database_is_at_alembic_head() -> None:
     rows = fetch("SELECT version_num FROM alembic_version")
     assert rows, "Bảng alembic_version rỗng"
-    assert rows[0][0] == "0012_lesson_source_type"
+    heads = _alembic_heads()
+    assert heads, "Không đọc được revision head từ thư mục alembic/versions"
+    assert rows[0][0] in heads, (
+        f"Database đang ở {rows[0][0]} nhưng head hiện tại là {sorted(heads)}. "
+        "Hãy chạy: alembic upgrade head"
+    )
 
 
 def test_every_lesson_has_valid_source_type() -> None:

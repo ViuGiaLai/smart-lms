@@ -1,0 +1,66 @@
+// Module 6: Analytics & Discovery
+// Dán vào https://dbdiagram.io → chụp ảnh cho phần "Phân tích & Khám phá học liệu"
+
+Enum discoverystatus {
+  pending
+  approved
+  rejected
+  converted
+}
+
+Table users {
+  id    integer      [pk]
+  email varchar(255) [not null]
+  name  varchar(255) [not null]
+}
+
+Table courses {
+  id    integer      [pk]
+  title varchar(512) [not null]
+}
+
+Table lessons {
+  id    integer      [pk]
+  title varchar(512) [not null]
+}
+
+Table learning_events {
+  id               integer     [pk, increment]
+  event_type       varchar(40) [not null, note: 'lesson_view | video_play | material_open | quiz_submit | ai_chat']
+  duration_seconds integer
+  metadata         json
+  created_at       timestamptz [not null, default: `now()`]
+  // ── FK ──
+  user_id          integer     [not null, ref: > users.id]
+  course_id        integer     [ref: > courses.id]
+  lesson_id        integer     [ref: > lessons.id]
+}
+
+Table discovery_jobs {
+  id                 integer         [pk, increment]
+  topic              varchar(512)    [not null]
+  target_level       varchar(100)
+  domain_category    varchar(100)
+  status             discoverystatus [not null, default: 'pending']
+  summary            text
+  proposed_blueprint json
+  created_at         timestamptz     [not null, default: `now()`]
+  updated_at         timestamptz     [not null, default: `now()`]
+  // ── FK ──
+  user_id            integer         [not null, ref: > users.id]
+}
+
+Table discovery_items {
+  id            integer         [pk, increment]
+  item_type     varchar(50)     [not null, note: 'video | document | exercise | topic | curriculum']
+  title         varchar(512)    [not null]
+  description   text
+  source_url    varchar(1024)
+  provider_name varchar(255)
+  metadata_info json
+  order_index   integer         [not null, default: 0]
+  status        discoverystatus [not null, default: 'pending']
+  created_at    timestamptz     [not null, default: `now()`]
+  // ── FK ──
+  job_id        integer         [not null, ref: > discovery_jobs.id]
+}

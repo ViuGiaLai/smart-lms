@@ -23,6 +23,8 @@ import {
   Award,
   FileText,
   Youtube,
+  ClipboardCheck,
+  BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -299,6 +301,18 @@ export function DashboardSidebar({
             label: 'Bài làm & kết quả',
             href: '/instructor/results',
             icon: Award,
+          },
+          {
+            label: 'Phân tích học tập',
+            href: '/instructor/analytics',
+            icon: BarChart3,
+          },
+          {
+            label: 'Chấm bài tự luận AI',
+            href: '/instructor/grading',
+            icon: ClipboardCheck,
+            badge: 'AI',
+            isAI: true,
           },
           {
             label: 'Sinh đề thi AI (Bloom)',

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import uuid
 import unicodedata
@@ -13,12 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
-from app.core.security import require_instructor
+from app.core.security import get_current_active_user, require_instructor
 from app.models.course import Course
 from app.models.lesson import Lesson
 from app.models.lesson_material import LessonMaterial
 from app.models.user import User
-from app.services.object_storage import delete_object, store_object
+from app.services.enrollment_service import require_course_access
+from app.services.object_storage import delete_object, presign_download, store_object
 
 router = APIRouter(prefix="/courses/{course_id}/lessons/{lesson_id}/documents", tags=["Documents"])
 
@@ -289,13 +291,49 @@ def _material_dict(material: LessonMaterial) -> dict:
 
 @router.get("")
 async def list_lesson_materials(
-    course_id: int, lesson_id: int, current_user: User = Depends(require_instructor), db: AsyncSession = Depends(get_db)
+    course_id: int,
+    lesson_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    await _get_owned_lesson(course_id, lesson_id, current_user, db)
-    result = await db.execute(
-        select(LessonMaterial).where(LessonMaterial.lesson_id == lesson_id).order_by(LessonMaterial.created_at)
-    )
-    return [_material_dict(item) for item in result.scalars().all()]
+    """Học liệu của một bài học.
+
+    - Giảng viên chủ khóa/admin: thấy toàn bộ bản ghi (kể cả đang xử lý/lỗi).
+    - Học viên đã ghi danh: chỉ thấy học liệu đã sẵn sàng (status = ready).
+    """
+    await require_course_access(db, current_user, course_id)
+
+    lesson = (
+        await db.execute(
+            select(Lesson.id).where(Lesson.id == lesson_id, Lesson.course_id == course_id)
+        )
+    ).scalar_one_or_none()
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="Bài học không tồn tại trong khóa học")
+
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    query = select(LessonMaterial).where(LessonMaterial.lesson_id == lesson_id)
+    if role == "student":
+        query = query.where(LessonMaterial.status == "ready")
+    result = await db.execute(query.order_by(LessonMaterial.created_at))
+    records = result.scalars().all()
+    items = [_material_dict(item) for item in records]
+
+    # Trả URL tải có chữ ký, hết hạn sau một giờ. URL công khai vẫn được giữ
+    # trong DB để nếu R2 tạm lỗi giao diện vẫn mở được tệp.
+    async def _signed(record: LessonMaterial, item: dict) -> None:
+        if record.storage_key:
+            signed = await presign_download(record.storage_key)
+            if signed:
+                item["file_url"] = signed
+                item["expires_in"] = settings.R2_SIGNED_URL_EXPIRE_SECONDS
+
+    await asyncio.gather(*[_signed(record, item) for record, item in zip(records, items)])
+
+    # Khóa lưu trữ chỉ dành cho vận hành, không cần thiết với giao diện.
+    for item in items:
+        item.pop("storage_key", None)
+    return items
 
 
 @router.delete("/{material_id}", status_code=status.HTTP_204_NO_CONTENT)

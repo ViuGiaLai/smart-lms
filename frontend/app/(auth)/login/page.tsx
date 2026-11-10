@@ -21,6 +21,7 @@ import {
 import { authApi } from '@/lib/api'
 import axios from 'axios'
 import { AuthShell } from '@/components/auth/AuthShell'
+import { useAuth } from '@/lib/auth-context'
 
 const loginSchema = z.object({
   email: z.string().email('Địa chỉ email không hợp lệ'),
@@ -38,6 +39,7 @@ const inputClass =
 
 export default function LoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [serverError, setServerError] = useState('')
 
@@ -73,6 +75,10 @@ export default function LoginPage() {
       if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
       if (resData.user) {
         localStorage.setItem('currentUser', JSON.stringify(resData.user))
+        login(resData.user as any, accessToken, refreshToken)
+        window.dispatchEvent(new Event('auth-change'))
+      } else {
+        login({ id: '', email: '', role: userRole as any }, accessToken, refreshToken)
         window.dispatchEvent(new Event('auth-change'))
       }
 
@@ -104,6 +110,10 @@ export default function LoginPage() {
       if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
       if (resData.user) {
         localStorage.setItem('currentUser', JSON.stringify(resData.user))
+        login(resData.user as any, accessToken, refreshToken)
+        window.dispatchEvent(new Event('auth-change'))
+      } else {
+        login({ id: '', email: '', role: role as any }, accessToken, refreshToken)
         window.dispatchEvent(new Event('auth-change'))
       }
 

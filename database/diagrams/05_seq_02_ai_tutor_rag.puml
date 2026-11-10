@@ -1,0 +1,71 @@
+@startuml Sequence_02_AI_Tutor_RAG
+!theme plain
+autonumber "<b>[00]</b>"
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 12
+skinparam roundCorner 8
+skinparam shadowing false
+
+skinparam sequence {
+  ArrowColor #2980B9
+  ArrowThickness 1.2
+  LifeLineBorderColor #34495E
+  LifeLineBackgroundColor #EBF5FB
+  ParticipantBorderColor #2C3E50
+  ParticipantBackgroundColor #EAEDED
+  ParticipantFontStyle bold
+  ParticipantFontColor #1A5276
+  ActorBorderColor #117864
+  ActorBackgroundColor #E8F8F5
+  ActorFontStyle bold
+  ActorFontColor #0E6251
+}
+
+actor "Học viên" as SV
+participant "Frontend\n(Next.js :3000)" as FE
+participant "Backend\n(FastAPI :8000)" as BE
+participant "AI Service\n(:8001)" as AIS
+database "Database\n(pgvector)" as DB
+participant "Gemini API\n(LLM)" as LLM
+
+SV -> FE : 1. Hỏi câu hỏi tại bài học
+activate FE
+FE -> BE : 2. POST /api/v1/ai-tutor/chat {lesson_id, question}
+activate BE
+
+BE -> DB : 3. Kiểm tra Enrollment & Quota ngày
+activate DB
+DB --> BE : 4. Hợp lệ
+deactivate DB
+
+BE -> AIS : 5. Gửi câu hỏi sang AI Service
+activate AIS
+
+AIS -> LLM : 6. Embed câu hỏi thành vector
+LLM --> AIS : 7. Vector 768 chiều
+
+AIS -> DB : 8. Tìm chunk tương đồng theo lesson_id (ngưỡng >= 0.5)
+activate DB
+DB --> AIS : 9. Trả chunk bài học & timestamp
+deactivate DB
+
+AIS -> LLM : 10. Prompt RAG (System Prompt + Chunks)
+activate LLM
+LLM --> AIS : 11. Stream kết quả
+deactivate LLM
+
+AIS --> BE : 12. Chuyển tiếp luồng SSE
+deactivate AIS
+
+BE --> FE : 13. Stream SSE về giao diện
+FE --> SV : 14. Hiển thị chữ chạy trực tiếp
+
+BE -> DB : 15. Lưu tin nhắn & trừ Quota token
+activate DB
+DB --> BE : 16. Hoàn tất
+deactivate DB
+
+deactivate BE
+deactivate FE
+@enduml

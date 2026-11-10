@@ -21,6 +21,7 @@ import {
   Edit3,
   Wand2,
   Check,
+  ChevronDown,
   ChevronRight,
   Layers,
 } from 'lucide-react';
@@ -53,6 +54,45 @@ interface LessonMaterial {
   error_message?: string | null;
 }
 
+const COURSE_LEVELS = [
+  { value: 'beginner', label: 'Cơ bản' },
+  { value: 'intermediate', label: 'Trung cấp' },
+  { value: 'advanced', label: 'Nâng cao' },
+];
+
+const categorySuggestions = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => courseCategoryText(item?.name ?? item))
+    .filter(Boolean);
+};
+
+function courseCategoryText(category: unknown): string {
+  if (typeof category === 'string') return category;
+  if (category && typeof category === 'object') {
+    const value = category as Record<string, unknown>;
+    for (const key of ['name', 'title', 'label', 'display_name']) {
+      if (typeof value[key] === 'string') return value[key] as string;
+    }
+  }
+  return '';
+}
+
+function courseLevelValue(level: unknown): string {
+  const raw = typeof level === 'string'
+    ? level
+    : level && typeof level === 'object'
+      ? String((level as Record<string, unknown>).code || (level as Record<string, unknown>).value || (level as Record<string, unknown>).name || '')
+      : '';
+  const normalized = raw.trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    'cơ bản': 'beginner', basic: 'beginner', beginner: 'beginner',
+    'trung cấp': 'intermediate', intermediate: 'intermediate',
+    'nâng cao': 'advanced', advanced: 'advanced',
+  };
+  return aliases[normalized] || raw;
+}
+
 type DocumentUploadState = 'idle' | 'uploading' | 'processing' | 'ready' | 'error';
 
 interface QuizOptionItem {
@@ -76,6 +116,7 @@ export default function CourseManagePage() {
 
   const [courseTitle, setCourseTitle] = useState('Đang tải thông tin khóa học...');
   const [courseDraft, setCourseDraft] = useState({ title: '', description: '', category: '', level: '' });
+  const [courseCategories, setCourseCategories] = useState<string[]>([]);
   const [showCourseEdit, setShowCourseEdit] = useState(false);
   const [isSavingCourse, setIsSavingCourse] = useState(false);
   const [lessons, setLessons] = useState<LessonItem[]>([]);
@@ -115,6 +156,13 @@ export default function CourseManagePage() {
   // Fetch course details from backend if available and verify ownership
   useEffect(() => {
     let isMounted = true;
+    void coursesApi.getCategories()
+      .then((response) => {
+        if (isMounted) setCourseCategories(categorySuggestions(response.data?.data));
+      })
+      .catch(() => {
+        if (isMounted) setCourseCategories([]);
+      });
     const fetchCourse = async () => {
       try {
         const res = await coursesApi.getById(courseId);
@@ -127,8 +175,13 @@ export default function CourseManagePage() {
             router.push('/instructor-dashboard');
             return;
           }
-          setCourseTitle(c.title || courseTitle);
-          setCourseDraft({ title: c.title || '', description: c.description || '', category: c.category || '', level: c.level || '' });
+          setCourseTitle(c.title || 'Khóa học');
+          setCourseDraft({
+            title: c.title || '',
+            description: c.description || '',
+            category: courseCategoryText(c.categoryName ?? c.category),
+            level: courseLevelValue(c.level),
+          });
           const mappedLessons = (c.lessons || []).map((lesson: any) => ({
             ...lesson,
             video_url: lesson.video_url ?? lesson.videoUrl ?? '',
@@ -471,7 +524,16 @@ export default function CourseManagePage() {
       const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ title: courseDraft.title.trim(), description: courseDraft.description.trim() || null, category: courseDraft.category.trim() || null, level: courseDraft.level.trim() || null }) });
       const updated = await response.json().catch(() => null);
       if (!response.ok) throw new Error(updated?.detail || 'Không thể cập nhật khóa học');
+      const savedCategory = courseCategoryText(updated?.categoryName ?? updated?.category ?? courseDraft.category);
+      const savedLevel = courseLevelValue(updated?.level ?? courseDraft.level);
       setCourseTitle(updated.title || courseDraft.title.trim());
+      setCourseDraft((draft) => ({
+        ...draft,
+        title: updated.title || draft.title,
+        description: updated.description ?? draft.description,
+        category: savedCategory,
+        level: savedLevel,
+      }));
       setShowCourseEdit(false);
       setSuccessMessage('Đã cập nhật thông tin khóa học.');
     } catch (error) { alert(error instanceof Error ? error.message : 'Không thể cập nhật khóa học'); }
@@ -634,7 +696,26 @@ export default function CourseManagePage() {
               <div><p className="text-xs font-bold uppercase text-primary">Quản lý khóa học</p><h2 className="mt-1 text-lg font-semibold text-foreground">Sửa thông tin khóa học</h2><p className="mt-1 text-xs text-muted-foreground">Chỉ giảng viên phụ trách và Quản trị viên có quyền lưu.</p></div>
               <label className="block text-xs font-bold text-foreground">Tên khóa học<input required value={courseDraft.title} onChange={(e) => setCourseDraft({ ...courseDraft, title: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
               <label className="block text-xs font-bold text-foreground">Mô tả<textarea value={courseDraft.description} onChange={(e) => setCourseDraft({ ...courseDraft, description: e.target.value })} className="mt-1 min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
-              <div className="grid gap-3 sm:grid-cols-2"><label className="block text-xs font-bold text-foreground">Lĩnh vực<input value={courseDraft.category} onChange={(e) => setCourseDraft({ ...courseDraft, category: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label><label className="block text-xs font-bold text-foreground">Cấp độ<input value={courseDraft.level} onChange={(e) => setCourseDraft({ ...courseDraft, level: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs font-bold text-foreground">Lĩnh vực
+                  <input
+                    list="course-category-options"
+                    value={courseDraft.category}
+                    onChange={(e) => setCourseDraft({ ...courseDraft, category: e.target.value })}
+                    placeholder="Ví dụ: Công nghệ thông tin"
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                  <datalist id="course-category-options">
+                    {courseCategories.map((category) => <option key={category} value={category} />)}
+                  </datalist>
+                </label>
+                <label className="block text-xs font-bold text-foreground">Cấp độ
+                  <select value={courseDraft.level} onChange={(e) => setCourseDraft({ ...courseDraft, level: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                    <option value="">Chưa xác định</option>
+                    {COURSE_LEVELS.map((level) => <option key={level.value} value={level.value}>{level.label}</option>)}
+                  </select>
+                </label>
+              </div>
               <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={() => setShowCourseEdit(false)} className="w-full rounded-md border border-border px-4 py-2.5 text-xs font-bold text-foreground sm:w-auto">Hủy</button><button type="submit" disabled={isSavingCourse} className="inline-flex w-full items-center justify-center gap-1 rounded-md bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-60 sm:w-auto"><Save className="w-3.5 h-3.5" />{isSavingCourse ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
             </form>
           </div>
@@ -1032,47 +1113,52 @@ export default function CourseManagePage() {
                   </div>
                 </div>
 
-                <div className="flex w-full flex-wrap items-center justify-end gap-2 self-end sm:w-auto sm:self-center shrink-0">
-                  <button onClick={() => setEditingLesson({ ...lesson })} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition" title="Sửa nội dung bài học">
-                    <Edit3 className="w-3.5 h-3.5" /> Sửa bài học
+                <div className="flex w-full flex-wrap items-center justify-end gap-1.5 self-end sm:w-auto sm:self-center shrink-0">
+                  <button onClick={() => setEditingLesson({ ...lesson })} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-indigo-700 transition hover:border-indigo-400 hover:bg-indigo-50" title="Sửa nội dung bài học">
+                    <Edit3 className="w-3.5 h-3.5" /> Sửa
                   </button>
-                  <label className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition cursor-pointer">
-                    <Upload className="w-3.5 h-3.5" /> Thêm tài liệu
-                    <input
-                      type="file"
-                      accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) void uploadDocument(lesson.id, file);
-                        e.currentTarget.value = '';
-                      }}
-                    />
-                  </label>
-                  <label className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition cursor-pointer">
-                    <Video className="w-3.5 h-3.5" /> Tải video MP4
-                    <input type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadVideo(lesson.id, file); e.currentTarget.value = ''; }} />
-                  </label>
-                  {lesson.youtubeVideoId && (
-                    <button onClick={() => void fetchYoutubeTranscript(lesson)} disabled={documentStates[String(lesson.id)] === 'processing'} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition disabled:opacity-60" title="Lấy phụ đề YouTube, lưu transcript và nhúng AI">
-                      <Sparkles className="w-3.5 h-3.5" /> {documentStates[String(lesson.id)] === 'processing' ? 'Đang lấy…' : 'Lấy transcript'}
-                    </button>
-                  )}
-                  <Link
-                    href={`/courses/${courseId}/learn?lessonId=${lesson.id}`}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition shadow-2xs"
-                    title="Mở không gian học của Học viên"
-                  >
-                    <Eye className="w-3.5 h-3.5" /> Xem bài học
-                  </Link>
-
-                  <button
-                    onClick={() => handleDeleteLesson(lesson.id)}
-                    className="p-1.5 rounded-xl bg-white border border-slate-200 hover:bg-red-50 text-slate-400 hover:text-red-600 text-xs transition"
-                    title="Xóa bài học"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <details className="relative">
+                    <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-indigo-700 transition hover:border-indigo-400 hover:bg-indigo-50 [&::-webkit-details-marker]:hidden">
+                      <Upload className="h-3.5 w-3.5" /> Học liệu <ChevronDown className="h-3.5 w-3.5" />
+                    </summary>
+                    <div className="absolute right-0 z-20 mt-1.5 w-52 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
+                      <label className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700">
+                        <FileText className="h-3.5 w-3.5" /> Tải tài liệu
+                        <input type="file" accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadDocument(lesson.id, file); e.currentTarget.value = ''; }} />
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700">
+                        <Video className="h-3.5 w-3.5" /> Tải video
+                        <input type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadVideo(lesson.id, file); e.currentTarget.value = ''; }} />
+                      </label>
+                      {lesson.youtubeVideoId && (
+                        <button type="button" onClick={() => void fetchYoutubeTranscript(lesson)} disabled={documentStates[String(lesson.id)] === 'processing'} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-60" title="Lấy phụ đề YouTube, lưu transcript và nhúng AI">
+                          <Sparkles className="h-3.5 w-3.5" /> {documentStates[String(lesson.id)] === 'processing' ? 'Đang lấy transcript…' : 'Lấy transcript'}
+                        </button>
+                      )}
+                    </div>
+                  </details>
+                  <details className="relative">
+                    <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-indigo-700 transition hover:border-indigo-400 hover:bg-indigo-50 [&::-webkit-details-marker]:hidden">
+                      Khác <ChevronDown className="h-3.5 w-3.5" />
+                    </summary>
+                    <div className="absolute right-0 z-20 mt-1.5 w-48 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
+                      <Link
+                        href={`/courses/${courseId}/learn?lessonId=${lesson.id}`}
+                        className="flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                        title="Mở không gian học của Học viên"
+                      >
+                        <Eye className="h-3.5 w-3.5" /> Xem trước bài học
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLesson(lesson.id)}
+                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-red-600 hover:bg-red-50"
+                        title="Xóa bài học"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Xóa bài học
+                      </button>
+                    </div>
+                  </details>
                 </div>
               </div>
             ))}

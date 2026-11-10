@@ -1,0 +1,143 @@
+@startuml Use_Case_Smart_LMS
+!theme plain
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 12
+skinparam roundCorner 8
+skinparam shadowing false
+skinparam linetype ortho
+
+skinparam actor {
+  BorderThickness 1.5
+  FontStyle bold
+}
+
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #2C3E50
+  BorderThickness 1.2
+  FontColor #1C2833
+  ArrowColor #2980B9
+  ArrowThickness 1.2
+}
+
+skinparam rectangle {
+  BackgroundColor #FAFAFA
+  BorderColor #BDC3C7
+  BorderThickness 1.2
+  FontStyle bold
+  FontColor #1A5276
+}
+
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #D5D8DC
+  FontStyle bold
+  FontColor #2C3E50
+}
+
+' ── ACTORS ──────────────────────────────────────────
+actor "Học viên\n(Student)" as SV #E8F8F5;line:117864;text:0E6251
+actor "Giảng viên\n(Instructor)" as GV #FEF9E7;line:B7950B;text:7D6608
+actor "Quản trị viên\n(Admin)" as AD #FDEDEC;line:922B21;text:78281F
+actor "AI Service\n(Gemini)" as AI #EBF5FB;line:2E86C1;text:1B4F72
+
+' ── SYSTEM BOUNDARY ─────────────────────────────────
+rectangle "Hệ thống Smart LMS" {
+
+  package "Xác thực & Tài khoản" as PKG_AUTH {
+    usecase "Đăng ký tài khoản" as UC_REG
+    usecase "Đăng nhập hệ thống" as UC_LOGIN
+    usecase "Đặt lại mật khẩu" as UC_RESET
+    usecase "Quản lý hồ sơ" as UC_PROFILE
+  }
+
+  package "Phân hệ Học tập (Học viên)" as PKG_STUDENT {
+    usecase "Tìm kiếm khóa học" as UC_SEARCH
+    usecase "Ghi danh khóa học" as UC_ENROLL
+    usecase "Xem bài giảng & Video" as UC_WATCH
+    usecase "Tải học liệu đính kèm" as UC_MAT
+    usecase "Hỏi đáp gia sư AI Tutor (RAG)" as UC_CHAT
+    usecase "Phản hồi câu trả lời AI" as UC_FEEDBACK
+    usecase "Làm bài kiểm tra (Quiz)" as UC_QUIZ
+    usecase "Xem tiến độ & Năng lực" as UC_PROG
+    usecase "Đánh giá khóa học" as UC_REV
+  }
+
+  package "Phân hệ Đào tạo (Giảng viên)" as PKG_INSTRUCTOR {
+    usecase "Quản lý Khóa học" as UC_COURSE
+    usecase "Quản lý Bài học & Học liệu" as UC_LESSON
+    usecase "Import bài giảng từ YouTube" as UC_YT
+    usecase "Tạo đề Quiz thủ công" as UC_QMANUAL
+    usecase "Sinh đề Quiz tự động bằng AI" as UC_QAIGEN
+    usecase "Chấm bài tự luận Rubric bằng AI" as UC_GRADE
+    usecase "Xem Analytics lớp học" as UC_ANALYTICS
+    usecase "Khám phá học liệu AI Discovery" as UC_DISCOVERY
+  }
+
+  package "Phân hệ Quản trị (Admin)" as PKG_ADMIN {
+    usecase "Quản lý Người dùng & Phân quyền" as UC_USERS
+    usecase "Quản lý Cây danh mục & Bậc học" as UC_CAT
+    usecase "Giám sát Token AI & Hạn mức Quota" as UC_TOKEN
+    usecase "Xem báo cáo tổng thể hệ thống" as UC_REPORT
+  }
+}
+
+' ── LIÊN KẾT HỌC VIÊN ──────────────────────────────
+SV --> UC_REG
+SV --> UC_LOGIN
+SV --> UC_RESET
+SV --> UC_PROFILE
+
+SV --> UC_SEARCH
+SV --> UC_ENROLL
+SV --> UC_WATCH
+SV --> UC_MAT
+SV --> UC_CHAT
+SV --> UC_QUIZ
+SV --> UC_PROG
+SV --> UC_REV
+
+' ── LIÊN KẾT GIẢNG VIÊN ────────────────────────────
+GV --> UC_LOGIN
+GV --> UC_PROFILE
+
+GV --> UC_COURSE
+GV --> UC_LESSON
+GV --> UC_YT
+GV --> UC_QMANUAL
+GV --> UC_QAIGEN
+GV --> UC_GRADE
+GV --> UC_ANALYTICS
+GV --> UC_DISCOVERY
+
+' ── LIÊN KẾT ADMIN ─────────────────────────────────
+AD --> UC_LOGIN
+AD --> UC_PROFILE
+
+AD --> UC_USERS
+AD --> UC_CAT
+AD --> UC_TOKEN
+AD --> UC_REPORT
+AD --> UC_ANALYTICS
+AD --> UC_COURSE
+
+' ── TÁC NHÂN PHỤ AI SERVICE ────────────────────────
+AI --> UC_CHAT
+AI --> UC_QAIGEN
+AI --> UC_GRADE
+AI --> UC_DISCOVERY
+
+' ── QUAN HỆ INCLUDE & EXTEND ───────────────────────
+UC_WATCH .> UC_ENROLL : <<include>>
+UC_MAT .> UC_ENROLL : <<include>>
+UC_CHAT .> UC_ENROLL : <<include>>
+UC_QUIZ .> UC_ENROLL : <<include>>
+UC_REV .> UC_ENROLL : <<include>>
+
+UC_FEEDBACK .> UC_CHAT : <<extend>>
+UC_QAIGEN .> UC_QMANUAL : <<extend>>
+UC_LESSON .> UC_COURSE : <<include>>
+
+@enduml

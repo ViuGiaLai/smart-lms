@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -9,6 +9,14 @@ from pipelines.rag_pipeline import RAGPipeline
 
 router = APIRouter()
 rag_pipeline = RAGPipeline()
+
+
+def _user_id_from_header(x_user_id: Optional[str]) -> Optional[int]:
+    try:
+        value = int(x_user_id or "")
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
 
 
 class ChatTurn(BaseModel):
@@ -45,7 +53,7 @@ def _history_payload(req: RAGQueryRequest) -> Optional[List[dict]]:
 
 
 @router.post("/ask", summary="Hỏi đáp gia sư ảo theo ngữ cảnh (Trả về JSON đầy đủ)")
-async def ask_tutor(req: RAGQueryRequest):
+async def ask_tutor(req: RAGQueryRequest, x_user_id: Optional[str] = Header(default=None)):
     try:
         return await rag_pipeline.ask(
             question=req.question,
@@ -58,6 +66,7 @@ async def ask_tutor(req: RAGQueryRequest):
             grade_label=req.grade_label,
             target_audience=req.target_audience,
             tutor_mode=req.tutor_mode,
+            user_id=_user_id_from_header(x_user_id),
         )
     except Exception:
         raise HTTPException(status_code=500, detail="AI Tutor không thể xử lý yêu cầu.")
@@ -67,7 +76,7 @@ async def ask_tutor(req: RAGQueryRequest):
     "/ask/stream",
     summary="Hỏi đáp gia sư ảo Real-time Streaming (SSE Server-Sent Events)",
 )
-async def ask_tutor_stream(req: RAGQueryRequest):
+async def ask_tutor_stream(req: RAGQueryRequest, x_user_id: Optional[str] = Header(default=None)):
     try:
         return StreamingResponse(
             rag_pipeline.ask_stream(
@@ -82,6 +91,7 @@ async def ask_tutor_stream(req: RAGQueryRequest):
                 target_audience=req.target_audience,
                 language=req.language,
                 tutor_mode=req.tutor_mode,
+                user_id=_user_id_from_header(x_user_id),
             ),
             media_type="text/event-stream",
             headers={

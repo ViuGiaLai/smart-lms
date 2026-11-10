@@ -16,6 +16,7 @@ from app.models.enrollment import Enrollment
 from app.models.category import LearningCategory
 from app.models.education_level import EducationLevel
 from app.models.quiz import Quiz
+from app.models.review import CourseReview
 from app.models.user import User, UserRole
 from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse
 from app.services.course_service import CourseService, slugify
@@ -25,6 +26,7 @@ from app.services.enrollment_service import (
     student_counts_by_course,
 )
 from app.services.quiz_service import serialize_question
+from app.services.review_service import rating_stats_by_course
 
 router = APIRouter(prefix="/courses")
 
@@ -77,7 +79,14 @@ def _eager_attr(obj: Any, attr: str) -> Any | None:
     return getattr(obj, attr, None)
 
 
-def _format_course_dict(course: Course, student_progress: float | None = None, total_students: int = 0, is_enrolled: bool = False) -> dict[str, Any]:
+def _format_course_dict(
+    course: Course,
+    student_progress: float | None = None,
+    total_students: int = 0,
+    is_enrolled: bool = False,
+    rating_average: float | None = None,
+    rating_count: int = 0,
+) -> dict[str, Any]:
     """Helper to convert Course model to frontend-friendly dict with live calculated fields."""
     actual_lessons_count = len(course.lessons) if course.lessons else 0
     actual_duration = sum((l.duration or 0) for l in course.lessons) if course.lessons else 0
@@ -115,9 +124,9 @@ def _format_course_dict(course: Course, student_progress: float | None = None, t
         "totalLessons": actual_lessons_count,
         "totalStudents": total_students,
         "studentsCount": total_students,
-        # Hệ thống chưa có bảng đánh giá (reviews) nên không bịa điểm số sao.
-        "rating": None,
-        "totalReviews": 0,
+        # Điểm sao lấy từ bảng course_reviews; None khi chưa có lượt đánh giá nào.
+        "rating": round(float(rating_average), 1) if rating_count and rating_average else None,
+        "totalReviews": int(rating_count or 0),
         "instructor": {
             "id": str(course.instructor_id),
             "fullName": course.instructor.name if course.instructor else "Chưa cập nhật",
@@ -228,7 +237,19 @@ async def list_courses(
     elif sortBy == "price":
         stmt = stmt.order_by(Course.price.asc())
     elif sortBy == "rating":
-        stmt = stmt.order_by(Course.id.desc())
+        # Khóa chưa có đánh giá xếp sau, không bị loại khỏi danh sách.
+        rating_subquery = (
+            select(
+                CourseReview.course_id.label("course_id"),
+                func.avg(CourseReview.rating).label("avg_rating"),
+            )
+            .group_by(CourseReview.course_id)
+            .subquery()
+        )
+        stmt = (
+            stmt.outerjoin(rating_subquery, rating_subquery.c.course_id == Course.id)
+            .order_by(func.coalesce(rating_subquery.c.avg_rating, 0).desc(), Course.id.asc())
+        )
     else:  # popularity or default
         stmt = stmt.order_by(Course.id.asc())
 
@@ -238,7 +259,16 @@ async def list_courses(
     courses = result.scalars().all()
 
     counts = await student_counts_by_course(db, [c.id for c in courses])
-    formatted = [_format_course_dict(c, total_students=counts.get(c.id, 0)) for c in courses]
+    rating_stats = await rating_stats_by_course(db, [c.id for c in courses])
+    formatted = [
+        _format_course_dict(
+            c,
+            total_students=counts.get(c.id, 0),
+            rating_average=rating_stats.get(c.id, (None, 0))[0],
+            rating_count=rating_stats.get(c.id, (None, 0))[1],
+        )
+        for c in courses
+    ]
 
     payload = {
         "success": True,
@@ -304,6 +334,7 @@ async def get_enrolled_courses(
 
     # Số học viên theo khóa lấy từ bảng enrollments (nguồn sự thật duy nhất).
     student_counts = await student_counts_by_course(db, course_ids)
+    rating_stats = await rating_stats_by_course(db, course_ids)
 
     enrollments = []
     for c in courses:
@@ -334,6 +365,8 @@ async def get_enrolled_courses(
                 student_progress=pct,
                 total_students=student_counts.get(c.id, 0),
                 is_enrolled=True,
+                rating_average=rating_stats.get(c.id, (None, 0))[0],
+                rating_count=rating_stats.get(c.id, (None, 0))[1],
             ),
             "progress": pct,
             "completedLessons": completed_count,
@@ -369,9 +402,18 @@ async def search_courses(
     result = await db.execute(stmt)
     courses = result.scalars().all()
     counts = await student_counts_by_course(db, [c.id for c in courses])
+    rating_stats = await rating_stats_by_course(db, [c.id for c in courses])
     return {
         "success": True,
-        "data": [_format_course_dict(c, total_students=counts.get(c.id, 0)) for c in courses],
+        "data": [
+            _format_course_dict(
+                c,
+                total_students=counts.get(c.id, 0),
+                rating_average=rating_stats.get(c.id, (None, 0))[0],
+                rating_count=rating_stats.get(c.id, (None, 0))[1],
+            )
+            for c in courses
+        ],
     }
 
 
@@ -501,7 +543,13 @@ async def get_course(
     include_answers = await _can_view_answer_key(db, course, current_user)
 
     student_counts = await student_counts_by_course(db, [course.id])
-    data = _format_course_dict(course, total_students=student_counts.get(course.id, 0))
+    rating_stats = await rating_stats_by_course(db, [course.id])
+    data = _format_course_dict(
+        course,
+        total_students=student_counts.get(course.id, 0),
+        rating_average=rating_stats.get(course.id, (None, 0))[0],
+        rating_count=rating_stats.get(course.id, (None, 0))[1],
+    )
     has_access = await _has_course_access(db, course, current_user)
     lessons_payload = []
     for lesson in course.lessons:

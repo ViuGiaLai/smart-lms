@@ -19,6 +19,7 @@ import google.generativeai as genai
 from pydantic import BaseModel
 
 from core.config import settings
+from core.usage import estimate_tokens, record_usage, usage_from_metadata
 
 logger = structlog.get_logger(__name__)
 
@@ -74,6 +75,7 @@ Luôn trả lời bằng tiếng Việt, rõ ràng, dễ hiểu, phù hợp cho 
         num_key_points: int = 10,
         num_flashcards: int = 10,
         lesson_id: Optional[int] = None,
+        user_id: Optional[int] = None,
     ) -> SummaryResult:
         """
         Tóm tắt bài giảng.
@@ -83,6 +85,7 @@ Luôn trả lời bằng tiếng Việt, rõ ràng, dễ hiểu, phù hợp cho 
             num_key_points: Số bullet points cần tạo
             num_flashcards: Số flashcard cần tạo
             lesson_id: ID bài học
+            user_id: ID người dùng yêu cầu
 
         Returns:
             SummaryResult với summary, key_points, flashcards, keywords
@@ -102,7 +105,7 @@ Luôn trả lời bằng tiếng Việt, rõ ràng, dễ hiểu, phù hợp cho 
             lesson_id=lesson_id,
         )
 
-        raw_json = await self._call_gemini(prompt)
+        raw_json = await self._call_gemini(prompt, lesson_id=lesson_id, user_id=user_id)
         result = self._parse_response(raw_json, lesson_id)
 
         logger.info(
@@ -149,15 +152,39 @@ Lưu ý:
 - Keywords là thuật ngữ chuyên môn quan trọng
 - Tất cả bằng tiếng Việt"""
 
-    async def _call_gemini(self, prompt: str) -> str:
-        """Gọi Gemini với retry."""
+    async def _call_gemini(
+        self,
+        prompt: str,
+        lesson_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+    ) -> str:
+        """Gọi Gemini với retry và ghi nhận lượng token tiêu thụ."""
         for attempt in range(3):
             try:
                 response = await asyncio.get_running_loop().run_in_executor(
                     None,
                     lambda: self.model.generate_content(prompt),
                 )
-                return response.text
+                if response and response.text:
+                    prompt_tokens, completion_tokens, total_tokens, is_real = usage_from_metadata(
+                        getattr(response, "usage_metadata", None)
+                    )
+                    if not is_real:
+                        prompt_tokens = estimate_tokens(prompt)
+                        completion_tokens = estimate_tokens(response.text)
+                        total_tokens = prompt_tokens + completion_tokens
+                    await record_usage(
+                        feature="summarizer",
+                        model=settings.GEMINI_MODEL,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                        is_estimated=not is_real,
+                        lesson_id=lesson_id,
+                        user_id=user_id,
+                    )
+                    return response.text
+                return ""
             except Exception as e:
                 logger.warning("Summarizer API error", attempt=attempt + 1, error=str(e))
                 if attempt == 2:

@@ -64,12 +64,13 @@ async def upload_and_ingest_document(
     x_user_role: str | None = Header(default=None),
 ):
     await _require_lesson_owner(lesson_id, x_user_id, x_user_role)
+    filename = file.filename or "tai-lieu"
     # 1. Kiểm tra parser phù hợp
-    parser = get_parser(file.filename)
+    parser = get_parser(filename)
     if not parser:
         raise HTTPException(
             status_code=400,
-            detail=f"Định dạng tệp không được hỗ trợ: {file.filename}. Chỉ chấp nhận .pdf, .docx hoặc .pptx"
+            detail=f"Định dạng tệp không được hỗ trợ: {filename}. Chỉ chấp nhận .pdf, .docx hoặc .pptx"
         )
 
     try:
@@ -78,33 +79,41 @@ async def upload_and_ingest_document(
             raise HTTPException(status_code=413, detail="Tài liệu vượt quá dung lượng cho phép")
 
         # 2. Bóc tách tài liệu
-        parsed_doc = await parser.parse_bytes(content_bytes, filename=file.filename)
+        parsed_doc = await parser.parse_bytes(content_bytes, filename=filename)
         text = parsed_doc.get("text", "")
         if not text.strip():
             raise HTTPException(status_code=400, detail="Tài liệu không chứa nội dung văn bản hợp lệ.")
 
         total_pages = parsed_doc.get("metadata", {}).get("total_pages", 1)
 
+        # Metadata nguồn thống nhất cho mọi chunk tài liệu. Cùng bộ khóa này
+        # được transcript YouTube sử dụng (source_type, filename, page...), nhờ
+        # đó giao diện và bộ đánh giá đọc trích dẫn theo một quy ước duy nhất.
+        base_metadata = {
+            "filename": filename,
+            "document_title": filename,
+            "lesson_id": lesson_id,
+            "source_type": "document",
+            "parser": parsed_doc.get("metadata", {}).get("parser"),
+        }
+
         # 3. Phân đoạn ngữ nghĩa (Chunking) với overlap tối ưu
         chunker = TextChunker()
         if parsed_doc.get("pages"):
             chunks = []
             for page in parsed_doc["pages"]:
+                page_number = page.get("page")
+                page_metadata = dict(base_metadata)
+                if isinstance(page_number, int) and page_number > 0:
+                    page_metadata["page"] = page_number
                 chunks.extend(
                     chunker.split_text(
                         page.get("text", ""),
-                        metadata={
-                            "filename": file.filename,
-                            "lesson_id": lesson_id,
-                            "page": page.get("page"),
-                        },
+                        metadata=page_metadata,
                     )
                 )
         else:
-            chunks = chunker.split_text(
-                text,
-                metadata={"filename": file.filename, "lesson_id": lesson_id},
-            )
+            chunks = chunker.split_text(text, metadata=dict(base_metadata))
         if not chunks:
             raise HTTPException(status_code=400, detail="Không thể phân đoạn văn bản từ tài liệu.")
 

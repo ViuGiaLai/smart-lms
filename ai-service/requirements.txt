@@ -4,11 +4,11 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 
-# LangChain ecosystem
-langchain==0.3.1
-langchain-google-genai==2.0.1
-langchain-openai==0.2.1
-langchain-community==0.3.1
+# LangChain ecosystem (không dùng trong pipeline hiện tại — gọi trực tiếp Google SDK)
+# langchain==0.3.1
+# langchain-google-genai==2.0.1
+# langchain-openai==0.2.1
+# langchain-community==0.3.1
 
 # AI / LLM providers
 openai==1.51.0

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 
@@ -16,6 +16,7 @@ from app.models.lesson import Lesson
 from app.models.quiz import Quiz, QuizQuestion
 from app.models.user import User
 from app.schemas.quiz import AIQuizGenRequest, AIQuizGenPreviewRequest, QuizResponse
+from app.services.ai_quota import enforce_ai_quota
 
 router = APIRouter(prefix="/ai-quiz-gen")
 
@@ -135,6 +136,8 @@ async def _request_ai_quiz(
     num_questions: int,
     difficulty: str,
     bloom_level: str = "mixed",
+    current_user: User | None = None,
+    lesson_id: int | None = None,
 ) -> dict[str, Any]:
     """Gọi AI Service đúng một nơi để preview và lưu DB luôn đồng bộ."""
     ai_url = f"{settings.AI_SERVICE_URL}/api/v1/quiz/generate"
@@ -143,10 +146,15 @@ async def _request_ai_quiz(
         "num_questions": num_questions,
         "difficulty": difficulty,
         "bloom_level": bloom_level,
+        "lesson_id": lesson_id,
     }
+    headers = dict(settings.ai_service_headers)
+    if current_user is not None:
+        headers["X-User-Id"] = str(current_user.id)
+        headers["X-User-Role"] = str(getattr(current_user.role, "value", current_user.role))
     try:
         async with httpx.AsyncClient(timeout=settings.AI_SERVICE_TIMEOUT) as client:
-            resp = await client.post(ai_url, json=ai_payload, headers=settings.ai_service_headers)
+            resp = await client.post(ai_url, json=ai_payload, headers=headers)
             resp.raise_for_status()
             return resp.json()
     except httpx.HTTPStatusError:
@@ -165,20 +173,24 @@ async def _request_ai_quiz(
 async def preview_ai_quiz(
     payload: AIQuizGenPreviewRequest,
     current_user: User = Depends(require_instructor),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Call the ai-service to generate quiz questions and return directly to caller
-    without saving to database. Ideal for previewing, course creation wizard, and editing before publish.
-    """
+    """Sinh đề AI và trả ngay cho người dùng xem trước, không lưu DB."""
     role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     if role_str not in ("admin", "instructor"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chỉ giảng viên hoặc quản trị viên mới có quyền sinh đề AI",
         )
+    await enforce_ai_quota(db, current_user.id, "quiz")
 
     ai_data = await _request_ai_quiz(
-        payload.topic, payload.num_questions, payload.difficulty, payload.bloom_level
+        payload.topic,
+        payload.num_questions,
+        payload.difficulty,
+        payload.bloom_level,
+        current_user=current_user,
+        lesson_id=None,
     )
     questions = _normalize_ai_questions(ai_data)
 
@@ -197,11 +209,7 @@ async def generate_quiz(
     current_user: User = Depends(require_instructor),
     db: AsyncSession = Depends(get_db),
 ) -> Quiz:
-    """
-    Call the ai-service to generate quiz questions, then persist them to the DB.
-    Only instructors and admins can trigger generation.
-    """
-    # Verify the course exists
+    """Sinh đề AI rồi lưu vào PostgreSQL. Chỉ giảng viên/admin được gọi."""
     result = await db.execute(select(Course).where(Course.id == payload.course_id))
     course = result.scalar_one_or_none()
     if not course:
@@ -211,6 +219,7 @@ async def generate_quiz(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chỉ giảng viên hoặc quản trị viên mới có quyền sinh đề AI")
     if role_str != "admin" and course.instructor_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không thể tạo đề thi cho khóa học của giảng viên khác")
+    await enforce_ai_quota(db, current_user.id, "quiz")
 
     lesson_obj: Lesson | None = None
     if payload.lesson_id is not None:
@@ -228,7 +237,12 @@ async def generate_quiz(
             )
 
     ai_data = await _request_ai_quiz(
-        payload.topic, payload.num_questions, payload.difficulty, payload.bloom_level
+        payload.topic,
+        payload.num_questions,
+        payload.difficulty,
+        payload.bloom_level,
+        current_user=current_user,
+        lesson_id=payload.lesson_id,
     )
     questions = _normalize_ai_questions(ai_data)
 

@@ -1,0 +1,53 @@
+@startuml Sequence_01_Auth_JWT
+!theme plain
+autonumber "<b>[00]</b>"
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Arial"
+skinparam defaultFontSize 12
+skinparam roundCorner 8
+skinparam shadowing false
+
+skinparam sequence {
+  ArrowColor #2980B9
+  ArrowThickness 1.2
+  LifeLineBorderColor #34495E
+  LifeLineBackgroundColor #EBF5FB
+  ParticipantBorderColor #2C3E50
+  ParticipantBackgroundColor #EAEDED
+  ParticipantFontStyle bold
+  ParticipantFontColor #1A5276
+  ActorBorderColor #117864
+  ActorBackgroundColor #E8F8F5
+  ActorFontStyle bold
+  ActorFontColor #0E6251
+}
+
+actor "Người dùng" as User
+participant "Frontend\n(Next.js :3000)" as FE
+participant "Backend\n(FastAPI :8000)" as BE
+database "Database\n(Supabase)" as DB
+
+User -> FE : 1. Nhập email & mật khẩu, bấm Đăng nhập
+activate FE
+FE -> BE : 2. POST /api/v1/auth/login
+activate BE
+
+BE -> DB : 3. Truy vấn user theo email
+activate DB
+DB --> BE : 4. Trả về hash mật khẩu & role
+deactivate DB
+
+BE -> BE : 5. So khớp mật khẩu bcrypt
+
+alt Thông tin hợp lệ
+    BE -> BE : 6. Ký JWT Access & Refresh Token
+    BE --> FE : 7. 200 OK (access_token, role)
+    FE --> User : 8. Điều hướng vào Dashboard
+else Sai mật khẩu hoặc tài khoản khóa
+    BE --> FE : 9. 401 Unauthorized / 403 Forbidden
+    FE --> User : 10. Thông báo lỗi đăng nhập
+end
+
+deactivate BE
+deactivate FE
+@enduml

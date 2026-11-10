@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
@@ -31,6 +32,10 @@ from app.api.v1 import (
     youtube,
     categories,
     ai_discovery,
+    grading,
+    reviews,
+    events,
+    analytics,
 )
 
 
@@ -43,6 +48,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception:
             pass
         await conn.run_sync(Base.metadata.create_all)
+        # Tác vụ nền xử lý học liệu chỉ sống trong tiến trình backend. Nếu tiến
+        # trình bị dừng giữa chừng, bản ghi sẽ kẹt ở queued/processing mãi và
+        # giao diện quay vòng vô hạn. Chuyển sang failed sau ngưỡng cấu hình để
+        # giảng viên biết cần tải lại, không âm thầm treo.
+        try:
+            result = await conn.execute(
+                text(
+                    """
+                    UPDATE lesson_materials
+                    SET status = 'failed',
+                        error_message = 'Tác vụ xử lý bị gián đoạn khi máy chủ khởi động lại. Vui lòng tải lại tệp.'
+                    WHERE status IN ('queued', 'processing')
+                      AND created_at < now() - make_interval(mins => :mins)
+                    """
+                ),
+                {"mins": settings.MATERIAL_STUCK_MINUTES},
+            )
+            if result.rowcount:
+                logging.getLogger(__name__).warning(
+                    "Đã chuyển %s học liệu kẹt sang failed", result.rowcount
+                )
+        except Exception as exc:  # pragma: no cover - không chặn khởi động
+            logging.getLogger(__name__).warning("Không thể phục hồi học liệu kẹt: %s", exc)
 
     yield
     await engine.dispose()
@@ -108,6 +136,11 @@ app.include_router(uploads.router,         prefix=prefix, tags=["Uploads"])
 app.include_router(youtube.router,          prefix=prefix, tags=["YouTube Import"])
 app.include_router(categories.router,       prefix=prefix, tags=["Categories & Levels"])
 app.include_router(ai_discovery.router,     prefix=prefix, tags=["AI Discovery"])
+app.include_router(grading.router,          prefix=prefix, tags=["AI Essay Grading"])
+app.include_router(reviews.router,          prefix=prefix, tags=["Course Reviews"])
+app.include_router(events.router,           prefix=prefix, tags=["Learning Events"])
+app.include_router(events.feedback_router,  prefix=prefix)
+app.include_router(analytics.router,        prefix=prefix, tags=["Analytics"])
 
 
 @app.get("/", include_in_schema=False)

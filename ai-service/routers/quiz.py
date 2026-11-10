@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from pipelines.quiz_generator import QuizGenerator
@@ -16,8 +16,17 @@ class GenerateQuizRequest(BaseModel):
     lesson_id: Optional[int] = Field(default=None, description="ID bài học liên quan")
     language: str = Field(default="vi", description="Ngôn ngữ sinh đề: vi hoặc en")
 
+
+def _user_id_from_header(x_user_id: Optional[str]) -> Optional[int]:
+    try:
+        value = int(x_user_id or "")
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 @router.post("/generate", response_model=QuizSet, summary="Tự động sinh bộ câu hỏi trắc nghiệm từ tài liệu")
-async def generate_quiz(req: GenerateQuizRequest):
+async def generate_quiz(req: GenerateQuizRequest, x_user_id: Optional[str] = Header(default=None)):
     try:
         quiz_set = await quiz_generator.generate(
             content=req.content,
@@ -26,6 +35,7 @@ async def generate_quiz(req: GenerateQuizRequest):
             bloom_level=req.bloom_level,
             lesson_id=req.lesson_id,
             language=req.language,
+            user_id=_user_id_from_header(x_user_id),
         )
         return quiz_set
     except Exception as e:

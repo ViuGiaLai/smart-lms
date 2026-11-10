@@ -1,0 +1,9 @@
+lesson_id,lesson_title,question,expected_keywords,scope,notes
+185,Cân bằng lực và sơ đồ vật thể tự do,Môn cơ học kỹ thuật 1 gồm những chủ đề chính nào?,sơ đồ vật thể tự do;cân bằng;chuyển động song phẳng,in_scope,Câu hỏi tổng quan có trong transcript
+186,Ứng suất biến dạng và chọn vật liệu,Giới hạn bền kéo của vật liệu được định nghĩa như thế nào?,ứng suất tối đa;thử kéo,in_scope,Định nghĩa xuất hiện trong bài giảng
+187,Đọc bản vẽ kỹ thuật và dung sai,Bản vẽ chế tạo thường có những thành phần chính nào?,hình chiếu;kích thước;dung sai,in_scope,Kiến thức nền của bài
+234,Chuẩn bị dữ liệu trong Power BI,Bài lab 1 yêu cầu nhập dữ liệu từ những nguồn nào?,SQL Server;CSV,in_scope,Thực hành Power BI
+235,Làm sạch và chuyển đổi dữ liệu trong Power BI Desktop,Bài lab 2 dùng Power Query để làm gì?,làm sạch;biến đổi dữ liệu,in_scope,Thực hành Power BI
+185,Cân bằng lực và sơ đồ vật thể tự do,Giá vàng hôm nay là bao nhiêu?,giá vàng,out_of_scope,Câu ngoài phạm vi bài giảng — kỳ vọng từ chối
+233,Tổng quan về phân tích dữ liệu và Power BI,Làm sao gửi dữ liệu cảm biến từ ESP32 lên Firebase?,ESP32;Firebase,out_of_scope,Tài liệu sai chủ đề đã được cách ly — kỳ vọng từ chối
+186,Ứng suất biến dạng và chọn vật liệu,Ai là người sáng lập Facebook?,Facebook;Mark Zuckerberg,out_of_scope,Câu ngoài phạm vi bài giảng — kỳ vọng từ chối

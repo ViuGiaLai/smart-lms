@@ -215,6 +215,37 @@ export interface Enrollment {
   certificateUrl?: string
 }
 
+// ===== Course Reviews =====
+export interface CourseReviewItem {
+  id: number
+  rating: number
+  comment: string
+  createdAt?: string | null
+  updatedAt?: string | null
+  user: {
+    id: string
+    fullName: string
+    avatarUrl?: string | null
+  }
+  isMine?: boolean
+}
+
+export interface CourseReviewSummary {
+  averageRating: number
+  totalReviews: number
+  distribution: Record<'1' | '2' | '3' | '4' | '5', number>
+}
+
+export interface CourseReviewsPayload {
+  summary: CourseReviewSummary
+  items: CourseReviewItem[]
+  myReview: CourseReviewItem | null
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
 // ===== Progress =====
 export interface LessonProgress {
   lessonId: string
@@ -257,10 +288,14 @@ export interface ChatSourceRef {
 
 export interface ChatMessage {
   id: string
+  /** ID thật trong PostgreSQL (dạng `db-123`) sau khi backend lưu câu trả lời. */
+  serverId?: string
   role: MessageRole
   content: string
   timestamp: string
   isStreaming?: boolean
+  /** Đánh giá đã lưu của người học cho câu trả lời này. */
+  feedback?: 'up' | 'down' | null
   metadata?: {
     lessonId?: string
     courseId?: string

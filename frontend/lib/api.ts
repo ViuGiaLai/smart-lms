@@ -222,6 +222,29 @@ export const coursesApi = {
   getProgress: (courseId: string) =>
     api.get(`/api/v1/courses/${courseId}/progress`),
 
+  // Tóm tắt bài học thành điểm chính, flashcards và từ khóa bằng AI.
+  summarizeLesson: (courseId: string | number, lessonId: string | number) =>
+    api.post(`/api/v1/courses/${courseId}/lessons/${lessonId}/summarize`),
+
+  // Học liệu (PDF/DOCX/PPTX, video) đã tải lên cloud của một bài học.
+  // Học viên đã ghi danh chỉ nhận các bản ghi đã xử lý xong (status = ready).
+  getLessonMaterials: (courseId: string | number, lessonId: string | number) =>
+    api.get(`/api/v1/courses/${courseId}/lessons/${lessonId}/documents`),
+
+  // Đánh giá khóa học: tổng hợp số sao + nhận xét (công khai), gửi/xóa của chính mình.
+  getReviews: (courseId: string | number, params?: { page?: number; limit?: number }) =>
+    api.get(`/api/v1/courses/${courseId}/reviews`, { params }),
+
+  submitReview: (courseId: string | number, data: { rating: number; comment?: string }) =>
+    api.put(`/api/v1/courses/${courseId}/reviews`, data),
+
+  deleteReview: (courseId: string | number, reviewId: string | number) =>
+    api.delete(`/api/v1/courses/${courseId}/reviews/${reviewId}`),
+
+  // Số liệu học tập theo khóa (giảng viên phụ trách/admin).
+  getCourseAnalytics: (courseId: string | number, days = 30) =>
+    api.get(`/api/v1/instructor/courses/${courseId}/analytics`, { params: { days } }),
+
   markLessonComplete: (courseId: string, lessonId: string, watchedSeconds: number) =>
     api.post(`/api/v1/courses/${courseId}/lessons/${lessonId}/complete`, { watchedSeconds }),
 
@@ -237,6 +260,7 @@ export const coursesApi = {
 
   search: (query: string) =>
     api.get('/api/v1/courses/search', { params: { q: query } }),
+
 }
 
 // Instructor
@@ -287,6 +311,46 @@ export const instructorApi = {
     api.post('/api/v1/uploads/image', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+
+  // Chấm bài tự luận bằng AI theo Rubric
+  evaluateEssay: (data: {
+    studentName: string
+    studentEmail?: string
+    question?: string
+    studentAnswer: string
+    referenceAnswer?: string
+    rubric: Array<{ name: string; description?: string; maxScore: number }>
+    courseId?: number | null
+    lessonId?: number | null
+    maxTotalScore?: number
+  }) =>
+    api.post('/api/v1/grading/evaluate', {
+      student_name: data.studentName,
+      student_email: data.studentEmail || null,
+      question: data.question || null,
+      student_answer: data.studentAnswer,
+      reference_answer: data.referenceAnswer || null,
+      rubric: data.rubric.map((item) => ({
+        name: item.name,
+        description: item.description || '',
+        max_score: item.maxScore,
+      })),
+      course_id: data.courseId ?? null,
+      lesson_id: data.lessonId ?? null,
+      max_total_score: data.maxTotalScore ?? null,
+    }),
+
+  getGradingHistory: (params?: { courseId?: number; lessonId?: number; limit?: number }) =>
+    api.get('/api/v1/grading/history', {
+      params: {
+        course_id: params?.courseId,
+        lesson_id: params?.lessonId,
+        limit: params?.limit ?? 30,
+      },
+    }),
+
+  deleteGrading: (gradingId: string | number) =>
+    api.delete(`/api/v1/grading/${gradingId}`),
 }
 
 // AI Chat
@@ -294,6 +358,16 @@ export const instructorApi = {
 // được gọi trong `lib/hooks/useAIChat.ts` vì phải đọc stream bằng ReadableStream.
 // Trước đây file này còn khai báo các route `/api/v1/ai/sessions*` không tồn tại ở
 // backend nên đã được bỏ để không ai gọi nhầm.
+export const aiTutorApi = {
+  // Đánh giá hữu ích/không hữu ích cho một câu trả lời đã lưu trong PostgreSQL.
+  rateMessage: (messageId: string | number, rating: 'up' | 'down', comment?: string) => {
+    const numericId = Number(String(messageId).replace(/^db-/, ''))
+    return api.put(`/api/v1/ai-tutor/messages/${numericId}/feedback`, {
+      rating,
+      comment: comment || null,
+    })
+  },
+}
 
 // Student
 export const studentApi = {
@@ -377,6 +451,9 @@ export const adminApi = {
 
   getAIMonitoring: () =>
     api.get('/api/v1/admin/ai-monitoring'),
+
+  getAnalyticsOverview: () =>
+    api.get('/api/v1/admin/analytics/overview'),
 
   getUsers: (params?: { role?: string; search?: string }) =>
     api.get('/api/v1/admin/users', { params }),

@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Award, Sparkles, BookOpen, AlertCircle, RefreshCw } from 'lucide-react';
 import { coursesApi } from '@/lib/api';
+import { trackLearningEvent } from '@/lib/analytics';
 
 interface QuestionOption {
   key: string;
@@ -150,6 +151,22 @@ export default function StudentQuizPage() {
     if (activeQuiz) setStartedAt(Date.now());
   }, [activeQuiz]);
 
+  // Ghi nhận lượt bắt đầu làm đề (mỗi đề một lần trong phiên mở trang).
+  const trackedQuizStartRef = useRef<string>('');
+  useEffect(() => {
+    const course = resolvedCourseId || courseId;
+    if (!activeQuiz?.id || !course) return;
+    const key = `${course}:${activeQuiz.id}`;
+    if (trackedQuizStartRef.current === key) return;
+    trackedQuizStartRef.current = key;
+    trackLearningEvent({
+      event_type: 'quiz_start',
+      course_id: course,
+      lesson_id: activeQuiz.lesson_id ?? null,
+      metadata: { quiz_id: activeQuiz.id },
+    });
+  }, [activeQuiz?.id, activeQuiz?.lesson_id, resolvedCourseId, courseId]);
+
   const handleSelect = (questionId: number, optKey: string) => {
     if (isSubmitted) return;
     setAnswers((prev) => ({ ...prev, [questionId]: optKey }));
@@ -212,6 +229,22 @@ export default function StudentQuizPage() {
         setCalculatedScore(scoreVal);
         setIsPassed(Boolean(subData.passed));
         setIsSubmitted(true);
+
+        const targetCourseId = resolvedCourseId || courseId;
+        if (targetCourseId) {
+          trackLearningEvent({
+            event_type: 'quiz_submit',
+            course_id: targetCourseId,
+            lesson_id: activeQuiz.lesson_id ?? null,
+            duration_seconds: timeSpent,
+            metadata: {
+              quiz_id: activeQuiz.id,
+              correct_count: scoreVal,
+              total_questions: totalQuestions,
+              passed: Boolean(subData.passed),
+            },
+          });
+        }
 
         // Nếu đạt yêu cầu, cập nhật tiến độ bài học trong cơ sở dữ liệu
         const targetCId = resolvedCourseId || courseId;

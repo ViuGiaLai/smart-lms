@@ -10,6 +10,12 @@ from app.models.education_level import EducationLevel
 from app.models.discovery import DiscoveryJob, DiscoveryItem, DiscoveryStatus
 from app.models.mastery import StudentTopicMastery
 from app.models.lesson_material import LessonMaterial
+from app.models.essay_grading import EssayGrading
+from app.models.chat_message import ChatMessage
+from app.models.ai_usage import AiUsageLog
+from app.models.review import CourseReview
+from app.models.learning_event import LearningEvent
+from app.models.ai_feedback import AiMessageFeedback
 
 __all__ = [
     "User",
@@ -29,4 +35,10 @@ __all__ = [
     "DiscoveryStatus",
     "StudentTopicMastery",
     "LessonMaterial",
+    "EssayGrading",
+    "ChatMessage",
+    "AiUsageLog",
+    "CourseReview",
+    "LearningEvent",
+    "AiMessageFeedback",
 ]

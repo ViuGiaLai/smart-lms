@@ -112,6 +112,70 @@ async def get_ai_monitoring(
     except (httpx.HTTPError, ValueError):
         pass
 
+    usage: dict[str, Any] = {
+        "totalTokens": 0,
+        "promptTokens": 0,
+        "completionTokens": 0,
+        "requests": 0,
+        "last7DaysTokens": 0,
+        "estimatedShare": 0.0,
+        "byFeature": [],
+    }
+    if database_online:
+        try:
+            totals = (
+                await db.execute(
+                    text(
+                        """
+                        SELECT COALESCE(SUM(total_tokens), 0),
+                               COALESCE(SUM(prompt_tokens), 0),
+                               COALESCE(SUM(completion_tokens), 0),
+                               COUNT(*),
+                               COALESCE(SUM(CASE WHEN created_at >= now() - interval '7 days'
+                                                 THEN total_tokens ELSE 0 END), 0),
+                               COALESCE(AVG(CASE WHEN is_estimated THEN 1.0 ELSE 0.0 END), 0)
+                        FROM ai_usage_logs
+                        """
+                    )
+                )
+            ).one()
+            by_feature = (
+                await db.execute(
+                    text(
+                        """
+                        SELECT feature,
+                               COALESCE(SUM(total_tokens), 0) AS tokens,
+                               COUNT(*) AS requests
+                        FROM ai_usage_logs
+                        GROUP BY feature
+                        ORDER BY tokens DESC
+                        """
+                    )
+                )
+            ).all()
+            usage = {
+                "totalTokens": int(totals[0] or 0),
+                "promptTokens": int(totals[1] or 0),
+                "completionTokens": int(totals[2] or 0),
+                "requests": int(totals[3] or 0),
+                "last7DaysTokens": int(totals[4] or 0),
+                "estimatedShare": round(float(totals[5] or 0), 2),
+                "byFeature": [
+                    {"feature": row[0], "tokens": int(row[1] or 0), "requests": int(row[2] or 0)}
+                    for row in by_feature
+                ],
+            }
+        except Exception:
+            usage = {
+                "totalTokens": 0,
+                "promptTokens": 0,
+                "completionTokens": 0,
+                "requests": 0,
+                "last7DaysTokens": 0,
+                "estimatedShare": 0.0,
+                "byFeature": [],
+            }
+
     return {
         "success": True,
         "data": {
@@ -122,6 +186,7 @@ async def get_ai_monitoring(
                 "indexedLessons": indexed_lessons,
             },
             "aiService": ai_service,
+            "usage": usage,
         },
     }
 

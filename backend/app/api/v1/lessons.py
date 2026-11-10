@@ -3,16 +3,20 @@ from __future__ import annotations
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core.cache import invalidate_course_caches
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_active_user, require_instructor
 from app.models.course import Course
+from app.models.learning_event import LearningEvent
 from app.models.lesson import Lesson
 from app.models.user import User
 from app.schemas.course import LessonCreate, LessonUpdate, LessonResponse
+from app.services.ai_quota import enforce_ai_quota
 from app.services.enrollment_service import require_course_access
 
 router = APIRouter(prefix="/courses/{course_id}/lessons")
@@ -150,3 +154,101 @@ async def delete_lesson(
     await db.commit()
     await invalidate_course_caches()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{lesson_id}/summarize")
+async def summarize_lesson(
+    course_id: int,
+    lesson_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Tóm tắt bài học thành điểm chính, flashcards và từ khóa bằng AI.
+    Tổng hợp nội dung từ video transcript, tài liệu đính kèm (document chunks) hoặc bài học.
+    """
+    await require_course_access(db, current_user, course_id)
+    await enforce_ai_quota(db, current_user.id, "summarizer")
+
+    lesson = await _get_lesson_or_404(lesson_id, course_id, db)
+
+    # 1. Thu thập nội dung bài học
+    parts: list[str] = []
+    if lesson.transcript and len(lesson.transcript.strip()) > 30:
+        parts.append(f"Phụ đề / Transcript video:\n{lesson.transcript.strip()}")
+
+    # 2. Lấy chunks tài liệu từ pgvector
+    try:
+        chunks_res = await db.execute(
+            text(
+                "SELECT content FROM document_chunks "
+                "WHERE lesson_id = :lesson_id "
+                "ORDER BY id ASC LIMIT 25"
+            ),
+            {"lesson_id": lesson_id},
+        )
+        chunk_texts = [r[0] for r in chunks_res.fetchall() if r[0]]
+        if chunk_texts:
+            parts.append("Tài liệu bài học:\n" + "\n\n".join(chunk_texts))
+    except Exception:
+        # Bảng chưa có hoặc truy vấn lỗi thì bỏ qua phần chunk
+        pass
+
+    if not parts and lesson.content and len(lesson.content.strip()) > 20:
+        parts.append(f"Nội dung bài học:\n{lesson.content.strip()}")
+
+    full_text = "\n\n".join(parts).strip()
+    if not full_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bài học chưa có nội dung văn bản, video transcript hoặc tài liệu số hóa để AI tóm tắt.",
+        )
+
+    # 3. Gửi sang AI Service
+    url = f"{settings.AI_SERVICE_URL.rstrip('/')}/api/v1/summarizer/summarize"
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    headers = {
+        "X-User-Id": str(current_user.id),
+        "X-User-Role": role_str,
+        **settings.ai_service_headers,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.AI_SERVICE_TIMEOUT) as client:
+            res = await client.post(
+                url,
+                json={
+                    "content": full_text[:35000],
+                    "num_key_points": 8,
+                    "num_flashcards": 6,
+                    "lesson_id": lesson_id,
+                },
+                headers=headers,
+            )
+        if res.status_code >= 400:
+            detail = "AI Service không thể tóm tắt bài giảng"
+            try:
+                detail = res.json().get("detail", detail)
+            except Exception:
+                pass
+            raise HTTPException(status_code=res.status_code, detail=str(detail))
+        summary_result = res.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Không thể kết nối đến AI Service: {str(exc)}",
+        )
+
+    # 4. Ghi nhận sự kiện học tập
+    db.add(
+        LearningEvent(
+            user_id=current_user.id,
+            course_id=course_id,
+            lesson_id=lesson_id,
+            event_type="ai_summary",
+            event_metadata={"lesson_title": lesson.title},
+        )
+    )
+    await db.commit()
+
+    return {"success": True, "data": summary_result}

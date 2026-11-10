@@ -30,10 +30,29 @@ from typing import Any
 from pydantic import BaseModel, EmailStr
 from app.models.user import User, UserRole
 from app.models.password_reset import PasswordResetToken
+from app.models.learning_event import LearningEvent
 from app.schemas.user import UserCreate, UserResponse, Token, LoginRequest
 from app.core.security import decode_token
 
 router = APIRouter(prefix="/auth")
+
+
+async def _record_login_event(db: AsyncSession, user: User) -> None:
+    """Ghi sự kiện đăng nhập để đo tỷ lệ kích hoạt của lớp pilot.
+
+    Lỗi ghi nhận không được làm hỏng đăng nhập: đây là dữ liệu phân tích phụ.
+    """
+    try:
+        db.add(
+            LearningEvent(
+                user_id=user.id,
+                event_type="login",
+                event_metadata={"role": str(user.role.value if hasattr(user.role, "value") else user.role)},
+            )
+        )
+        await db.commit()
+    except Exception:  # noqa: BLE001 - analytics không được chặn đăng nhập
+        await db.rollback()
 
 
 class RefreshRequest(BaseModel):
@@ -146,6 +165,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
     user_dict = _format_user_dict(user)
+    await _record_login_event(db, user)
 
     return {
         "success": True,
@@ -204,6 +224,7 @@ async def demo_login(payload: DemoLoginRequest, db: AsyncSession = Depends(get_d
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
     user_dict = _format_user_dict(user)
+    await _record_login_event(db, user)
 
     return {
         "success": True,

@@ -966,7 +966,7 @@ export default function CreateCoursePage() {
                         <Badge variant="success" className="text-[10px] font-bold">Khám phá thông minh</Badge>
                       </div>
                       <p className="mt-0.5 text-xs text-stone-600">
-                        Nhập chủ đề bất kỳ (Toán học, Tiếng Anh, Lập trình...), AI sẽ tự tìm học liệu, video bài giảng YouTube và thiết lập khóa học cho bạn duyệt!
+                        Nhập chủ đề bất kỳ , AI sẽ tự tìm học liệu, video bài giảng YouTube và thiết lập khóa học cho bạn duyệt!
                       </p>
                     </div>
                   </div>
