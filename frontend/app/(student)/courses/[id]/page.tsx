@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useState, useEffect } from 'react';
+import { AssignmentsPanel } from '@/components/course/AssignmentsPanel';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
@@ -31,12 +32,14 @@ import { useAuth } from '@/lib/auth-context';
 import type { CourseReviewItem, CourseReviewsPayload } from '@/types';
 
 interface LessonDetail {
+  section_id?: number | null;
   id: string | number;
   title: string;
   duration?: string | number;
   durationText?: string;
   order?: number;
   isFree?: boolean;
+  youtubeVideoId?: string | null;
 }
 
 function formatLessonDuration(lesson: LessonDetail): string {
@@ -106,6 +109,7 @@ function StarRow({
 }
 
 interface CourseDetail {
+  sections?: { id: number; title: string }[];
   id: string;
   title: string;
   description: string;
@@ -118,10 +122,14 @@ interface CourseDetail {
   totalLessons?: number;
   totalStudents?: number;
   price?: number;
+  isInternal?: boolean;
+  demoCheckoutEnabled?: boolean;
   thumbnail?: string;
   category?: {
+    id?: number | null;
     name?: string;
   };
+  targetAudience?: string;
   level?: string;
   rating?: number;
   totalReviews?: number;
@@ -143,6 +151,7 @@ export default function CourseDetailPage() {
   const [enrollmentLoading, setEnrollmentLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [enrollError, setEnrollError] = useState('');
+  const [relatedCourses, setRelatedCourses] = useState<Pick<CourseDetail, 'id' | 'title'>[]>([]);
 
   // Đánh giá khóa học
   const [reviewsData, setReviewsData] = useState<CourseReviewsPayload | null>(null);
@@ -165,40 +174,21 @@ export default function CourseDetailPage() {
   const isAdmin = currentUser?.role === 'admin';
   const isStudent = currentUser?.role === 'student';
 
-  // Học viên phải có bản ghi ghi danh thì mới được ghi tiến độ / nhận chứng chỉ.
-  useEffect(() => {
-    if (!isStudent) {
-      setEnrollmentLoading(false);
-      return;
-    }
-    let isMounted = true;
-    setEnrollmentLoading(true);
-    coursesApi
-      .getEnrolled()
-      .then((res) => {
-        if (!isMounted) return;
-        const list = res.data?.data || [];
-        setIsEnrolled(
-          list.some((item: any) => String(item.courseId ?? item.course?.id) === String(courseId))
-        );
-      })
-      .catch(() => {
-        // Không chặn trang nếu không đọc được trạng thái ghi danh.
-      })
-      .finally(() => {
-        if (isMounted) setEnrollmentLoading(false);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [isStudent, courseId]);
-
   const handleEnrollAndLearn = async () => {
     if (!course) return;
     setEnrollError('');
     if (!currentUser) {
       // Khách chưa đăng nhập: đưa tới trang đăng nhập thay vì gọi API và nhận 401.
-      router.push('/login');
+      router.push(`/login?next=${encodeURIComponent(`/courses/${courseId}`)}`);
+      return;
+    }
+    if (!isStudent) {
+      setEnrollError('Chỉ tài khoản học viên có thể ghi danh.');
+      return;
+    }
+    if ((course.price ?? 0) > 0) {
+      if (course.demoCheckoutEnabled) router.push(`/checkout/${course.id}`);
+      else setEnrollError('Khóa học có học phí. Hiện chưa mở thanh toán trực tuyến.');
       return;
     }
     setEnrolling(true);
@@ -217,6 +207,7 @@ export default function CourseDetailPage() {
   };
 
   useEffect(() => {
+    if (authLoading) return;
     let isMounted = true;
     const fetchCourse = async () => {
       setLoading(true);
@@ -227,6 +218,7 @@ export default function CourseDetailPage() {
           : await coursesApi.getBySlug(courseId);
         if (res.data?.data && isMounted) {
           const apiCourse = res.data.data;
+          setIsEnrolled(Boolean(apiCourse.isEnrolled));
           setCourse({
             id: String(apiCourse.id),
             title: apiCourse.title,
@@ -238,14 +230,18 @@ export default function CourseDetailPage() {
             totalLessons: apiCourse.lessons?.length || apiCourse.totalLessons || 0,
             totalStudents: apiCourse.totalStudents || 0,
             price: typeof apiCourse.price === 'number' ? apiCourse.price : 0,
+            isInternal: apiCourse.isInternal === true,
+            demoCheckoutEnabled: apiCourse.demoCheckoutEnabled === true,
             thumbnail: apiCourse.thumbnail || '',
             category: apiCourse.category || { name: 'Chưa phân loại' },
+            targetAudience: apiCourse.targetAudience,
             level: apiCourse.level || 'Chưa phân loại',
             rating: apiCourse.rating ?? undefined,
             totalReviews: apiCourse.totalReviews ?? 0,
             outcomes: apiCourse.outcomes || [],
             prerequisites: apiCourse.prerequisites || [],
             lessons: apiCourse.lessons || [],
+            sections: apiCourse.sections ?? [],
           });
         }
       } catch (err: any) {
@@ -253,14 +249,33 @@ export default function CourseDetailPage() {
           setError('Không tìm thấy thông tin khóa học hoặc khóa học chưa được kích hoạt.');
         }
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          setEnrollmentLoading(false);
+        }
       }
     };
     fetchCourse();
     return () => {
       isMounted = false;
     };
-  }, [courseId]);
+  }, [courseId, currentUser?.id, authLoading]);
+
+  const categoryId = course?.category?.id;
+  const numericCourseId = course?.id;
+  useEffect(() => {
+    setRelatedCourses([]);
+    if (typeof categoryId !== 'number' || !numericCourseId) return;
+    let active = true;
+    coursesApi.getAll({ category_id: categoryId, limit: 4 })
+      .then((response) => {
+        if (!active) return;
+        const related = (response.data?.data ?? []) as Pick<CourseDetail, 'id' | 'title'>[];
+        setRelatedCourses(related.filter((item) => String(item.id) !== numericCourseId).slice(0, 3));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [categoryId, numericCourseId]);
 
   const reviewsCourseId = course?.id;
 
@@ -487,7 +502,7 @@ export default function CourseDetailPage() {
             </div>
 
             {/* Mục tiêu học tập & Yêu cầu tiên quyết (dữ liệu giảng viên nhập trong DB) */}
-            {((course.outcomes?.length ?? 0) > 0 || (course.prerequisites?.length ?? 0) > 0) && (
+            {((course.outcomes?.length ?? 0) > 0 || (course.prerequisites?.length ?? 0) > 0 || course.targetAudience) && (
               <div className="bg-white rounded-lg p-6 sm:p-8 border border-stone-200/90 shadow-xs space-y-4">
                 {(course.outcomes?.length ?? 0) > 0 && (
                   <>
@@ -517,6 +532,12 @@ export default function CourseDetailPage() {
                     </ul>
                   </div>
                 )}
+                {course.targetAudience && (
+                  <div className="space-y-2">
+                    <h3 className="text-base font-semibold">Khóa học phù hợp với ai?</h3>
+                    <p className="text-sm text-muted-foreground">{course.targetAudience}</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -527,14 +548,19 @@ export default function CourseDetailPage() {
                   <h2 className="text-base font-semibold text-stone-900 uppercase tracking-wider">
                     Giáo trình bài học ({course.lessons?.length || 0} bài)
                   </h2>
-                  <p className="text-xs text-stone-500">Bao gồm video bài giảng, tài liệu slide và đề thi AI ôn tập</p>
+                  <p className="text-sm text-muted-foreground">Bài có nhãn Học thử mở được trước khi ghi danh.</p>
                 </div>
               </div>
 
               <div className="space-y-2.5 pt-2">
                 {course.lessons?.map((lesson, idx) => (
+                  <React.Fragment key={lesson.id}>
+                  {Boolean(course.sections?.length) && (idx === 0 || course.lessons?.[idx - 1]?.section_id !== lesson.section_id) && (
+                    <h3 className="px-1 pt-3 text-sm font-semibold text-foreground">
+                      {course.sections?.find((section) => section.id === lesson.section_id)?.title ?? 'Bài học khác'}
+                    </h3>
+                  )}
                   <div
-                    key={lesson.id}
                     className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 sm:p-4 rounded-lg border border-stone-200/80 hover:border-brand-300 hover:bg-brand-50/20 transition group gap-3"
                   >
                     <div className="flex items-start sm:items-center gap-3">
@@ -556,18 +582,7 @@ export default function CourseDetailPage() {
                       </div>
                     </div>
 
-                    {isStudent && !isEnrolled ? (
-                      // Chưa ghi danh: ghi danh trước rồi mới vào bài, nếu không backend sẽ từ chối lưu tiến độ.
-                      <button
-                        type="button"
-                        onClick={handleEnrollAndLearn}
-                        disabled={enrolling}
-                        className="self-end sm:self-center inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-50 group-hover:bg-brand-600 text-brand-700 group-hover:text-white text-xs font-bold transition shadow-xs disabled:opacity-60"
-                      >
-                        <PlayCircle className="w-3.5 h-3.5" />
-                        Đăng ký & học
-                      </button>
-                    ) : (
+                    {isEnrolled || isOwner || isAdmin ? (
                       <Link
                         href={`/courses/${course.id}/learn?lessonId=${lesson.id}`}
                         className="self-end sm:self-center inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-50 group-hover:bg-brand-600 text-brand-700 group-hover:text-white text-xs font-bold transition shadow-xs"
@@ -575,8 +590,13 @@ export default function CourseDetailPage() {
                         <PlayCircle className="w-3.5 h-3.5" />
                         Học bài
                       </Link>
+                    ) : lesson.isFree && lesson.youtubeVideoId ? (
+                      <a href={`https://www.youtube.com/watch?v=${encodeURIComponent(lesson.youtubeVideoId)}`} target="_blank" rel="noopener noreferrer" className="self-start rounded-md border border-border px-3 py-2 text-sm font-semibold text-primary sm:self-center">Học thử</a>
+                    ) : (
+                      <span className="self-start text-sm text-muted-foreground sm:self-center">Cần ghi danh</span>
                     )}
                   </div>
+                  </React.Fragment>
                 ))}
               </div>
             </div>
@@ -611,7 +631,7 @@ export default function CourseDetailPage() {
               <div className="flex items-baseline justify-between border-b border-stone-100 pb-4">
                 <div>
                   <span className="text-2xl font-semibold text-stone-900">
-                    {course.price === 0 ? 'Miễn phí' : `${Number(course.price).toLocaleString('vi-VN')} đ`}
+                    {course.isInternal ? 'Khóa học nội bộ' : course.price === 0 ? 'Miễn phí' : `${Number(course.price).toLocaleString('vi-VN')} đ`}
                   </span>
                 </div>
               </div>
@@ -657,10 +677,10 @@ export default function CourseDetailPage() {
                 </div>
               ) : isEnrolled ? (
                 <Link
-                  href={`/courses/${course.id}/learn?lessonId=${firstLessonId}`}
+                  href={`/courses/${course.id}/learn`}
                   className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold py-3.5 rounded-lg shadow-md shadow-brand-100 transition"
                 >
-                  <PlayCircle className="w-5 h-5" /> Vào học ngay
+                  <PlayCircle className="w-5 h-5" /> Tiếp tục học
                 </Link>
               ) : (
                 <div className="space-y-2">
@@ -677,7 +697,7 @@ export default function CourseDetailPage() {
                         ? 'Đăng nhập để đăng ký học'
                         : course.price === 0
                           ? 'Đăng ký học miễn phí'
-                          : 'Đăng ký học ngay'}
+                          : course.demoCheckoutEnabled ? 'Mở thanh toán Demo' : 'Kiểm tra khả năng ghi danh'}
                   </button>
                   {enrollError && (
                     <p role="alert" className="text-[11px] font-medium text-rose-600 text-center">
@@ -694,7 +714,7 @@ export default function CourseDetailPage() {
                 </p>
                 <div className="flex items-center gap-2">
                   <Video className="w-4 h-4 text-brand-600 shrink-0" />
-                  <span>Trình phát Focus Player độ nét cao Full HD</span>
+                  <span>Trình phát bài giảng</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-brand-600 shrink-0" />
@@ -715,10 +735,10 @@ export default function CourseDetailPage() {
             <div className="bg-brand-50/70 border border-brand-100 rounded-lg p-4 text-xs text-brand-900 space-y-1">
               <div className="flex items-center gap-1.5 font-bold">
                 <ShieldCheck className="w-4 h-4 text-brand-600" />
-                <span>Bảo chứng Học thuật & NCKH</span>
+                <span>Thông tin về Gia sư AI</span>
               </div>
               <p className="text-[11px] text-brand-700/90 leading-relaxed">
-                Đề tài NCKH SmartTutor LMS. Dữ liệu bài giảng được kiểm duyệt sư phạm trước khi nạp vào pgvector.
+                Sau khi ghi danh, bạn có thể hỏi Gia sư AI về nội dung bài học. Câu trả lời có nguồn khi trợ lý tìm được học liệu liên quan.
               </p>
             </div>
           </div>
@@ -1015,16 +1035,28 @@ export default function CourseDetailPage() {
             </div>
           </div>
         </section>
+        {isEnrolled && <AssignmentsPanel courseId={course.id} initialAssignmentId={
+          typeof window === 'undefined' ? undefined : Number(new URLSearchParams(window.location.search).get('assignment')) || undefined
+        } />}
+        {relatedCourses.length > 0 && (
+          <section className="space-y-3 rounded-xl border border-border bg-card p-5 sm:p-6" aria-labelledby="related-courses">
+            <h2 id="related-courses" className="text-lg font-semibold">Khóa học cùng lĩnh vực</h2>
+            <ul className="divide-y divide-border">
+              {relatedCourses.map((related) => (
+                <li key={related.id}>
+                  <Link href={`/courses/${related.id}`} className="block py-3 text-sm font-medium text-primary hover:underline">{related.title}</Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
 
       {/* ── Mobile Sticky Bottom Enrollment Bar ── */}
       <div className="md:hidden fixed inset-x-0 bottom-0 z-40 flex items-center justify-between border-t border-stone-200/90 bg-white/95 px-4 pt-2.5 pb-safe shadow-xl backdrop-blur-md">
         <div>
           <span className="text-base font-bold text-stone-900 block leading-tight">
-            {course.price === 0 ? 'Miễn phí' : `${Number(course.price).toLocaleString('vi-VN')} đ`}
-          </span>
-          <span className="text-[10px] text-emerald-600 font-bold">
-            {course.price === 0 ? 'Học bổng NCKH' : 'Bảo đảm kiến thức'}
+            {course.isInternal ? 'Nội bộ' : course.price === 0 ? 'Miễn phí' : `${Number(course.price).toLocaleString('vi-VN')} đ`}
           </span>
         </div>
 
@@ -1046,11 +1078,11 @@ export default function CourseDetailPage() {
           </Link>
         ) : isEnrolled ? (
           <Link
-            href={`/courses/${course.id}/learn?lessonId=${firstLessonId}`}
+            href={`/courses/${course.id}/learn`}
             className="inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 active:scale-95 text-white text-xs font-bold py-2.5 px-5 rounded-lg transition"
           >
             <PlayCircle className="w-4 h-4" />
-            <span>Vào học ngay</span>
+            <span>Tiếp tục học</span>
           </Link>
         ) : (
           <button

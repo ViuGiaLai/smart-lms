@@ -69,7 +69,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: {
-    signIn: '/login',
+    signIn: '/?auth=login',
   },
   secret: process.env.NEXTAUTH_SECRET || 'smart_lms_super_secret_jwt_key_2026',
 };

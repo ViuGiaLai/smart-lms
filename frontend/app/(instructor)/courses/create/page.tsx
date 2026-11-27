@@ -114,6 +114,7 @@ export default function CreateCoursePage() {
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [level, setLevel] = useState('beginner');
   const [isFree, setIsFree] = useState(true);
+  const [isInternal, setIsInternal] = useState(false);
   const [price, setPrice] = useState('');
   const [statusVal, setStatusVal] = useState<'published' | 'draft'>('draft');
   const [thumbnail, setThumbnail] = useState(PRESET_THUMBNAILS[0].url);
@@ -659,6 +660,7 @@ export default function CreateCoursePage() {
         target_audience: targetAudience.trim() || undefined,
         language: language || 'vi',
         price: isFree ? 0 : Number(price) || 0,
+        is_internal: isInternal,
         thumbnail: thumbnail.trim(),
         // Khóa học luôn được tạo ở trạng thái nháp: backend chỉ cho xuất bản
         // khi bài học và học liệu đã được lưu/trích xuất xong.
@@ -777,6 +779,7 @@ export default function CreateCoursePage() {
       // Không xuất bản khi còn tác vụ nền: lúc đó backend chưa thể xác nhận
       // RAG/học liệu đã sẵn sàng. Giảng viên có thể xuất bản ở trang quản lý
       // sau khi các tệp hoàn tất.
+      let finalStatus = 'draft';
       if (statusVal === 'published' && queuedUploads === 0) {
         setSuccessMsg('Đang kiểm tra điều kiện xuất bản khóa học...');
         const publishResponse = await fetch(`${apiUrl}/api/v1/courses/${newCourseId}/publish`, {
@@ -792,14 +795,17 @@ export default function CreateCoursePage() {
               : publishError?.detail?.message || publishError?.detail || 'Khóa học chưa đủ điều kiện để xuất bản.',
           );
         }
+        finalStatus = (await publishResponse.json()).status;
       }
 
       setSuccessMsg(
         queuedUploads > 0
           ? `Khóa học đang ở bản nháp. ${queuedUploads} tệp đang được máy chủ xử lý; vào Quản lý khóa học để theo dõi và xuất bản khi hoàn tất.`
-          : statusVal === 'published'
-            ? 'Khóa học, bài giảng và các bộ đề đã đạt kiểm tra và được xuất bản!'
-            : 'Lưu khóa học, toàn bộ bài giảng và các bộ đề trắc nghiệm AI thành công vào PostgreSQL!',
+          : finalStatus === 'published'
+            ? 'Đã xuất bản khóa học.'
+            : finalStatus === 'in_review'
+              ? 'Đã gửi khóa học để quản trị viên duyệt.'
+              : 'Đã lưu bản nháp, bài giảng và bài kiểm tra.',
       );
       setTimeout(() => {
         router.push(`/courses/${newCourseId}/manage`);
@@ -1215,15 +1221,16 @@ export default function CreateCoursePage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <Label>Chính sách Học phí</Label>
-                        <div className="flex gap-2">
+                        <Label>Hình thức ghi danh</Label>
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
                             size="sm"
-                            variant={isFree ? 'success' : 'outline'}
-                            aria-pressed={isFree}
+                            variant={isFree && !isInternal ? 'default' : 'outline'}
+                            aria-pressed={isFree && !isInternal}
                             onClick={() => {
                               setIsFree(true);
+                              setIsInternal(false);
                               setPrice('');
                             }}
                             className="flex-1"
@@ -1235,12 +1242,17 @@ export default function CreateCoursePage() {
                             size="sm"
                             variant={!isFree ? 'default' : 'outline'}
                             aria-pressed={!isFree}
-                            onClick={() => setIsFree(false)}
+                            onClick={() => { setIsFree(false); setIsInternal(false); }}
                             className="flex-1"
                           >
-                            Có phí
+                            Bổ trợ (Demo)
+                          </Button>
+                          <Button type="button" size="sm" variant={isInternal ? 'default' : 'outline'} aria-pressed={isInternal}
+                            onClick={() => { setIsInternal(true); setIsFree(true); setPrice(''); }} className="flex-1">
+                            Nội bộ
                           </Button>
                         </div>
+                        {isInternal && <p className="text-sm text-muted-foreground">Giảng viên ghi danh sinh viên sau khi khóa học được xuất bản.</p>}
 
                         {!isFree && (
                           <div className="space-y-1.5 pt-1.5">
@@ -1283,7 +1295,7 @@ export default function CreateCoursePage() {
                           aria-pressed={statusVal === 'published'}
                           onClick={() => setStatusVal('published')}
                         >
-                          Xuất bản
+                          Gửi duyệt hoặc xuất bản
                         </Button>
                         <Button
                           type="button"

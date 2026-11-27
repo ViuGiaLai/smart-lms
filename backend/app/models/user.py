@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -27,6 +27,7 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    profile_fields: Mapped[dict | None] = mapped_column(JSON)
     # Tang len moi khi nguoi dung dang xuat: moi JWT cu (access + refresh) co
     # claim "ver" thap hon se bi tu choi, ke ca khi token chua het han.
     token_version: Mapped[int] = mapped_column(

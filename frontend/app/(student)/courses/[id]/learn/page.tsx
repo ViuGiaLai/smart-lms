@@ -35,6 +35,7 @@ import { coursesApi, quizApi } from '@/lib/api';
 import { trackLearningEvent } from '@/lib/analytics';
 
 interface LessonItem {
+  section_id?: number | null;
   id: string | number;
   title: string;
   duration?: number | string;
@@ -161,6 +162,8 @@ export default function LearnPage() {
   const [courseInstructorId, setCourseInstructorId] = useState<number | null>(null);
   // Yêu cầu tua video tại chỗ khi học viên bấm mốc thời gian trong câu trả lời AI.
   const [seekRequest, setSeekRequest] = useState<{ seconds: number; token: number } | null>(null);
+  const [savedPositions, setSavedPositions] = useState<Record<string, number>>({});
+  const [sectionNames, setSectionNames] = useState<Record<string, string>>({});
   // Transcript bài thật dài 1.500-2.300 ký tự: mặc định thu gọn để trang không bị kéo dài.
   const [showFullTranscript, setShowFullTranscript] = useState(false);
   const [showFullDescription, setShowFullDescription] = useState(false);
@@ -216,6 +219,8 @@ export default function LearnPage() {
     const fetchCourseData = async () => {
       setIsLoading(true);
       setAccessError('');
+      setSavedPositions({});
+      setSeekRequest(null);
       try {
         const res = /^\d+$/.test(courseId)
           ? await coursesApi.getById(courseId)
@@ -224,9 +229,15 @@ export default function LearnPage() {
         let loadedLessons: LessonItem[] = [];
         if (res.data?.data && isMounted) {
           const c = res.data.data;
+          if (!c.canAccessLessons) {
+            setLessons([]);
+            setAccessError('not-enrolled');
+            return;
+          }
           numericCourseId = String(c.id);
           setResolvedCourseId(numericCourseId);
           setCourseTitle(c.title || 'Khóa học trực tuyến');
+          setSectionNames(Object.fromEntries((c.sections ?? []).map((section: { id: number; title: string }) => [section.id, section.title])));
           if (c.instructor?.id) {
             setCourseInstructorId(Number(c.instructor.id));
           }
@@ -258,12 +269,14 @@ export default function LearnPage() {
           if (progRes?.data?.data && isMounted) {
             const p = progRes.data.data;
             if (p.completedLessons) setCompletedLessonIds(p.completedLessons);
+            setSavedPositions(p.positions ?? {});
             if (p.percentage !== undefined) setProgress(p.percentage);
             // Không có ?lessonId (nút "Học tiếp"): mở đúng bài chưa hoàn thành đầu tiên
             // thay vì luôn quay về bài 1.
             if (!searchParams?.get('lessonId') && loadedLessons.length > 0) {
               const done = new Set((p.completedLessons || []).map((id: any) => String(id)));
-              const resumeLesson = loadedLessons.find((l) => !done.has(String(l.id)));
+              const resumeLesson = loadedLessons.find((l) => String(l.id) === String(p.lastLessonId) && !done.has(String(l.id)))
+                || loadedLessons.find((l) => !done.has(String(l.id)));
               if (resumeLesson) setActiveLessonId(String(resumeLesson.id));
             }
           }
@@ -435,6 +448,7 @@ export default function LearnPage() {
   };
 
   const handleLessonChange = (lessonId: string | number) => {
+    setSeekRequest(null);
     setActiveLessonId(String(lessonId));
     setInTabAnswers({});
     setInTabSubmitted(false);
@@ -666,8 +680,11 @@ export default function LearnPage() {
               const isCompleted = completedLessonIds.includes(String(lesson.id));
 
               return (
+                <div key={lesson.id}>
+                {Object.keys(sectionNames).length > 0 && (idx === 0 || lessons[idx - 1].section_id !== lesson.section_id) && (
+                  <h3 className="px-3 pb-1 pt-3 text-xs font-semibold text-stone-300">{sectionNames[String(lesson.section_id)] ?? 'Bài học khác'}</h3>
+                )}
                 <button
-                  key={lesson.id}
                   onClick={() => handleLessonChange(lesson.id)}
                   className={`w-full text-left p-3 rounded-lg transition flex items-start gap-3 group pt-2.5 ${
                     isActive
@@ -711,6 +728,7 @@ export default function LearnPage() {
                     </div>
                   </div>
                 </button>
+                </div>
               );
             })}
           </div>
@@ -759,8 +777,11 @@ export default function LearnPage() {
                   const isCompleted = completedLessonIds.includes(String(lesson.id));
 
                   return (
+                    <div key={lesson.id}>
+                    {Object.keys(sectionNames).length > 0 && (idx === 0 || lessons[idx - 1].section_id !== lesson.section_id) && (
+                      <h3 className="px-3 pb-1 pt-3 text-xs font-semibold text-stone-300">{sectionNames[String(lesson.section_id)] ?? 'Bài học khác'}</h3>
+                    )}
                     <button
-                      key={lesson.id}
                       onClick={() => handleLessonChange(lesson.id)}
                       className={`w-full text-left p-3 rounded-lg transition flex items-start gap-3 pt-2.5 ${
                         isActive
@@ -800,6 +821,7 @@ export default function LearnPage() {
                         </div>
                       </div>
                     </button>
+                    </div>
                   );
                 })}
               </div>
@@ -815,7 +837,7 @@ export default function LearnPage() {
               <VideoPlayer
                 key={`player-${currentLesson.id}-${startSeconds}`}
                 videoUrl={currentLesson.video_url || currentLesson.videoUrl}
-                startSeconds={startSeconds}
+                startSeconds={startSeconds || savedPositions[String(currentLesson.id)] || 0}
                 seekRequest={seekRequest ?? undefined}
                 title={currentLesson.title}
                 onPlay={() => {

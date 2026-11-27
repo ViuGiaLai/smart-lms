@@ -126,7 +126,8 @@ async def get_optional_user(
     if not token:
         return None
     try:
-        return await get_current_user(token=token, db=db)
+        user = await get_current_user(token=token, db=db)
+        return user if user.is_active else None
     except HTTPException:
         return None
 

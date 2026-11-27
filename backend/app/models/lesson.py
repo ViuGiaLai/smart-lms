@@ -16,6 +16,9 @@ class Lesson(Base):
         Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String(512), nullable=False)
+    section_id: Mapped[int | None] = mapped_column(
+        ForeignKey("course_sections.id", ondelete="SET NULL"), index=True
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     video_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     duration: Mapped[int] = mapped_column(Integer, default=0, nullable=False)  # seconds

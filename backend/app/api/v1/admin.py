@@ -15,8 +15,29 @@ from app.models.user import User, UserRole
 from app.models.course import Course, CourseStatus
 from app.models.lesson import Lesson
 from app.models.quiz import QuizSubmission
+from app.models.checkout import DemoOrder
+from app.models.audit_log import AuditLog
+from app.services.audit_service import record_change
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+@router.get("/audit-logs")
+async def list_audit_logs(
+    before: int | None = Query(None, gt=0),
+    limit: int = Query(30, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    query = select(AuditLog).order_by(AuditLog.id.desc()).limit(limit + 1)
+    if before is not None:
+        query = query.where(AuditLog.id < before)
+    rows = list(await db.scalars(query))
+    return {"data": [
+        {"id": row.id, "actorId": row.actor_id, "action": row.action, "targetType": row.target_type,
+         "targetId": row.target_id, "details": row.details, "createdAt": row.created_at}
+        for row in rows[:limit]
+    ], "nextBefore": rows[limit - 1].id if len(rows) > limit else None}
 
 
 @router.get("/stats")
@@ -51,10 +72,19 @@ async def get_admin_stats(
 
     # 4. Đếm số lượng chunks đã số hóa vào pgvector
     try:
-        chunk_res = await db.execute(text("SELECT count(*) FROM document_chunks"))
-        total_chunks = chunk_res.scalar() or 0
+        async with db.begin_nested():
+            chunk_res = await db.execute(text("SELECT count(*) FROM document_chunks"))
+            total_chunks = chunk_res.scalar() or 0
     except Exception:
         total_chunks = 0
+
+    demo_stats = {}
+    if settings.demo_checkout_enabled:
+        count, amount = (await db.execute(
+            select(func.count(DemoOrder.id), func.coalesce(func.sum(DemoOrder.amount), 0))
+            .where(DemoOrder.status == "paid")
+        )).one()
+        demo_stats = {"paidDemoOrders": count, "demoAmount": float(amount)}
 
     return {
         "success": True,
@@ -67,6 +97,7 @@ async def get_admin_stats(
             "totalLessons": total_lessons,
             "totalQuizSubmissions": total_submissions,
             "totalIndexedChunks": total_chunks,
+            **demo_stats,
         },
     }
 
@@ -237,7 +268,7 @@ async def toggle_user_status(
     current_user: User = Depends(require_admin),
 ):
     """Bật/Tắt trạng thái hoạt động (Khóa / Mở khóa) của tài khoản. Chỉ Admin."""
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id).with_for_update())
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại")
@@ -246,7 +277,11 @@ async def toggle_user_status(
     if user.id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Không thể khóa tài khoản của chính mình")
 
-    user.is_active = not user.is_active
+    previous = user.is_active
+    user.is_active = not previous
+    if not user.is_active:
+        user.token_version += 1
+    record_change(db, current_user.id, "account.status", "user", user.id, previous=previous, current=user.is_active)
     await db.commit()
     await db.refresh(user)
 
@@ -268,7 +303,7 @@ async def change_user_role(
     current_user: User = Depends(require_admin),
 ):
     """Cập nhật phân quyền người dùng. Chỉ Admin."""
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id).with_for_update())
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Người dùng không tồn tại")
@@ -277,7 +312,10 @@ async def change_user_role(
     if user.id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Không thể thay đổi vai trò của chính mình")
 
-    user.role = UserRole(new_role)
+    if user.role.value != new_role:
+        record_change(db, current_user.id, "account.role", "user", user.id, previous=user.role.value, current=new_role)
+        user.role = UserRole(new_role)
+        user.token_version += 1
     await db.commit()
     await db.refresh(user)
 
@@ -299,7 +337,7 @@ async def list_courses_for_moderation(
     """Danh sách toàn bộ khóa học, bao gồm bản nháp và đã lưu trữ, cho Admin."""
     result = await db.execute(
         select(Course)
-        .options(selectinload(Course.instructor), selectinload(Course.lessons))
+        .options(selectinload(Course.instructor), selectinload(Course.lessons), selectinload(Course.education_level_rel))
         .order_by(desc(Course.created_at))
     )
     courses = result.scalars().all()
@@ -317,6 +355,7 @@ async def list_courses_for_moderation(
                     "fullName": course.instructor.name if course.instructor else "Chưa xác định",
                 },
                 "level": course.level or "intermediate",
+                "educationLevelName": course.education_level_rel.name if course.education_level_rel else None,
                 "totalLessons": len(course.lessons),
                 "price": float(course.price or 0),
                 "status": course.status.value if hasattr(course.status, "value") else str(course.status),
@@ -331,13 +370,14 @@ async def list_courses_for_moderation(
 async def change_course_status(
     course_id: int,
     new_status: CourseStatus = Query(...),
+    review_note: str | None = Query(None, max_length=2000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """Xuất bản, đưa về nháp hoặc lưu trữ một khóa học. Chỉ Admin."""
     from app.services.course_service import CourseService
 
-    course = await CourseService.change_status(db, course_id, new_status, current_user)
+    course = await CourseService.change_status(db, course_id, new_status, current_user, review_note)
     await db.commit()
     await db.refresh(course)
     await invalidate_course_caches()

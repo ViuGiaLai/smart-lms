@@ -46,7 +46,6 @@ async def get_instructor_dashboard(
     """Return live dashboard analytics for instructor directly from PostgreSQL."""
     from app.models.lesson import Lesson
     from app.models.quiz import Quiz, QuizSubmission
-    from app.models.enrollment import Enrollment
     from app.models.user import UserRole
 
     is_admin = (
@@ -96,17 +95,11 @@ async def get_instructor_dashboard(
     total_lessons = les_res.scalar() or 0 if les_res else 0
     total_quizzes = quiz_res.scalar() or 0 if quiz_res else 0
 
-    # 4. Doanh thu chỉ tính từ các lượt ghi danh thực tế theo từng khóa
-    revenue_res = await db.execute(
-        select(func.coalesce(func.sum(Course.price), 0))
-        .join(Enrollment, Enrollment.course_id == Course.id)
-        .where(Course.id.in_(course_ids))
-        .where(Course.status == CourseStatus.published)
-    ) if course_ids else None
-    total_rev = float(revenue_res.scalar() or 0) if revenue_res else 0.0
-
-    from datetime import datetime
-    current_month = datetime.utcnow().strftime("T%m")
+    from app.models.review import CourseReview
+    average_rating, total_reviews = (await db.execute(
+        select(func.avg(CourseReview.rating), func.count(CourseReview.id))
+        .where(CourseReview.course_id.in_(course_ids))
+    )).one()
 
     return {
         "success": True,
@@ -115,14 +108,10 @@ async def get_instructor_dashboard(
             "publishedCourses": published_count,
             "totalStudents": student_count,
             "totalSubmissions": submission_count,
-            "totalRevenue": total_rev,
             "totalLessons": total_lessons,
             "totalQuizzes": total_quizzes,
-            "averageRating": None,
-            "totalReviews": 0,
-            "monthlyRevenue": [
-                {"month": current_month, "revenue": round(total_rev), "students": student_count},
-            ],
+            "averageRating": round(float(average_rating), 1) if average_rating is not None else None,
+            "totalReviews": total_reviews,
         },
     }
 
@@ -641,6 +630,6 @@ async def publish_course_instructor(
     await invalidate_course_caches()
     return {
         "success": True,
-        "message": "Xuất bản khóa học thành công",
+        "message": "Đã gửi duyệt khóa học" if course.status == CourseStatus.in_review else "Xuất bản khóa học thành công",
         "data": {"id": str(course.id), "status": course.status.value if hasattr(course.status, "value") else str(course.status)},
     }

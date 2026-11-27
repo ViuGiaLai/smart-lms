@@ -24,7 +24,7 @@ async def get_public_stats(db: AsyncSession = Depends(get_db)) -> dict:
 
     total_courses = (
         await db.execute(
-            select(func.count(Course.id)).where(Course.status == CourseStatus.published)
+            select(func.count(Course.id)).where(Course.status == CourseStatus.published, Course.is_internal.is_(False))
         )
     ).scalar() or 0
     total_lessons = (await db.execute(select(func.count(Lesson.id)))).scalar() or 0

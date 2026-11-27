@@ -20,8 +20,8 @@ import {
 } from 'lucide-react'
 import { authApi } from '@/lib/api'
 import axios from 'axios'
-import { AuthShell } from '@/components/auth/AuthShell'
 import { useAuth } from '@/lib/auth-context'
+import { safeReturnPath } from '@/lib/auth-redirect'
 import { syncAuthCookieFromStorage } from '@/lib/auth-cookie'
 
 const loginSchema = z.object({
@@ -38,11 +38,12 @@ const ALLOW_DEMO_LOGIN = process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === 'true'
 const inputClass =
   'w-full rounded-md border border-input bg-card py-2.5 pl-10 pr-4 text-sm text-foreground transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30'
 
-export default function LoginPage() {
+export default function LoginForm({ switchHref }: { switchHref: string }) {
   const router = useRouter()
   const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [serverError, setServerError] = useState('')
+  const [passwordChanged, setPasswordChanged] = useState(false)
 
   const {
     register,
@@ -55,12 +56,12 @@ export default function LoginPage() {
   // Trang bị chặn trước đó được giữ trong ?next= để quay lại đúng chỗ.
   const resolveNextPath = () => {
     if (typeof window === 'undefined') return null
-    const raw = new URLSearchParams(window.location.search).get('next')
-    if (!raw) return null
-    // Chỉ chấp nhận đường dẫn nội bộ, tránh open-redirect ra domain khác.
-    if (!raw.startsWith('/') || raw.startsWith('//')) return null
-    return raw
+    return safeReturnPath(window.location.search)
   }
+
+  useEffect(() => {
+    setPasswordChanged(new URLSearchParams(window.location.search).get('passwordChanged') === '1')
+  }, [])
 
   // Phiên cũ chỉ có localStorage (tạo trước khi có middleware) bị đẩy về đây.
   // Đồng bộ cookie rồi quay lại đúng trang bị chặn thay vì bắt đăng nhập lại.
@@ -164,21 +165,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthShell
-      eyebrow="Đăng nhập"
-      title="Chào mừng trở lại!"
-      subtitle="Tiếp tục lộ trình học tập và trò chuyện cùng Gia sư AI của bạn."
-      asideTitle="Học đúng mạch, tiếp tục đúng chỗ."
-      asideDescription="Mở lại bài đang học, xem tiến độ và luyện tập theo lộ trình của riêng bạn."
-      footer={
-        <p className="text-center text-xs text-stone-600">
-          Chưa có tài khoản?{' '}
-          <Link href="/register" className="font-bold text-brand-600 hover:underline">
-            Đăng ký ngay miễn phí
-          </Link>
-        </p>
-      }
-    >
+    <>
       {/* Khối Tài khoản Trải nghiệm Nhanh (chỉ bật khi ALLOW_DEMO_LOGIN=true) */}
       {ALLOW_DEMO_LOGIN && (
         <div className="mb-6 rounded-lg border border-stone-200/80 bg-stone-50 p-3.5">
@@ -222,6 +209,7 @@ export default function LoginPage() {
         </div>
       )}
 
+      {passwordChanged && <p role="status" className="mb-4 rounded-lg bg-muted p-3 text-sm">Đã đổi mật khẩu. Hãy đăng nhập bằng mật khẩu mới.</p>}
       {serverError && (
         <div
           role="alert"
@@ -331,6 +319,10 @@ export default function LoginPage() {
         </Link>{' '}
         của chúng tôi.
       </p>
-    </AuthShell>
+      <p className="mt-5 border-t border-border pt-4 text-center text-sm text-muted-foreground">
+        Chưa có tài khoản?{' '}
+        <Link href={switchHref} scroll={false} className="font-semibold text-primary hover:underline">Đăng ký</Link>
+      </p>
+    </>
   )
 }

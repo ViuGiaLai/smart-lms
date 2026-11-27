@@ -212,6 +212,7 @@ export interface Enrollment {
   completedLessons?: number
   totalLessons?: number
   lastAccessedAt?: string
+  learningStatus?: 'not_started' | 'in_progress' | 'completed'
   certificateUrl?: string
 }
 

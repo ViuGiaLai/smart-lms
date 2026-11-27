@@ -37,6 +37,9 @@ from app.api.v1 import (
     events,
     analytics,
     checkout,
+    curriculum,
+    assignments,
+    notifications,
 )
 
 
@@ -145,6 +148,9 @@ app.include_router(events.router,           prefix=prefix, tags=["Learning Event
 app.include_router(events.feedback_router,  prefix=prefix)
 app.include_router(analytics.router,        prefix=prefix, tags=["Analytics"])
 app.include_router(checkout.router, prefix=prefix)
+app.include_router(curriculum.router, prefix=prefix)
+app.include_router(assignments.router, prefix=prefix)
+app.include_router(notifications.router, prefix=prefix)
 
 
 @app.get("/", include_in_schema=False)

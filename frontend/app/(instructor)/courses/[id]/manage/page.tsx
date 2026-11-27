@@ -25,14 +25,18 @@ import {
   ChevronRight,
   Layers,
 } from 'lucide-react';
-import { categoriesApi, coursesApi, educationLevelsApi, youtubeApi } from '@/lib/api';
+import { categoriesApi, coursesApi, educationLevelsApi, instructorApi, youtubeApi } from '@/lib/api';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ErrorState } from '@/components/ui/empty-state';
+import { CurriculumEditor, type CourseSection } from '@/components/course/CurriculumEditor';
+import { InternalEnrollment } from '@/components/course/InternalEnrollment';
+import { AssignmentsPanel } from '@/components/course/AssignmentsPanel';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
 
 interface LessonItem {
   id: string | number;
   title: string;
+  section_id?: number | null;
   order_index?: number;
   duration?: number;
   video_url?: string;
@@ -110,8 +114,12 @@ export default function CourseManagePage() {
   const [showCourseEdit, setShowCourseEdit] = useState(false);
   const [isSavingCourse, setIsSavingCourse] = useState(false);
   const [lessons, setLessons] = useState<LessonItem[]>([]);
+  const [sections, setSections] = useState<CourseSection[]>([]);
+  const [isInternal, setIsInternal] = useState(false);
   const [courseQuizzes, setCourseQuizzes] = useState<any[]>([]);
   const [courseStatus, setCourseStatus] = useState<string>('draft');
+  const [reviewRequired, setReviewRequired] = useState(false);
+  const [reviewNote, setReviewNote] = useState('');
   const [editingLesson, setEditingLesson] = useState<LessonItem | null>(null);
   const [isSavingLesson, setIsSavingLesson] = useState(false);
 
@@ -195,8 +203,12 @@ export default function CourseManagePage() {
             } catch { return { ...lesson, materials: [] }; }
           }));
           setLessons(lessonsWithMaterials);
+          setSections(c.sections ?? []);
+          setIsInternal(c.isInternal === true);
           setCourseQuizzes(c.quizzes || []);
           setCourseStatus(c.status || 'draft');
+          setReviewRequired(c.courseReviewRequired === true);
+          setReviewNote(c.reviewNote || '');
         }
       } catch (err) {
         console.error('Lỗi khi nạp dữ liệu khóa học:', err);
@@ -502,10 +514,21 @@ export default function CourseManagePage() {
       if (!response.ok) {
         throw new Error(courseError(data?.detail, 'Không thể xuất bản khóa học.'));
       }
-      setCourseStatus('published');
-      setSuccessMessage('Khóa học đã được xuất bản.');
+      setCourseStatus(data.status);
+      setReviewNote('');
+      setSuccessMessage(data.status === 'in_review' ? 'Đã gửi khóa học cho quản trị viên duyệt.' : 'Khóa học đã được xuất bản.');
     } catch (error) {
       setPublishError(error instanceof Error ? error.message : 'Không thể xuất bản khóa học.');
+    }
+  };
+
+  const withdrawReview = async () => {
+    try {
+      await instructorApi.updateCourse(courseId, { status: 'draft' });
+      setCourseStatus('draft');
+      setSuccessMessage('Đã rút yêu cầu duyệt.');
+    } catch {
+      setPublishError('Không thể rút yêu cầu duyệt.');
     }
   };
 
@@ -683,7 +706,7 @@ export default function CourseManagePage() {
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}>
-                {courseStatus === 'published' ? '✓ Đã xuất bản' : '✏️ Bản nháp'}
+                {({ published: 'Đã xuất bản', in_review: 'Chờ duyệt', archived: 'Đã lưu trữ' } as Record<string, string>)[courseStatus] || 'Bản nháp'}
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
@@ -694,21 +717,22 @@ export default function CourseManagePage() {
             </p>
           </div>
 
-          <button onClick={() => setShowCourseEdit(true)} className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-3 text-xs font-bold text-primary transition hover:bg-accent md:w-auto shrink-0">
+          {courseStatus !== 'in_review' && <button onClick={() => { setEditError(''); setShowCourseEdit(true); }} className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-3 text-xs font-bold text-primary transition hover:bg-accent md:w-auto shrink-0">
             <Edit3 className="w-4 h-4" /> Sửa thông tin khóa học
-          </button>
-          <button
+          </button>}
+          {courseStatus !== 'in_review' && <button
             onClick={() => setShowAddForm(true)}
             className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-xs font-bold text-primary-foreground transition hover:bg-primary/90 md:w-auto shrink-0"
           >
             <PlusCircle className="w-4 h-4" /> Soạn thảo bài học mới
-          </button>
-          {courseStatus !== 'published' && (
+          </button>}
+          {courseStatus === 'in_review' && <button type="button" onClick={() => void withdrawReview()} className="rounded-md border border-border px-4 py-3 text-sm font-semibold">Rút yêu cầu duyệt</button>}
+          {(courseStatus === 'draft' || (!reviewRequired && courseStatus === 'archived')) && (
             <button
               onClick={handlePublishCourse}
               className="inline-flex w-full items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-5 py-3 rounded-xl shadow-md shadow-emerald-100 transition md:w-auto shrink-0"
             >
-              <CheckCircle2 className="w-4 h-4" /> Xuất bản khóa học
+              <CheckCircle2 className="w-4 h-4" /> {reviewRequired ? 'Gửi duyệt' : 'Xuất bản khóa học'}
             </button>
           )}
         </div>
@@ -748,7 +772,25 @@ export default function CourseManagePage() {
         </Dialog>
 
         {publishError && <ErrorState message={publishError} />}
+        {reviewNote && <p role="status" className="rounded-lg border border-border bg-card p-4 text-sm">Góp ý từ quản trị viên. {reviewNote}</p>}
         {materialError && <ErrorState message={materialError} />}
+        {isInternal && courseStatus === 'published' && <InternalEnrollment courseId={courseId} />}
+        <AssignmentsPanel courseId={courseId} teaching locked={courseStatus === 'in_review'} />
+        {courseStatus !== 'in_review' && (
+          <CurriculumEditor courseId={courseId} sections={sections} lessons={lessons} onChange={(nextSections, placements) => {
+            setSections(nextSections);
+            if (!placements) return;
+            setLessons((items) => {
+              const byId = new Map(items.map((item) => [Number(item.id), item]));
+              const ordered = placements.flatMap((group) => group.lessonIds.flatMap((id) => {
+                const lesson = byId.get(id);
+                byId.delete(id);
+                return lesson ? [{ ...lesson, section_id: group.sectionId }] : [];
+              }));
+              return [...ordered, ...Array.from(byId.values())].map((lesson, index) => ({ ...lesson, order_index: index + 1 }));
+            });
+          }} />
+        )}
 
         {/* Success Alert */}
         {successMessage && (

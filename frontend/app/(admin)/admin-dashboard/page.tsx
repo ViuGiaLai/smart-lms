@@ -1,5 +1,7 @@
 'use client';
 
+import { AuditPanel } from '@/components/layout/AuditPanel';
+
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -20,12 +22,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PageSkeleton } from '@/components/ui/page-skeleton';
 import { LearningCategoryItem, EducationLevelItem, DiscoveryJobItem } from '@/types';
 
-type Section = 'overview' | 'users' | 'courses' | 'ai' | 'categories' | 'discovery';
+type Section = 'overview' | 'users' | 'courses' | 'ai' | 'categories' | 'discovery' | 'audit';
 type ServiceStatus = 'online' | 'offline';
 
-interface Stats { totalUsers: number; totalStudents: number; totalInstructors: number; totalCourses: number; publishedCourses: number; totalLessons: number; totalQuizSubmissions: number; totalIndexedChunks: number }
+interface Stats { totalUsers: number; totalStudents: number; totalInstructors: number; totalCourses: number; publishedCourses: number; totalLessons: number; totalQuizSubmissions: number; totalIndexedChunks: number; paidDemoOrders?: number; demoAmount?: number }
 interface UserItem { id: string; name: string; email: string; role: string; isActive: boolean; createdAt: string }
-interface CourseItem { id: string; title: string; instructor: { fullName: string }; level: string; totalLessons: number; status: 'draft' | 'published' | 'archived' }
+interface CourseItem { id: string; title: string; instructor: { fullName: string }; level: string; educationLevelName?: string; totalLessons: number; status: 'draft' | 'published' | 'archived' | 'in_review' }
 interface UsageByFeature { feature: string; tokens: number; requests: number }
 interface UsageSummary {
   totalTokens: number;
@@ -78,7 +80,7 @@ export default function AdminDashboardPage() {
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab');
   const section: Section =
-    tab === 'users' || tab === 'courses' || tab === 'ai' || tab === 'categories' || tab === 'discovery'
+    tab === 'users' || tab === 'courses' || tab === 'ai' || tab === 'categories' || tab === 'discovery' || tab === 'audit'
       ? tab
       : 'overview';
   const [stats, setStats] = useState<Stats>(emptyStats);
@@ -151,8 +153,11 @@ export default function AdminDashboardPage() {
 
   const changeCourse = async (id: string, newStatus: CourseItem['status']) => {
     setActionMessage(null);
+    const returning = newStatus === 'draft' && courses.find((course) => course.id === id)?.status === 'in_review';
+    const note = returning ? window.prompt('Lý do trả khóa học về bản nháp?')?.trim() : undefined;
+    if (returning && !note) return;
     try {
-      await adminApi.changeCourseStatus(id, newStatus);
+      await adminApi.changeCourseStatus(id, newStatus, note);
       setCourses((items) => items.map((c) => c.id === id ? { ...c, status: newStatus } : c));
       setActionMessage({ kind: 'ok', text: 'Đã cập nhật trạng thái khóa học.' });
     } catch (err) {
@@ -161,6 +166,7 @@ export default function AdminDashboardPage() {
   };
 
   const heading: Record<Section, [string, string]> = {
+    audit: ['Nhật ký hoạt động', 'Theo dõi những thay đổi quan trọng trên hệ thống.'],
     overview: ['Bảng điều khiển Quản trị viên', 'Tổng quan vận hành hệ thống SmartTutor LMS.'],
     users: ['Quản lý tài khoản & phân quyền', 'Quản lý trạng thái truy cập và vai trò người dùng.'],
     courses: ['Kiểm duyệt khóa học', 'Xuất bản, đưa về bản nháp hoặc lưu trữ từng khóa học.'],
@@ -211,6 +217,7 @@ export default function AdminDashboardPage() {
       {section === 'ai' && <AiPanel monitoring={monitoring} />}
       {section === 'categories' && <CategoriesPanel onMessage={setActionMessage} />}
       {section === 'discovery' && <DiscoveryPanel onMessage={setActionMessage} />}
+      {section === 'audit' && <AuditPanel />}
     </main>
   );
 }
@@ -238,6 +245,15 @@ function Overview({ stats }: { stats: Stats }) {
           </CardContent>
         </Card>
       ))}
+      {stats.demoAmount !== undefined && (
+        <Card>
+          <CardContent className="space-y-2 p-5">
+            <p className="text-sm font-semibold">Tổng thanh toán Demo</p>
+            <p className="text-2xl font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(stats.demoAmount)}</p>
+            <p className="text-sm text-muted-foreground">{stats.paidDemoOrders ?? 0} đơn mô phỏng đã hoàn tất</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -305,7 +321,7 @@ function UsersPanel({ users, search, role, setSearch, setRole, onToggle, onRoleC
 }
 
 function CoursesPanel({ courses, onStatusChange }: { courses: CourseItem[]; onStatusChange: (id: string, status: CourseItem['status']) => void }) {
-  const label: Record<CourseItem['status'], string> = { draft: 'Bản nháp', published: 'Đã xuất bản', archived: 'Đã lưu trữ' };
+  const label: Record<CourseItem['status'], string> = { draft: 'Bản nháp', published: 'Đã xuất bản', archived: 'Đã lưu trữ', in_review: 'Chờ duyệt' };
   return (
     <Card>
       <div className="border-b border-border p-5">
@@ -330,14 +346,16 @@ function CoursesPanel({ courses, onStatusChange }: { courses: CourseItem[]; onSt
                 <td className="p-4 font-bold text-foreground">{c.title}</td>
                 <td className="p-4 text-muted-foreground">{c.instructor.fullName}</td>
                 <td className="p-4 text-muted-foreground">{c.totalLessons}</td>
-                <td className="p-4 capitalize text-muted-foreground">{c.level}</td>
+                <td className="p-4 text-muted-foreground">{c.educationLevelName || ({ beginner: 'Cơ bản', intermediate: 'Trung cấp', advanced: 'Nâng cao' } as Record<string, string>)[c.level] || 'Chưa xác định'}</td>
                 <td className="p-4">
                   <select
                     value={c.status}
+                    aria-label={`Trạng thái khóa học ${c.title}`}
                     onChange={(e) => onStatusChange(c.id, e.target.value as CourseItem['status'])}
                     className="rounded-lg border border-input bg-background px-2.5 py-1.5 font-semibold text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <option value="draft">{label.draft}</option>
+                    {c.status === 'in_review' && <option value="in_review">{label.in_review}</option>}
                     <option value="published">{label.published}</option>
                     <option value="archived">{label.archived}</option>
                   </select>

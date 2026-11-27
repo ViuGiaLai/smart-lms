@@ -15,11 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_active_user, require_instructor
-from app.models.course import Course
+from app.models.course import Course, CourseStatus
 from app.models.lesson import Lesson
 from app.models.lesson_material import LessonMaterial
 from app.models.user import User
 from app.services.enrollment_service import require_course_access
+from app.services.audit_service import record_change
 from app.services.object_storage import delete_object, r2_enabled, resolve_media_url, store_object, store_stream
 
 router = APIRouter(prefix="/courses/{course_id}/lessons/{lesson_id}/documents", tags=["Documents"])
@@ -48,7 +49,7 @@ def _safe_filename(filename: str) -> str:
 async def _get_owned_lesson(
     course_id: int, lesson_id: int, current_user: User, db: AsyncSession
 ) -> Lesson:
-    course_result = await db.execute(select(Course).where(Course.id == course_id))
+    course_result = await db.execute(select(Course).where(Course.id == course_id).with_for_update())
     course = course_result.scalar_one_or_none()
     if course is None:
         raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
@@ -56,6 +57,8 @@ async def _get_owned_lesson(
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     if role != "admin" and course.instructor_id != current_user.id:
         raise HTTPException(status_code=403, detail="Bạn không có quyền quản lý học liệu khóa học này")
+    if course.status == CourseStatus.in_review:
+        raise HTTPException(status_code=409, detail="Khóa học đang được duyệt. Hãy rút yêu cầu trước khi sửa học liệu.")
 
     lesson_result = await db.execute(
         select(Lesson).where(Lesson.id == lesson_id, Lesson.course_id == course_id)
@@ -336,6 +339,7 @@ async def delete_lesson_material(
     if material.kind == "video" and lesson.video_url == material.file_url and lesson.source_type == "upload":
         lesson.video_url = None
         lesson.source_type = "manual"
+    record_change(db, current_user.id, "material.delete", "material", material.id, lessonId=lesson_id, kind=material.kind)
     await db.delete(material)
     await db.commit()
     return None

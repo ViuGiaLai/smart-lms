@@ -2,8 +2,9 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { AuthProvider } from '@/lib/auth-context'
+import { AuthModal } from '@/components/auth/AuthModal'
 
 // Devtools chỉ tải khi thực sự cần (môi trường dev) để không làm nặng bundle.
 const ReactQueryDevtools = dynamic(
@@ -30,6 +31,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
         {children}
+        <Suspense fallback={null}><AuthModal /></Suspense>
         {process.env.NODE_ENV === 'development' && (
           <ReactQueryDevtools initialIsOpen={false} />
         )}

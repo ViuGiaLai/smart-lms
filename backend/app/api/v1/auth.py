@@ -27,12 +27,14 @@ from app.core.rate_limit import (
     forgot_rate_limiter,
 )
 from typing import Any
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl
 from app.models.user import User, UserRole
 from app.models.password_reset import PasswordResetToken
 from app.models.learning_event import LearningEvent
 from app.schemas.user import UserCreate, UserResponse, Token, LoginRequest
 from app.core.security import decode_token
+from app.services.audit_service import record_change
+from app.api.v1.notifications import notify
 
 router = APIRouter(prefix="/auth")
 
@@ -87,6 +89,7 @@ def _format_user_dict(user: User) -> dict[str, Any]:
         "role": str(user.role.value if hasattr(user.role, "value") else user.role),
         "isActive": user.is_active,
         "avatar": user.avatar_url,
+        "avatarUrl": user.avatar_url,
     }
 
 
@@ -421,12 +424,69 @@ async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depen
 @router.get("/me")
 async def get_profile(current_user: User = Depends(get_current_active_user)):
     """Return the currently authenticated user's profile."""
-    user_dict = _format_user_dict(current_user)
+    user_dict = {**_format_user_dict(current_user), "profile": current_user.profile_fields or {},
+                 "createdAt": current_user.created_at}
     return {
         "success": True,
         "data": user_dict,
         **user_dict,
     }
+
+
+class ProfilePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(min_length=2, max_length=120)
+    avatarUrl: HttpUrl | None = None
+    bio: str = Field("", max_length=500)
+    university: str = Field("", max_length=160)
+    field: str = Field("", max_length=160)
+
+
+@router.patch("/profile")
+async def update_profile(payload: ProfilePatch, current_user: User = Depends(get_current_active_user),
+                         db: AsyncSession = Depends(get_db)):
+    avatar = payload.avatarUrl
+    if avatar and (avatar.scheme != "https" or avatar.username or avatar.password or len(str(avatar)) > 512):
+        raise HTTPException(422, "Địa chỉ ảnh phải dùng HTTPS và không chứa thông tin đăng nhập.")
+    if current_user.role == UserRole.admin and (payload.university or payload.field):
+        raise HTTPException(422, "Thông tin đào tạo chỉ dùng cho học viên và giảng viên.")
+    current_user.name = payload.name
+    if "avatarUrl" in payload.model_fields_set:
+        current_user.avatar_url = str(avatar) if avatar else None
+    current_user.profile_fields = {
+        **(current_user.profile_fields or {}),
+        **payload.model_dump(exclude_unset=True, exclude={"name", "avatarUrl"}),
+    }
+    await db.flush()
+    return await get_profile(current_user)
+
+
+class PasswordChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    currentPassword: str = Field(min_length=1, max_length=128)
+    newPassword: str = Field(min_length=8, max_length=72)
+
+
+@router.post("/change-password", dependencies=[Depends(login_rate_limiter)])
+async def change_password(payload: PasswordChange, current_user: User = Depends(get_current_active_user),
+                          db: AsyncSession = Depends(get_db)):
+    user = await db.get(User, current_user.id, with_for_update=True, populate_existing=True)
+    if not user.is_active or not verify_password(payload.currentPassword, user.hashed_password):
+        raise HTTPException(400, "Mật khẩu hiện tại không chính xác.")
+    if len(payload.newPassword.encode("utf-8")) > 72:
+        raise HTTPException(422, "Mật khẩu mới vượt độ dài hệ thống hỗ trợ.")
+    if not any(char.isupper() for char in payload.newPassword) or not any(char.isdigit() for char in payload.newPassword):
+        raise HTTPException(422, "Mật khẩu mới cần một chữ hoa và một chữ số.")
+    if verify_password(payload.newPassword, user.hashed_password):
+        raise HTTPException(422, "Mật khẩu mới phải khác mật khẩu hiện tại.")
+    user.hashed_password = hash_password(payload.newPassword)
+    user.token_version += 1
+    await db.execute(update(PasswordResetToken).where(
+        PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None),
+    ).values(used_at=datetime.now(timezone.utc)))
+    record_change(db, user.id, "account.password", "user", user.id)
+    notify(db, user.id, "Mật khẩu tài khoản đã được thay đổi", "/account/settings")
+    return {"success": True}
 
 
 @router.post("/login/form", response_model=Token, include_in_schema=False, dependencies=[Depends(login_rate_limiter)])

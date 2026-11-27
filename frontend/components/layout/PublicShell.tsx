@@ -32,13 +32,13 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
               <Link href="/courses">Khóa học</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href="/login">
+              <Link href="/?auth=login">
                 <LogIn className="h-4 w-4" />
                 Đăng nhập
               </Link>
             </Button>
             <Button asChild size="sm" className="hidden sm:inline-flex">
-              <Link href="/register">Đăng ký</Link>
+              <Link href="/?auth=register">Đăng ký</Link>
             </Button>
           </nav>
         </div>

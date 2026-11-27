@@ -197,7 +197,7 @@ export default function HomePage() {
                 <ArrowUpRight className="h-4 w-4" aria-hidden />
               </Link>
               <Link
-                href="/register"
+                href="/?auth=register"
                 className="inline-flex items-center gap-2 border-b border-foreground/30 pb-1 text-[13px] font-semibold text-foreground transition-colors hover:border-foreground"
               >
                 Tạo tài khoản học viên
@@ -508,14 +508,14 @@ export default function HomePage() {
           </div>
           <div className="flex flex-wrap gap-3 lg:justify-end">
             <Link
-              href="/register"
+              href="/?auth=register"
               className="inline-flex items-center gap-2 bg-brand-50 px-5 py-3 text-[13px] font-semibold text-brand-950 transition-colors hover:bg-white"
             >
               Tạo tài khoản
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             <Link
-              href="/login"
+              href="/?auth=login"
               className="inline-flex items-center gap-2 border border-brand-700 px-5 py-3 text-[13px] font-semibold text-brand-50 transition-colors hover:border-brand-400"
             >
               Đã có tài khoản
@@ -544,8 +544,8 @@ export default function HomePage() {
           <div>
             <p className="kicker">Tài khoản</p>
             <div className="mt-3 space-y-2">
-              <Link href="/login" className="block text-foreground/80 hover:text-foreground">Đăng nhập</Link>
-              <Link href="/register" className="block text-foreground/80 hover:text-foreground">Đăng ký</Link>
+              <Link href="/?auth=login" className="block text-foreground/80 hover:text-foreground">Đăng nhập</Link>
+              <Link href="/?auth=register" className="block text-foreground/80 hover:text-foreground">Đăng ký</Link>
               <Link href="/forgot-password" className="block text-foreground/80 hover:text-foreground">Quên mật khẩu</Link>
               <Link href="/terms" className="block text-foreground/80 hover:text-foreground">Điều khoản</Link>
               <Link href="/privacy" className="block text-foreground/80 hover:text-foreground">Quyền riêng tư</Link>

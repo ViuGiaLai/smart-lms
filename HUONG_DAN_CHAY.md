@@ -44,6 +44,21 @@ Nếu chạy backend thủ công, mở thêm một terminal tại thư mục `ba
 
 Với Docker Compose, tiến trình này nằm trong service `media-worker`.
 
+Bật kiểm duyệt khóa học với `REQUIRE_COURSE_REVIEW=true`. Giảng viên gửi duyệt
+và quản trị viên xuất bản hoặc trả về bản nháp kèm lý do. Bật thanh toán mô phỏng
+trên database riêng của bản demo với `ENVIRONMENT=demo` và `ALLOW_DEMO_CHECKOUT=true`.
+Backend từ chối checkout mô phỏng ở các môi trường khác.
+
+SmartTutor LMS phục vụ tự học và đào tạo bổ trợ cho sinh viên đại học, cao đẳng,
+ưu tiên học liệu CNTT và hỗ trợ mở rộng đa ngành. Giảng viên chọn khóa công khai
+miễn phí, khóa bổ trợ có học phí Demo hoặc khóa nội bộ. Với khóa nội bộ đã xuất
+bản, mở trang quản lý để ghi danh sinh viên bằng email tài khoản hiện có.
+
+Trang quản lý khóa học có mục **Chương và thứ tự bài học** và **Bài tập thực hành**.
+Bài thực hành nhận văn bản hoặc URL mã nguồn HTTPS, áp dụng hạn nộp và số lần nộp.
+Sinh viên xem điểm và nhận xét ở trang chi tiết khóa học đã ghi danh. Admin xem
+lịch sử thay đổi trong mục **Nhật ký hoạt động**.
+
 # Hạn mức AI theo người/ngày (đặt 0 để tắt)
 AI_TUTOR_DAILY_LIMIT=80
 AI_QUIZ_DAILY_LIMIT=40

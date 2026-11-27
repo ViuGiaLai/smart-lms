@@ -129,7 +129,7 @@ api.interceptors.response.use(
           localStorage.removeItem('refreshToken')
           clearAuthCookie()
           if (window.location.pathname !== '/login') {
-            window.location.href = '/login'
+            window.location.href = '/?auth=login'
           }
         }
         return Promise.reject(error)
@@ -155,7 +155,7 @@ api.interceptors.response.use(
         localStorage.removeItem('refreshToken')
         clearAuthCookie()
         if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-          window.location.href = '/login'
+          window.location.href = '/?auth=login'
         }
         return Promise.reject(refreshError)
       } finally {
@@ -471,8 +471,8 @@ export const adminApi = {
   getCourses: () =>
     api.get('/api/v1/admin/courses'),
 
-  changeCourseStatus: (courseId: string | number, newStatus: 'draft' | 'published' | 'archived') =>
-    api.patch(`/api/v1/admin/courses/${courseId}/status`, null, { params: { new_status: newStatus } }),
+  changeCourseStatus: (courseId: string | number, newStatus: 'draft' | 'published' | 'archived' | 'in_review', reviewNote?: string) =>
+    api.patch(`/api/v1/admin/courses/${courseId}/status`, null, { params: { new_status: newStatus, review_note: reviewNote } }),
 }
 
 // Danh mục Lĩnh vực & Môn học (Master Spec Section III)

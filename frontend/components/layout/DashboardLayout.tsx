@@ -14,6 +14,7 @@ import {
 import { DashboardSidebar } from './DashboardSidebar';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
+import { AccountActions } from './AccountActions';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -31,17 +32,23 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   // Định nghĩa breadcrumb tự động (kiểm tra đường đi sâu trước đường đi chung)
   const getBreadcrumbTitle = () => {
+    if (pathname === '/account/profile') return 'Thông tin cá nhân';
+    if (pathname === '/account/settings') return 'Cài đặt và bảo mật';
+    if (pathname === '/account/notifications') return 'Thông báo';
     if (pathname.includes('/admin-dashboard')) return 'Bảng Quản trị Hệ thống';
     if (pathname.includes('/instructor-dashboard')) return 'Bảng điều khiển Giảng viên';
     if (pathname.includes('/instructor/materials')) return 'Bài học & Tài liệu (RAG)';
     if (pathname.includes('/instructor/students')) return 'Học viên của tôi';
     if (pathname.includes('/instructor/results')) return 'Bài làm & Kết quả';
+    if (pathname.includes('/instructor/analytics')) return 'Phân tích học tập';
+    if (pathname.includes('/instructor/grading')) return 'Chấm bài tự luận';
     if (pathname.includes('/courses/create')) return 'Tạo khóa học mới';
     if (pathname.includes('/manage')) return 'Quản lý khóa học';
     if (pathname.includes('/quiz/generate')) return 'Sinh đề thi trắc nghiệm AI (Bloom)';
     if (pathname.includes('/quiz/bank')) return 'Ngân hàng đề thi';
     if (pathname.includes('/youtube-import')) return 'Nhập học liệu YouTube';
     if (pathname.includes('/my-courses')) return 'Khóa học của tôi';
+    if (pathname.includes('/quizzes')) return 'Bài kiểm tra';
     if (pathname.includes('/results')) return 'Kết quả học tập';
     if (pathname.includes('/progress')) return 'Tiến độ học tập';
     if (pathname.includes('/dashboard')) return 'Bảng học tập';
@@ -160,6 +167,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 Quản trị
               </span>
             )}
+            <AccountActions />
           </div>
         </header>
 

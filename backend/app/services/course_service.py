@@ -7,13 +7,16 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from app.core.config import settings
 
 from app.models.course import Course, CourseStatus
 from app.models.category import LearningCategory
 from app.models.education_level import EducationLevel
 from app.models.lesson import Lesson
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.course import CourseCreate, CourseUpdate
+from app.services.audit_service import record_change
+from app.api.v1.notifications import notify
 
 
 def slugify(value: str | None) -> str:
@@ -31,15 +34,17 @@ class CourseService:
     """Business logic layer for Course operations."""
 
     @staticmethod
-    async def _get_or_404(db: AsyncSession, course_id: int) -> Course:
+    async def _get_or_404(db: AsyncSession, course_id: int, *, lock: bool = False) -> Course:
+        query = select(Course).where(Course.id == course_id)
+        if lock:
+            query = query.with_for_update()
         result = await db.execute(
-            select(Course)
+            query
             .options(
                 selectinload(Course.lessons).selectinload(Lesson.materials),
                 selectinload(Course.learning_category),
                 selectinload(Course.education_level_rel),
             )
-            .where(Course.id == course_id)
         )
         course = result.scalar_one_or_none()
         if not course:
@@ -120,6 +125,8 @@ class CourseService:
     @staticmethod
     async def create(db: AsyncSession, payload: CourseCreate, instructor_id: int) -> Course:
         data = payload.model_dump()
+        if data["is_internal"] and data["price"] != 0:
+            raise HTTPException(422, "Khóa học nội bộ không thu học phí.")
         requested_slug = data.pop("slug", None)
         # Một khóa học mới chưa thể thỏa điều kiện xuất bản vì bài học/học liệu
         # được tạo sau khi bản ghi course đã có id. Ép luồng tạo qua bản nháp để
@@ -194,9 +201,20 @@ class CourseService:
     async def update(
         db: AsyncSession, course_id: int, payload: CourseUpdate, user: User
     ) -> Course:
-        course = await CourseService._get_or_404(db, course_id)
+        course = await CourseService._get_or_404(db, course_id, lock=True)
         CourseService._check_ownership(course, user)
         data = payload.model_dump(exclude_unset=True)
+        old_price = course.price
+        old_status = course.status
+        if "is_internal" in data and data["is_internal"] is None:
+            raise HTTPException(422, "Phạm vi khóa học không hợp lệ.")
+        if data.get("is_internal", course.is_internal) and data.get("price", course.price) != 0:
+            raise HTTPException(422, "Khóa học nội bộ không thu học phí.")
+        if course.status == CourseStatus.in_review and user.role != UserRole.admin:
+            if data != {"status": "draft"}:
+                raise HTTPException(status_code=409, detail="Hãy rút yêu cầu duyệt trước khi chỉnh sửa khóa học.")
+        if data.get("status") == "in_review" or (settings.REQUIRE_COURSE_REVIEW and data.get("status") == "published"):
+            raise HTTPException(status_code=409, detail="Hãy chuyển trạng thái qua thao tác gửi duyệt hoặc xuất bản.")
         requested_slug = data.pop("slug", None)
         if "category_id" in data or "education_level_id" in data:
             await CourseService._validate_catalog(
@@ -206,6 +224,10 @@ class CourseService:
             )
         for field, value in data.items():
             setattr(course, field, value)
+        if course.price != old_price:
+            record_change(db, user.id, "course.price", "course", course.id, previous=str(old_price), current=str(course.price))
+        if course.status != old_status and course.status is not None:
+            record_change(db, user.id, "course.status", "course", course.id, previous=str(old_status.value), current=str(course.status))
         # Chỉ chạy checklist khi request đang chuyển sang published. Khóa học
         # cũ đã public vẫn phải sửa được metadata để có thể đưa về chuẩn dần.
         if data.get("status") == CourseStatus.published or data.get("status") == CourseStatus.published.value:
@@ -221,20 +243,39 @@ class CourseService:
     @staticmethod
     async def delete(db: AsyncSession, course_id: int, user: User) -> None:
         """Soft-delete by setting status to archived."""
-        course = await CourseService._get_or_404(db, course_id)
-        CourseService._check_ownership(course, user)
-        course.status = CourseStatus.archived
-        await db.flush()
+        await CourseService.change_status(db, course_id, CourseStatus.archived, user)
 
     @staticmethod
     async def change_status(
-        db: AsyncSession, course_id: int, new_status: CourseStatus, user: User
+        db: AsyncSession, course_id: int, new_status: CourseStatus, user: User, review_note: str | None = None
     ) -> Course:
-        course = await CourseService._get_or_404(db, course_id)
+        course = await CourseService._get_or_404(db, course_id, lock=True)
         CourseService._check_ownership(course, user)
-        if new_status == CourseStatus.published:
+        if settings.REQUIRE_COURSE_REVIEW and new_status == CourseStatus.published:
+            if user.role != UserRole.admin:
+                if course.status != CourseStatus.draft:
+                    raise HTTPException(status_code=409, detail="Chỉ có thể gửi duyệt khóa học ở trạng thái bản nháp.")
+                new_status = CourseStatus.in_review
+            elif course.status not in (CourseStatus.in_review, CourseStatus.published):
+                raise HTTPException(status_code=409, detail="Khóa học cần được gửi duyệt trước khi xuất bản.")
+        if new_status == CourseStatus.in_review and course.status != CourseStatus.draft:
+            raise HTTPException(status_code=409, detail="Chỉ có thể gửi duyệt bản nháp.")
+        if new_status in (CourseStatus.in_review, CourseStatus.published):
             CourseService._ensure_publishable(course)
             await CourseService._validate_catalog(db, course.category_id, course.education_level_id)
+            course.review_note = None
+        if course.status == CourseStatus.in_review and new_status == CourseStatus.draft and user.role == UserRole.admin:
+            if not (review_note or "").strip():
+                raise HTTPException(status_code=422, detail="Cần nhập lý do trả khóa học về bản nháp.")
+            course.review_note = review_note.strip()
+        if course.status != new_status:
+            record_change(db, user.id, "course.status", "course", course.id,
+                          previous=course.status.value, current=new_status.value, reason=course.review_note)
+            if user.role == UserRole.admin and course.instructor_id != user.id:
+                if new_status == CourseStatus.published:
+                    notify(db, course.instructor_id, f"Khóa học đã xuất bản: {course.title}", f"/courses/{course.id}/manage")
+                elif course.status == CourseStatus.in_review and new_status == CourseStatus.draft:
+                    notify(db, course.instructor_id, f"Khóa học cần chỉnh sửa: {course.title}", f"/courses/{course.id}/manage")
         course.status = new_status
         await db.flush()
         return await CourseService._get_or_404(db, course_id)

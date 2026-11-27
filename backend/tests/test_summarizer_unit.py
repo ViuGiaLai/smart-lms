@@ -31,15 +31,17 @@ def test_certificate_code_deterministic_and_verifiable():
 async def test_answer_key_hidden_from_students():
     course = Course(id=10, title="Khóa thương mại", instructor_id=2)
     student = User(id=3, email="sv@example.com", name="SV", role=UserRole.student)
-    instructor_owner = User(id=2, email="gv@example.com", name="GV", role=UserRole.instructor)
+    instructor_owner = User(id=2, email="gv@example.com", name="GV", role=UserRole.instructor, is_active=True)
     other_instructor = User(id=9, email="gv2@example.com", name="GV2", role=UserRole.instructor)
-    admin = User(id=1, email="admin@example.com", name="Admin", role=UserRole.admin)
+    admin = User(id=1, email="admin@example.com", name="Admin", role=UserRole.admin, is_active=True)
 
     assert await _can_view_answer_key(None, course, None) is False  # type: ignore[arg-type]
     assert await _can_view_answer_key(None, course, student) is False  # type: ignore[arg-type]
     assert await _can_view_answer_key(None, course, other_instructor) is False  # type: ignore[arg-type]
     assert await _can_view_answer_key(None, course, instructor_owner) is True  # type: ignore[arg-type]
     assert await _can_view_answer_key(None, course, admin) is True  # type: ignore[arg-type]
+    instructor_owner.is_active = False
+    assert await _can_view_answer_key(None, course, instructor_owner) is False  # type: ignore[arg-type]
 
 
 def test_material_dict_hides_storage_key():

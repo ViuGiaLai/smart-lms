@@ -137,6 +137,7 @@ class Settings(BaseSettings):
     # enroll miễn phí mà yêu cầu hoàn tất thanh toán (trả HTTP 402).
     ENFORCE_COURSE_PAYMENT: bool = False
     ALLOW_DEMO_CHECKOUT: bool = False
+    REQUIRE_COURSE_REVIEW: bool = False
 
     @property
     def demo_checkout_enabled(self) -> bool:

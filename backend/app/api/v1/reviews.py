@@ -59,6 +59,9 @@ async def _get_visible_course(
     course = await db.get(Course, course_id)
     if course is None:
         raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
+    if course.is_internal and not _can_manage_course(course, current_user):
+        if current_user is None or not await _is_enrolled(db, course_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
     if course.status != CourseStatus.published and not _can_manage_course(course, current_user):
         raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
     return course

@@ -19,7 +19,7 @@ export function Navbar() {
 
   const handleLogout = async () => {
     await logout();
-    router.push('/login');
+    router.push('/?auth=login');
   };
 
   return (
@@ -67,13 +67,13 @@ export function Navbar() {
           ) : (
             <div className="ml-2 flex items-center gap-2">
               <Link
-                href="/login"
+                href="/?auth=login"
                 className="rounded-md px-3 py-2 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
               >
                 Đăng nhập
               </Link>
               <Link
-                href="/register"
+                href="/?auth=register"
                 className="rounded-md bg-primary px-3.5 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 Đăng ký

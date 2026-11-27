@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import get_current_active_user, require_instructor
-from app.models.course import Course
+from app.models.course import Course, CourseStatus
 from app.models.lesson import Lesson
 from app.models.quiz import Quiz, QuizQuestion, QuizSession, QuizSubmission
 from app.models.user import User, UserRole
@@ -31,7 +31,7 @@ standalone_router = APIRouter(prefix="/quizzes")
 
 
 async def _check_course_ownership(course_id: int, current_user: User, db: AsyncSession) -> Course:
-    res = await db.execute(select(Course).where(Course.id == course_id))
+    res = await db.execute(select(Course).where(Course.id == course_id).with_for_update())
     course = res.scalar_one_or_none()
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
@@ -41,6 +41,8 @@ async def _check_course_ownership(course_id: int, current_user: User, db: AsyncS
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chỉ giảng viên phụ trách khóa học hoặc Admin mới có quyền thao tác trên bài kiểm tra.",
         )
+    if course.status == CourseStatus.in_review:
+        raise HTTPException(status_code=409, detail="Khóa học đang được duyệt. Hãy rút yêu cầu trước khi sửa bài kiểm tra.")
     return course
 
 

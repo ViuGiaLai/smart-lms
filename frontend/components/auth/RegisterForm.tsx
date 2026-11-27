@@ -19,7 +19,8 @@ import {
 } from 'lucide-react'
 import { authApi } from '@/lib/api'
 import axios from 'axios'
-import { AuthShell } from '@/components/auth/AuthShell'
+import { useAuth } from '@/lib/auth-context'
+import { safeReturnPath } from '@/lib/auth-redirect'
 
 const registerSchema = z
   .object({
@@ -45,8 +46,9 @@ type RegisterFormData = z.infer<typeof registerSchema>
 const inputClass =
   'w-full rounded-lg border border-stone-200 bg-white py-2.5 pl-10 pr-4 text-sm text-stone-900 transition-all placeholder:text-stone-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30'
 
-export default function RegisterPage() {
+export default function RegisterForm({ switchHref }: { switchHref: string }) {
   const router = useRouter()
+  const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [serverError, setServerError] = useState('')
@@ -89,16 +91,9 @@ export default function RegisterPage() {
       // Quyền do máy chủ quyết định (luôn là Học viên khi tự đăng ký).
       const user = resData.user || { name: data.fullName, email: data.email, role: 'student' }
 
-      if (accessToken) localStorage.setItem('accessToken', accessToken)
-      if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
-      localStorage.setItem('currentUser', JSON.stringify(user))
-      window.dispatchEvent(new Event('auth-change'))
-
-      if (user.role === 'instructor' || user.role === 'admin') {
-        router.push('/instructor-dashboard')
-      } else {
-        router.push('/dashboard')
-      }
+      if (!accessToken) throw new Error('Không nhận được phiên đăng nhập.')
+      login(user, accessToken, refreshToken)
+      router.replace(safeReturnPath(window.location.search) || '/dashboard')
     } catch (err) {
       if (axios.isAxiosError(err)) {
         setServerError(
@@ -113,21 +108,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthShell
-      eyebrow="Tạo tài khoản"
-      title="Bắt đầu hành trình học tập"
-      subtitle="Miễn phí, không cần thẻ tín dụng. Tài khoản mới bắt đầu với quyền Học viên."
-      asideTitle="Một tài khoản, một lộ trình học rõ ràng."
-      asideDescription="Tạo tài khoản để lưu tiến độ, làm bài luyện tập và nhận hỗ trợ theo từng bài học."
-      footer={
-        <p className="text-center text-xs text-stone-600">
-          Đã có tài khoản?{' '}
-          <Link href="/login" className="font-bold text-brand-600 hover:underline">
-            Đăng nhập ngay
-          </Link>
-        </p>
-      }
-    >
+    <>
       {serverError && (
         <div
           role="alert"
@@ -312,6 +293,10 @@ export default function RegisterPage() {
           )}
         </button>
       </form>
-    </AuthShell>
+      <p className="mt-5 border-t border-border pt-4 text-center text-sm text-muted-foreground">
+        Đã có tài khoản?{' '}
+        <Link href={switchHref} scroll={false} className="font-semibold text-primary hover:underline">Đăng nhập</Link>
+      </p>
+    </>
   )
 }

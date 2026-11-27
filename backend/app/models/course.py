@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -22,6 +23,7 @@ from app.core.database import Base
 
 class CourseStatus(str, enum.Enum):
     draft = "draft"
+    in_review = "in_review"
     published = "published"
     archived = "archived"
 
@@ -37,11 +39,13 @@ class Course(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
+    is_internal: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     thumbnail: Mapped[str | None] = mapped_column(String(512), nullable=True)
     status: Mapped[CourseStatus] = mapped_column(
         Enum(CourseStatus, name="coursestatus"), default=CourseStatus.draft, nullable=False
     )
     category: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     level: Mapped[str | None] = mapped_column(String(50), nullable=True)  # beginner / intermediate / advanced
     # ── Mở rộng Đa Lĩnh Vực & Đa Trình Độ (Smart Tutor LMS Master Spec) ──
     category_id: Mapped[int | None] = mapped_column(

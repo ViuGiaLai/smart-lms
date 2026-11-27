@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { UserAvatar } from './AccountActions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -112,7 +112,7 @@ export function DashboardSidebar({
     // Gọi logout của AuthProvider để backend thu hồi token (tăng token_version),
     // không chỉ xóa phiên cục bộ — tránh token cũ dùng được đến khi hết hạn.
     await logout();
-    router.push('/login');
+    router.push('/?auth=login');
   };
 
   const role = currentUser?.role || 'student';
@@ -120,23 +120,7 @@ export function DashboardSidebar({
   const isStudent = role === 'student';
   const roleLabel = isAdmin ? 'Quản trị viên' : isStudent ? 'Học viên' : 'Giảng viên';
   const badgeVariant = isAdmin ? 'purple' : isStudent ? 'info' : 'success';
-  const roleStyles = isAdmin
-    ? 'bg-clay-500/15 border-clay-400/40 text-clay-200'
-    : isStudent
-      ? 'bg-brand-400/15 border-brand-300/40 text-brand-100'
-      : 'bg-brand-500/20 border-brand-300/40 text-brand-100';
   const displayName = currentUser?.fullName || currentUser?.name || 'Tài khoản người dùng';
-  // Bỏ phần trong ngoặc (vd. "(Sinh viên)") để không sinh ra initials kiểu "(V".
-  const initials =
-    displayName
-      .replace(/\([^)]*\)/g, ' ')
-      .trim()
-      .split(/\s+/)
-      .filter((part) => /[A-Za-zÀ-ỹ0-9]/.test(part))
-      .slice(-2)
-      .map((part) => part.charAt(0))
-      .join('')
-      .toUpperCase() || (isAdmin ? 'AD' : isStudent ? 'HV' : 'GV');
 
   // Navigation is role-specific; every workspace uses this single left sidebar.
   const getNavSections = (): NavSection[] => {
@@ -146,7 +130,7 @@ export function DashboardSidebar({
           title: 'TỔNG QUAN',
           items: [
             {
-              label: 'Bảng Quản trị',
+              label: 'Tổng quan',
               href: '/admin-dashboard',
               icon: ShieldCheck,
             },
@@ -194,6 +178,11 @@ export function DashboardSidebar({
               isAI: true,
             },
             {
+              label: 'Nhật ký hoạt động',
+              href: '/admin-dashboard?tab=audit',
+              icon: ClipboardCheck,
+            },
+            {
               label: 'Ngân hàng đề thi',
               href: '/quiz/bank',
               icon: Layers,
@@ -223,9 +212,11 @@ export function DashboardSidebar({
         {
           title: 'HỌC TẬP',
           items: [
-            { label: 'Bảng học tập', href: '/dashboard', icon: LayoutDashboard },
+            { label: 'Tổng quan', href: '/dashboard', icon: LayoutDashboard },
             { label: 'Khám phá khóa học', href: '/courses', icon: BookOpen },
             { label: 'Khóa học của tôi', href: '/my-courses', icon: GraduationCap },
+            { label: 'Hạn nộp bài', href: '/dashboard#assignments', icon: ClipboardCheck },
+            { label: 'Gia sư AI', href: '/dashboard#ai-tutor', icon: Wand2 },
             { label: 'Bài kiểm tra', href: '/quizzes', icon: HelpCircle },
             { label: 'Tiến độ học tập', href: '/progress', icon: GraduationCap },
             { label: 'Kết quả học tập', href: '/results', icon: Award },
@@ -246,7 +237,7 @@ export function DashboardSidebar({
         title: 'TỔNG QUAN',
         items: [
           {
-            label: 'Bảng Giảng viên',
+            label: 'Tổng quan',
             href: '/instructor-dashboard',
             icon: LayoutDashboard,
           },
@@ -514,11 +505,7 @@ export function DashboardSidebar({
             )}
           >
             <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
-              <Avatar className="h-9 w-9 rounded-md border border-brand-700">
-                <AvatarFallback className={cn('rounded-md text-xs font-semibold', roleStyles)}>
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              {user && <Link href="/account/profile" aria-label="Thông tin cá nhân" title="Thông tin cá nhân" onClick={onMobileClose}><UserAvatar user={user} className="h-9 w-9 rounded-md border border-brand-700" /></Link>}
               {!collapsed && (
                 <div className="min-w-0 flex-1">
                   <p className="mb-0.5 text-[9px] font-medium uppercase tracking-[0.16em] text-brand-200/45">
@@ -543,7 +530,7 @@ export function DashboardSidebar({
                   <Badge variant={badgeVariant} className="text-[10px] font-medium">
                     {roleLabel}
                   </Badge>
-                  <span className="text-[10px] text-brand-200/45">Đã xác thực</span>
+                  <Link href="/account/profile" onClick={onMobileClose} className="text-xs text-brand-100 hover:underline">Hồ sơ</Link>
                 </div>
               </>
             )}

@@ -1,5 +1,13 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
+const nextConfig = (phase) => ({
+  // A local dev server and a production build must never write the same files.
+  distDir: phase === 'phase-development-server' ? '.next-dev' : '.next',
+  async redirects() {
+    return [
+      { source: '/login', destination: '/?auth=login', permanent: false },
+      { source: '/register', destination: '/?auth=register', permanent: false },
+    ]
+  },
   images: {
     remotePatterns: [
       {
@@ -35,6 +43,6 @@ const nextConfig = {
       },
     ]
   },
-}
+})
 
 export default nextConfig

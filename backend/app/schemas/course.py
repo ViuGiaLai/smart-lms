@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-CourseStatusLiteral = Literal["draft", "published", "archived"]
+CourseStatusLiteral = Literal["draft", "in_review", "published", "archived"]
 
 
 # ── Shared ───────
@@ -39,6 +39,7 @@ class LessonUpdate(BaseModel):
 class LessonResponse(LessonBase):
     id: int
     course_id: int
+    section_id: int | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -49,6 +50,7 @@ class CourseBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=512)
     description: str | None = None
     price: Decimal = Field(Decimal("0.00"), ge=0)
+    is_internal: bool = False
     thumbnail: str | None = None
     category: str | None = None
     level: str | None = None
@@ -69,6 +71,7 @@ class CourseCreate(CourseBase):
 
 
 class CourseUpdate(BaseModel):
+    is_internal: bool | None = None
     title: str | None = Field(None, min_length=1, max_length=512)
     description: str | None = None
     price: Decimal | None = Field(None, ge=0)
@@ -92,6 +95,7 @@ class CourseResponse(CourseBase):
     slug: str
     instructor_id: int
     status: str
+    review_note: str | None = None
     created_at: datetime
     updated_at: datetime
     lessons: list[LessonResponse] = []

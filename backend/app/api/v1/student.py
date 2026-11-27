@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.models.course import Course, CourseStatus
 from app.models.lesson import Lesson
 from app.models.progress import Progress
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.quiz import Quiz, QuizQuestion, QuizSubmission
 from app.core.security import get_current_active_user
 from app.services.enrollment_service import enrolled_course_ids
@@ -49,11 +49,14 @@ async def get_student_dashboard(
         compute_longest_streak,
         enrolled_course_ids,
     )
-    from datetime import date
+    from datetime import date, datetime, timedelta
 
     # 1) Phạm vi khóa học đã ghi danh — chỉ đọc bảng `enrollments` (nguồn sự thật
     #    duy nhất); migration 0007 đã backfill các cặp cũ vốn chỉ có trong progress.
     course_ids = await enrolled_course_ids(db, current_user.id)
+    course_ids = set(await db.scalars(select(Course.id).where(
+        Course.id.in_(course_ids), Course.status == CourseStatus.published,
+    )))
 
     # 2) Một truy vấn duy nhất lấy tiến độ từng bài + khóa chứa bài đó
     #    (join lessons để quy bài học về khóa, phục vụ thống kê theo khóa).
@@ -62,12 +65,13 @@ async def get_student_dashboard(
             Lesson.course_id,
             Progress.is_completed,
             Progress.last_position,
+            Progress.percent_complete,
             Progress.updated_at,
             Progress.started_at,
             Progress.completed_at,
         )
         .join(Lesson, Lesson.id == Progress.lesson_id)
-        .where(Progress.user_id == current_user.id)
+        .where(Progress.user_id == current_user.id, Lesson.course_id.in_(course_ids))
     )
 
     completed_lessons_by_course: dict[int, int] = {}
@@ -75,7 +79,12 @@ async def get_student_dashboard(
     total_in_progress_lessons = 0
     total_watch_time = 0
     activity_dates: set[date] = set()
-    for course_id, is_completed, last_position, updated_at, started_at, completed_at in rows.all():
+    started_courses = set()
+    learning_timezone = timezone(timedelta(hours=7))
+    for course_id, is_completed, last_position, percent, updated_at, started_at, completed_at in rows.all():
+        if not (is_completed or last_position or percent):
+            continue
+        started_courses.add(course_id)
         if is_completed:
             total_completed_lessons += 1
             completed_lessons_by_course[course_id] = completed_lessons_by_course.get(course_id, 0) + 1
@@ -86,7 +95,7 @@ async def get_student_dashboard(
             if stamp is None:
                 continue
             if stamp.tzinfo is not None:
-                stamp = stamp.astimezone(timezone.utc)
+                stamp = stamp.astimezone(learning_timezone)
             activity_dates.add(stamp.date())
 
     # 3) Tổng số bài của từng khóa đã ghi danh — cần để biết khóa đã xong hay chưa.
@@ -106,7 +115,7 @@ async def get_student_dashboard(
         done_lessons = completed_lessons_by_course.get(course_id, 0)
         if total_lessons > 0 and done_lessons >= total_lessons:
             total_completed_courses += 1
-        elif done_lessons > 0:
+        elif course_id in started_courses:
             total_in_progress_courses += 1
 
     return {
@@ -118,13 +127,40 @@ async def get_student_dashboard(
             "totalEnrolled": len(course_ids),
             "totalCompleted": total_completed_courses,
             "totalInProgress": total_in_progress_courses,
+            "totalNotStarted": len(course_ids) - total_completed_courses - total_in_progress_courses,
             "totalCompletedLessons": total_completed_lessons,
             "totalInProgressLessons": total_in_progress_lessons,
             "totalWatchTime": total_watch_time,
-            "currentStreak": compute_streak(activity_dates, date.today()),
+            "currentStreak": compute_streak(activity_dates, datetime.now(learning_timezone).date()),
             "longestStreak": compute_longest_streak(activity_dates),
         },
     }
+@router.get("/upcoming-assignments")
+async def upcoming_assignments(current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
+    from app.models.assignment import Assignment, AssignmentSubmission
+    from app.models.enrollment import Enrollment
+
+    if current_user.role != UserRole.student:
+        raise HTTPException(403, "Chỉ học viên có lịch nộp bài cá nhân.")
+    submitted = select(AssignmentSubmission.id).where(
+        AssignmentSubmission.assignment_id == Assignment.id,
+        AssignmentSubmission.student_id == current_user.id,
+    ).exists()
+    rows = (await db.execute(
+        select(Assignment, Course.title)
+        .join(Course, Course.id == Assignment.course_id)
+        .join(Enrollment, Enrollment.course_id == Course.id)
+        .where(Enrollment.user_id == current_user.id, Course.status == CourseStatus.published,
+               Assignment.due_at >= datetime.now(timezone.utc), ~submitted)
+        .order_by(Assignment.due_at, Assignment.id).limit(8)
+    )).all()
+    return {"data": [
+        {"id": item.id, "title": item.title, "courseTitle": course_title, "dueAt": item.due_at,
+         "href": f"/courses/{item.course_id}?assignment={item.id}#assignments"}
+        for item, course_title in rows
+    ]}
+
+
 @router.get("/quizzes")
 async def get_my_quizzes(
     current_user: User = Depends(get_current_active_user),
@@ -238,7 +274,7 @@ async def get_notifications(
     # Lấy các khóa học mới nhất đã xuất bản
     stmt = (
         select(Course)
-        .where(Course.status == CourseStatus.published)
+        .where(Course.status == CourseStatus.published, Course.is_internal.is_(False))
         .order_by(Course.created_at.desc())
         .limit(5)
     )

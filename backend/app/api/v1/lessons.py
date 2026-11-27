@@ -11,7 +11,7 @@ from app.core.cache import invalidate_course_caches
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_active_user, require_instructor
-from app.models.course import Course
+from app.models.course import Course, CourseStatus
 from app.models.learning_event import LearningEvent
 from app.models.lesson import Lesson
 from app.models.user import User
@@ -33,10 +33,12 @@ def _youtube_video_id(url: str | None) -> str | None:
 
 
 async def _get_course_or_404(course_id: int, db: AsyncSession) -> Course:
-    result = await db.execute(select(Course).where(Course.id == course_id))
+    result = await db.execute(select(Course).where(Course.id == course_id).with_for_update())
     course = result.scalar_one_or_none()
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+    if course.status == CourseStatus.in_review:
+        raise HTTPException(status_code=409, detail="Khóa học đang được duyệt. Hãy rút yêu cầu trước khi sửa bài học.")
     return course
 
 

@@ -1,5 +1,9 @@
 from app.models.user import User
+from app.models.notification import Notification
 from app.models.course import Course, CourseStatus
+from app.models.course_section import CourseSection
+from app.models.audit_log import AuditLog
+from app.models.assignment import Assignment, AssignmentSubmission
 from app.models.lesson import Lesson
 from app.models.quiz import Quiz, QuizQuestion, QuizSubmission
 from app.models.progress import Progress

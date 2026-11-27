@@ -20,6 +20,7 @@ from app.models.review import CourseReview
 from app.models.user import User, UserRole
 from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse
 from app.services.course_service import CourseService, slugify
+from app.api.v1.curriculum import curriculum_sections
 from app.services.enrollment_service import (
     ensure_enrollment,
     enrolled_course_ids,
@@ -42,9 +43,9 @@ def _is_admin(user: User | None) -> bool:
 
 
 def _can_manage_course(course: Course, user: User | None) -> bool:
-    if user is None:
+    if user is None or not user.is_active:
         return False
-    return _is_admin(user) or course.instructor_id == user.id
+    return _is_admin(user) or (_role_value(user) == UserRole.instructor.value and course.instructor_id == user.id)
 
 
 def _status_value(course: Course) -> str:
@@ -113,12 +114,14 @@ def _format_course_dict(
         "categoryName": cat_name,
         "educationLevelId": course.education_level_id,
         "educationLevelName": lvl_name,
+        "educationLevel": {"id": lvl_rel.id, "code": lvl_rel.code, "name": lvl_rel.name} if lvl_rel else None,
         "gradeLabel": course.grade_label,
         "proficiencyLevel": course.proficiency_level,
         "targetAudience": course.target_audience,
         "language": course.language or "vi",
         "status": status_value,
         "isPublished": status_value == CourseStatus.published.value,
+        "isInternal": course.is_internal,
         "duration": actual_duration,
         "durationText": _duration_label(actual_duration),
         "totalLessons": actual_lessons_count,
@@ -130,12 +133,11 @@ def _format_course_dict(
         "instructor": {
             "id": str(course.instructor_id),
             "fullName": course.instructor.name if course.instructor else "Chưa cập nhật",
-            "email": course.instructor.email if course.instructor else "",
         },
         "category": {
-            "id": f"cat-{slugify(cat_name) or 'chua-phan-loai'}",
+            "id": cat_rel.id if cat_rel else course.category_id,
             "name": cat_name,
-            "slug": slugify(cat_name) or "chua-phan-loai",
+            "slug": cat_rel.slug if cat_rel else slugify(cat_name) or "chua-phan-loai",
         },
         # Mục tiêu/chuẩn đầu ra và yêu cầu tiên quyết (dữ liệu giảng viên nhập).
         "outcomes": list(course.outcomes or []),
@@ -177,7 +179,7 @@ async def list_courses(
     if cached is not None:
         return cached
 
-    conditions = []
+    conditions = [Course.is_internal.is_(False)]
     if status:
         conditions.append(Course.status == status)
     else:
@@ -350,7 +352,7 @@ async def get_enrolled_courses(
                 if p_obj.is_completed:
                     completed_count += 1
                 # Giữ mốc truy cập MỚI NHẤT, không phải bài học cuối theo thứ tự.
-                if p_obj.updated_at and (last_accessed is None or p_obj.updated_at > last_accessed):
+                if (p_obj.is_completed or p_obj.last_position or p_obj.percent_complete) and p_obj.updated_at and (last_accessed is None or p_obj.updated_at > last_accessed):
                     last_accessed = p_obj.updated_at
 
         pct = round((completed_count / total_l * 100), 1) if total_l > 0 else 0
@@ -371,7 +373,8 @@ async def get_enrolled_courses(
             "progress": pct,
             "completedLessons": completed_count,
             "totalLessons": total_l,
-            "lastAccessedAt": last_accessed.isoformat() if last_accessed else (c.created_at.isoformat() if c.created_at else None),
+            "lastAccessedAt": last_accessed.isoformat() if last_accessed else None,
+            "learningStatus": "completed" if total_l and completed_count == total_l else "in_progress" if last_accessed else "not_started",
             "enrolledAt": enrolled_at.isoformat() if enrolled_at else (c.created_at.isoformat() if c.created_at else None),
         })
 
@@ -395,7 +398,7 @@ async def search_courses(
             selectinload(Course.learning_category),
             selectinload(Course.education_level_rel),
         )
-        .where(Course.status == CourseStatus.published)
+        .where(Course.status == CourseStatus.published, Course.is_internal.is_(False))
         .where(or_(Course.title.ilike(f"%{q}%"), Course.description.ilike(f"%{q}%")))
         .limit(10)
     )
@@ -421,12 +424,7 @@ async def _can_view_answer_key(db: AsyncSession, course: Course, user: User | No
     """Chỉ người quản lý khóa học (giảng viên chủ khóa/admin) mới được thấy đáp
     án đúng ngay trong API chi tiết khóa học. Học viên phải nộp bài qua endpoint
     chấm điểm (/api/v1/quizzes/{id}/submit) để tránh lộ đáp án qua DevTools."""
-    if user is None:
-        return False
-    role = _role_value(user)
-    if role == UserRole.admin.value or course.instructor_id == user.id:
-        return True
-    return False
+    return _can_manage_course(course, user)
 
 
 @router.get("/categories")
@@ -447,7 +445,7 @@ async def list_course_categories(
         return cached
 
     total = func.count(Course.id)
-    conditions = [Course.category.isnot(None), Course.category != ""]
+    conditions = [Course.category.isnot(None), Course.category != "", Course.is_internal.is_(False)]
     if status != "all":
         conditions.append(Course.status == status)
     result = await db.execute(
@@ -501,6 +499,8 @@ async def _has_course_access(db: AsyncSession, course: Course, user: User | None
         return False
     if _can_manage_course(course, user):
         return True
+    if _role_value(user) != UserRole.student.value:
+        return False
     row = await db.execute(
         select(Enrollment.id)
         .where(Enrollment.user_id == user.id, Enrollment.course_id == course.id)
@@ -532,6 +532,9 @@ async def get_course(
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
 
+    has_access = await _has_course_access(db, course, current_user)
+    if course.is_internal and not has_access:
+        raise HTTPException(status_code=404, detail="Khóa học không tồn tại")
     # Bản nháp/lưu trữ không được lộ cho học viên hoặc khách: coi như không tồn tại.
     if course.status != CourseStatus.published and not _can_manage_course(course, current_user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
@@ -546,16 +549,35 @@ async def get_course(
         rating_average=rating_stats.get(course.id, (None, 0))[0],
         rating_count=rating_stats.get(course.id, (None, 0))[1],
     )
-    has_access = await _has_course_access(db, course, current_user)
     from app.core.config import settings
     data["demoCheckoutEnabled"] = settings.demo_checkout_enabled
+    data["courseReviewRequired"] = settings.REQUIRE_COURSE_REVIEW
+    if _can_manage_course(course, current_user):
+        data["reviewNote"] = course.review_note
     data["isEnrolled"] = bool(has_access and _role_value(current_user) == UserRole.student.value)
+    data["canAccessLessons"] = has_access
     from app.services.object_storage import resolve_media_url
+    from app.api.v1.lessons import _youtube_video_id
+    from urllib.parse import urlparse
 
+    sections = await curriculum_sections(db, course.id)
+    section_positions = {section.id: index for index, section in enumerate(sections)}
+    ordered_lessons = sorted(course.lessons, key=lambda lesson: (
+        section_positions.get(lesson.section_id, len(sections)), lesson.order_index, lesson.id,
+    ))
+    data["sections"] = [{"id": section.id, "title": section.title} for section in sections]
     lessons_payload = []
-    for lesson in course.lessons:
+    for lesson in ordered_lessons:
         # Chỉ video YouTube ở bài đầu được dùng làm bản xem trước.
-        is_preview = lesson.order_index == 1 and lesson.source_type == "youtube"
+        preview_id = None
+        if not course.is_internal and lesson.order_index == 1 and lesson.source_type == "youtube":
+            try:
+                parsed = urlparse(lesson.video_url or "")
+                if parsed.scheme == "https" and parsed.hostname in {"www.youtube.com", "youtube.com", "youtu.be", "m.youtube.com"}:
+                    preview_id = _youtube_video_id(lesson.video_url)
+            except ValueError:
+                pass
+        is_preview = preview_id is not None
         unlocked = has_access or is_preview
         resolved_video_url = (await resolve_media_url(lesson.video_url) or "") if unlocked else ""
         lessons_payload.append(
@@ -573,8 +595,9 @@ async def get_course(
                 "transcript": (lesson.transcript or "") if has_access else "",
                 "resources_url": (lesson.resources_url or "") if has_access else "",
                 "order": lesson.order_index,
+                "section_id": lesson.section_id,
                 "isFree": is_preview,
-                "youtubeVideoId": lesson.youtube_video_id if unlocked else None,
+                "youtubeVideoId": (preview_id or lesson.youtube_video_id) if unlocked else None,
                 "subtitleStatus": lesson.subtitle_status or "none",
                 "subtitleLanguage": lesson.subtitle_language,
             }
@@ -620,12 +643,13 @@ async def enroll_course(
     course = c_res.scalar_one_or_none()
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
+    if course.is_internal:
+        raise HTTPException(404, "Khóa học không mở ghi danh công khai.")
 
     # Không cho ghi danh khóa chưa xuất bản (trừ khi chính giảng viên/admin thao tác).
     if course.status != CourseStatus.published and not _can_manage_course(course, current_user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
 
-    from app.core.config import settings
     from app.models.lesson import Lesson
     from app.models.progress import Progress
     from sqlalchemy.dialects.postgresql import insert
@@ -633,8 +657,7 @@ async def enroll_course(
 
     user_id = current_user.id
 
-    # Khi bật chế độ thương mại thu phí (ENFORCE_COURSE_PAYMENT=True), khóa học có
-    # giá > 0 yêu cầu phải được cấp quyền qua đơn hàng thanh toán trước.
+    # Khóa học có giá chỉ được mở bằng luồng thanh toán/cấp quyền chuyên biệt.
     if (
         course.price
         and float(course.price) > 0
@@ -710,6 +733,7 @@ async def get_course_progress(
             "totalLessons": total,
             "percentage": pct,
             "lastLessonId": last_lesson,
+            "positions": {str(record.lesson_id): record.last_position for record in progress_records if not record.is_completed},
         },
     }
 

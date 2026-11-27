@@ -15,8 +15,6 @@ import type { NextRequest } from 'next/server';
 
 const PUBLIC_EXACT_ROUTES = new Set([
   '/',
-  '/login',
-  '/register',
   '/terms',
   '/privacy',
   '/forgot-password',
@@ -61,7 +59,7 @@ export function middleware(request: NextRequest) {
   const isPublicRoute = PUBLIC_EXACT_ROUTES.has(path) || isCourseCatalog;
 
   if (!isPublicRoute && !token) {
-    const loginUrl = new URL('/login', request.url);
+    const loginUrl = new URL('/?auth=login', request.url);
     loginUrl.searchParams.set('next', `${path}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
   }

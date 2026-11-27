@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
@@ -28,27 +27,19 @@ import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/layout/AccountActions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageSkeleton } from '@/components/ui/page-skeleton';
+import { ErrorState } from '@/components/ui/empty-state';
+import api from '@/lib/api';
 
 export default function StudentDashboardPage() {
   const { isAuthorized } = useRoleGuard(['student']);
   const { user: currentUser, isLoading: authLoading } = useAuth();
-  const [userName, setUserName] = useState('Học viên');
-  const [userEmail, setUserEmail] = useState('');
-
-  useEffect(() => {
-    if (currentUser) {
-      // Bỏ hậu tố vai trò trong tên hiển thị, ví dụ "Nguyễn Văn An (Sinh viên)".
-      const rawName = currentUser.fullName || currentUser.name;
-      if (rawName) setUserName(rawName.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim());
-      if (currentUser.email) setUserEmail(currentUser.email);
-    }
-  }, [currentUser]);
+  const userName = currentUser?.fullName || currentUser?.name || 'Học viên';
 
   const { data: stats, isLoading: statsLoading } = useQuery<StudentDashboardStats>({
-    queryKey: ['student', 'dashboard'],
+    queryKey: ['student', currentUser?.id, 'dashboard'],
     queryFn: async () => {
       const res = await studentApi.getDashboardStats();
       return res.data.data;
@@ -56,8 +47,8 @@ export default function StudentDashboardPage() {
     enabled: isAuthorized,
   });
 
-  const { data: enrolledData, isLoading: enrolledLoading } = useQuery<{ data: Enrollment[] }>({
-    queryKey: ['courses', 'enrolled'],
+  const { data: enrolledData, isLoading: enrolledLoading, isError: enrolledError, refetch: reloadEnrollments } = useQuery<{ data: Enrollment[] }>({
+    queryKey: ['student', currentUser?.id, 'enrolled-dashboard'],
     queryFn: async () => {
       const res = await coursesApi.getEnrolled();
       return res.data;
@@ -67,7 +58,7 @@ export default function StudentDashboardPage() {
   });
 
   const { data: masteryData } = useQuery({
-    queryKey: ['student', 'mastery'],
+    queryKey: ['student', currentUser?.id, 'mastery'],
     queryFn: async () => {
       const res = await studentApi.getMastery();
       return res.data?.data;
@@ -76,6 +67,11 @@ export default function StudentDashboardPage() {
   });
 
   const rawEnrollments = enrolledData?.data ?? [];
+  const upcoming = useQuery({
+    queryKey: ['student', currentUser?.id, 'upcoming-assignments'],
+    enabled: isAuthorized,
+    queryFn: async () => (await api.get<{ data: { id: number; title: string; courseTitle: string; dueAt: string; href: string }[] }>('/api/v1/student/upcoming-assignments')).data.data,
+  });
   const enrollments = rawEnrollments;
 
   const formatWatchTime = (seconds: number) => {
@@ -88,7 +84,7 @@ export default function StudentDashboardPage() {
   const statCards = [
     {
       icon: BookOpen,
-      label: 'Đang theo học',
+      label: 'Đã ghi danh',
       value: stats?.totalEnrolled ?? enrollments.length,
       color: 'bg-primary/10 text-primary border-primary/20',
     },
@@ -100,7 +96,7 @@ export default function StudentDashboardPage() {
     },
     {
       icon: Clock,
-      label: 'Thời gian học',
+      label: 'Vị trí xem đã lưu',
       value: stats ? formatWatchTime(stats.totalWatchTime) : '0 phút',
       color: 'bg-clay-500/10 text-clay-600 border-clay-500/20',
     },
@@ -113,7 +109,9 @@ export default function StudentDashboardPage() {
   ];
 
   // Khóa học đang học dở gần nhất (Hero active course)
-  const activeEnrollment = enrollments[0];
+  const activeEnrollment = enrollments.filter((item) => item.learningStatus === 'in_progress')
+    .sort((a, b) => Date.parse(b.lastAccessedAt ?? '') - Date.parse(a.lastAccessedAt ?? ''))[0];
+  const notStarted = enrollments.filter((item) => item.learningStatus === 'not_started');
   const overallProgress =
     enrollments.length > 0
       ? Math.round(enrollments.reduce((acc, curr) => acc + (curr.progress || 0), 0) / enrollments.length)
@@ -129,11 +127,7 @@ export default function StudentDashboardPage() {
         {/* ── 1. Header Cá Nhân Hóa (Mobile-First Greeting Bar) ── */}
         <Card className="flex flex-col justify-between gap-3.5 p-4 sm:flex-row sm:items-center sm:p-6">
           <div className="flex items-center gap-3">
-            <Avatar className="h-11 w-11 shrink-0 sm:h-14 sm:w-14">
-              <AvatarFallback className="bg-primary text-base font-semibold text-primary-foreground sm:text-xl">
-                {userName.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            {currentUser && <UserAvatar user={currentUser} className="h-11 w-11 shrink-0 sm:h-14 sm:w-14" />}
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="truncate text-base font-bold tracking-tight text-foreground sm:text-2xl">
@@ -289,7 +283,8 @@ export default function StudentDashboardPage() {
         )}
 
         {/* ── 3b. Trạng thái chưa ghi danh khóa nào ── */}
-        {!activeEnrollment && !enrolledLoading && (
+        {enrolledError && <ErrorState message="Chưa tải được danh sách khóa học đã ghi danh." actionLabel="Thử lại" onAction={() => void reloadEnrollments()} />}
+        {!activeEnrollment && !enrolledLoading && !enrolledError && (
           <Card className="border-dashed border-border bg-card p-6 sm:p-8">
             <div className="flex flex-col items-center gap-3 text-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -297,16 +292,15 @@ export default function StudentDashboardPage() {
               </span>
               <div>
                 <h2 className="text-base font-semibold text-foreground">
-                  Bạn chưa bắt đầu khóa học nào
+                  {notStarted.length ? `Bạn có ${notStarted.length} khóa học chưa bắt đầu` : enrollments.length ? 'Bạn đã hoàn thành các khóa đã ghi danh' : 'Bạn chưa ghi danh khóa học nào'}
                 </h2>
                 <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
-                  Khám phá danh mục khóa học và chọn một khóa phù hợp. Tiến độ học tập và Gia sư AI
-                  sẽ xuất hiện ngay tại đây.
+                  {notStarted.length ? 'Chọn một khóa đã ghi danh trong danh sách khóa học của bạn.' : 'Bạn có thể khám phá thêm khóa học trong danh mục.'}
                 </p>
               </div>
               <Button asChild size="sm" className="mt-1">
-                <Link href="/courses">
-                  Khám phá khóa học
+                <Link href={notStarted.length ? '/my-courses' : '/courses'}>
+                  {notStarted.length ? 'Mở khóa học của tôi' : 'Khám phá khóa học'}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </Button>
@@ -314,8 +308,17 @@ export default function StudentDashboardPage() {
           </Card>
         )}
 
-        {/* ── 4. Lối Tắt Gia Sư AI Tức Thì (Mobile Quick Ask Widget) ── */}
-        <Card className="space-y-3 border border-brand-900 bg-brand-950 p-4 text-brand-50 sm:p-5">
+        <Card id="assignments" className="scroll-mt-20 space-y-3 border border-border bg-card p-4 sm:p-5">
+          <h2 className="font-semibold">Hạn nộp bài sắp tới</h2>
+          {upcoming.isLoading ? <p role="status" className="text-sm">Đang tải bài tập…</p> :
+            upcoming.isError ? <ErrorState message="Chưa tải được lịch nộp bài." actionLabel="Thử lại" onAction={() => void upcoming.refetch()} /> :
+            !upcoming.data?.length ? <p className="text-sm text-muted-foreground">Bạn không có bài chưa nộp sắp đến hạn.</p> :
+            <ul className="divide-y divide-border">{upcoming.data.map((assignment) => <li key={assignment.id} className="flex flex-wrap items-baseline justify-between gap-2 py-3 text-sm">
+              <div><Link href={assignment.href} className="font-semibold text-primary hover:underline">{assignment.title}</Link><p className="text-muted-foreground">{assignment.courseTitle}</p></div>
+              <time dateTime={assignment.dueAt}>{new Date(assignment.dueAt).toLocaleString('vi-VN')}</time>
+            </li>)}</ul>}
+        </Card>
+        <Card id="ai-tutor" className="scroll-mt-20 space-y-3 border border-brand-900 bg-brand-950 p-4 text-brand-50 sm:p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white">

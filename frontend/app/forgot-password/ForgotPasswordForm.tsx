@@ -50,7 +50,7 @@ export function ForgotPasswordForm() {
         eyebrow="Kiểm tra hộp thư"
         title="Đã gửi liên kết đặt lại"
         subtitle="Nếu email này tồn tại trong hệ thống, bạn sẽ nhận được hướng dẫn trong ít phút."
-        backHref="/login"
+        backHref="/?auth=login"
         backLabel="Quay lại đăng nhập"
         footer={
           <p className="text-center text-xs text-stone-600">
@@ -119,7 +119,7 @@ export function ForgotPasswordForm() {
       eyebrow="Khôi phục tài khoản"
       title="Quên mật khẩu?"
       subtitle="Nhập email đăng nhập, chúng tôi sẽ gửi liên kết an toàn để bạn tạo mật khẩu mới."
-      backHref="/login"
+      backHref="/?auth=login"
       backLabel="Quay lại đăng nhập"
     >
       {error && (
