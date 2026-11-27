@@ -1,4 +1,4 @@
-# Smart LMS – Hệ thống Quản lý Đào tạo Trực tuyến tích hợp Trợ lý AI
+# SmartTutor LMS – Hệ thống Quản lý Đào tạo Trực tuyến tích hợp Trợ lý AI
 
 Tài liệu này mô tả **đúng những gì đang chạy trong mã nguồn** tại thời điểm cập nhật, không dùng số liệu dự kiến. Các mục chưa triển khai được ghi rõ ở phần cuối.
 
@@ -8,7 +8,7 @@ Tài liệu này mô tả **đúng những gì đang chạy trong mã nguồn** 
 
 | Thông tin | Giá trị thực tế |
 |---|---|
-| Tên dự án | Smart Learning Management System (Smart LMS) |
+| Tên dự án | Smart Learning Management System (SmartTutor LMS) |
 | Frontend | Next.js 14 (App Router), cổng `3000` |
 | Backend | FastAPI + SQLAlchemy 2.0 async, cổng `8000` |
 | AI Service | FastAPI riêng, cổng `8001` |

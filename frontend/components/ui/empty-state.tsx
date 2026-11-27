@@ -38,7 +38,7 @@ export function EmptyState({
       <div className="space-y-1">
         <p className="text-sm font-bold text-foreground">{title}</p>
         {description && (
-          <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">{description}</p>
+          <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">{description}</p>
         )}
       </div>
       {actionLabel && onAction && (
@@ -69,7 +69,7 @@ export function ErrorState({ message, actionLabel, onAction, className }: ErrorS
     >
       <div className="flex items-start gap-2">
         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-        <p className="text-xs font-medium leading-relaxed">{message}</p>
+        <p className="min-w-0 break-words text-sm font-medium leading-relaxed">{message}</p>
       </div>
       {actionLabel && onAction && (
         <Button type="button" size="sm" variant="outline" onClick={onAction}>

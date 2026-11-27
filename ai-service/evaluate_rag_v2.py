@@ -342,7 +342,7 @@ def render_markdown(result: dict[str, Any], top_k: int) -> str:
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
-    parser = argparse.ArgumentParser(description="Đánh giá RAG v2 của Smart LMS")
+    parser = argparse.ArgumentParser(description="Đánh giá RAG v2 của SmartTutor LMS")
     parser.add_argument("--dataset", type=Path, default=Path("eval_dataset_template.csv"))
     parser.add_argument("--top-k", type=int, default=4)
     parser.add_argument("--retrieval-only", action="store_true", help="Chỉ đo truy xuất, không gọi mô hình")

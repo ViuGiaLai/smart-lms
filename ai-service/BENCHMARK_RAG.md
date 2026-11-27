@@ -1,4 +1,4 @@
-﻿# Benchmark RAG - Smart LMS
+﻿# Benchmark RAG - SmartTutor LMS
 
 - Thời điểm chạy: 2026-11-05
 - Model nhúng: `models/gemini-embedding-001` (768 chiều)

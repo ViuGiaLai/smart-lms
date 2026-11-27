@@ -25,6 +25,7 @@ async def run(minutes: int, apply: bool) -> int:
                 select(LessonMaterial)
                 .where(
                     LessonMaterial.status.in_(["queued", "processing"]),
+                    LessonMaterial.file_url == "",
                     LessonMaterial.created_at < threshold,
                 )
                 .order_by(LessonMaterial.created_at)

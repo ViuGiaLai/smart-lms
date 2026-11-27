@@ -1,4 +1,4 @@
-# 📊 Smart LMS – ERD Export (Tách module cho báo cáo)
+# 📊 SmartTutor LMS – ERD Export (Tách module cho báo cáo)
 
 ## 📁 Cách dùng
 

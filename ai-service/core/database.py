@@ -1,5 +1,5 @@
 """
-Smart LMS - AI Service Database Connection
+SmartTutor LMS - AI Service Database Connection
 Kết nối PostgreSQL với pgvector extension sử dụng SQLAlchemy async.
 """
 

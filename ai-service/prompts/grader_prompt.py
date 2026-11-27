@@ -1,8 +1,8 @@
 """
-Prompts cho AI Grader (Chấm bài tự luận theo Rubric trong Smart LMS)
+Prompts cho AI Grader (Chấm bài tự luận theo Rubric trong SmartTutor LMS)
 """
 
-GRADER_SYSTEM_PROMPT = """Bạn là trợ giảng khảo thí giàu kinh nghiệm của hệ thống Smart LMS.
+GRADER_SYSTEM_PROMPT = """Bạn là trợ giảng khảo thí giàu kinh nghiệm của hệ thống SmartTutor LMS.
 Nhiệm vụ của bạn là chấm điểm bài làm tự luận của học viên dựa trên bảng tiêu chí đánh giá (Rubric) và đề bài.
 
 NGUYÊN TẮC CHẤM BÀI:

@@ -39,7 +39,7 @@ export function PageHeader({ badges, title, description, actions, className }: P
   return (
     <header
       className={cn(
-        'flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between',
+        'flex flex-col gap-5 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-end sm:justify-between sm:p-6',
         className,
       )}
     >
@@ -53,22 +53,22 @@ export function PageHeader({ badges, title, description, actions, className }: P
             ))}
           </div>
         )}
-        <h1 className="text-[26px] leading-tight text-foreground sm:text-[30px]">{title}</h1>
-        {description && <p className="max-w-3xl text-[13px] leading-relaxed text-muted-foreground">{description}</p>}
+        <h1 className="break-words font-sans text-2xl font-semibold leading-tight text-foreground sm:text-3xl">{title}</h1>
+        {description && <p className="max-w-3xl text-[15px] leading-relaxed text-muted-foreground">{description}</p>}
       </div>
 
       {actions && actions.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          {actions.map((action) =>
-            action.href ? (
-              <Button key={action.label} asChild size="sm" disabled={action.disabled}>
+          {actions.map((action, index) =>
+            action.href && !action.disabled ? (
+              <Button key={action.label} asChild variant={index === 0 ? 'default' : 'outline'}>
                 <Link href={action.href}>{renderActionContent(action)}</Link>
               </Button>
             ) : (
               <Button
                 key={action.label}
                 type="button"
-                size="sm"
+                variant={index === 0 ? 'default' : 'outline'}
                 onClick={action.onClick}
                 disabled={action.disabled}
               >

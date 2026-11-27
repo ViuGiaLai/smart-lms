@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import HTTPException, status
@@ -15,19 +16,18 @@ from app.models.user import User, UserRole
 
 async def ensure_enrollment(db: AsyncSession, user_id: int, course_id: int) -> Enrollment:
     """Tạo bản ghi ghi danh nếu chưa có. Idempotent."""
+    await db.execute(
+        insert(Enrollment)
+        .values(user_id=user_id, course_id=course_id)
+        .on_conflict_do_nothing(index_elements=[Enrollment.user_id, Enrollment.course_id])
+    )
     result = await db.execute(
         select(Enrollment).where(
             Enrollment.user_id == user_id,
             Enrollment.course_id == course_id,
         )
     )
-    existing = result.scalar_one_or_none()
-    if existing:
-        return existing
-    enrollment = Enrollment(user_id=user_id, course_id=course_id)
-    db.add(enrollment)
-    await db.flush()
-    return enrollment
+    return result.scalar_one()
 
 
 async def require_course_access(

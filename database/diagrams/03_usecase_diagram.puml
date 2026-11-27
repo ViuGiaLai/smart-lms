@@ -44,7 +44,7 @@ actor "Quản trị viên\n(Admin)" as AD #FDEDEC;line:922B21;text:78281F
 actor "AI Service\n(Gemini)" as AI #EBF5FB;line:2E86C1;text:1B4F72
 
 ' ── SYSTEM BOUNDARY ─────────────────────────────────
-rectangle "Hệ thống Smart LMS" {
+rectangle "Hệ thống SmartTutor LMS" {
 
   package "Xác thực & Tài khoản" as PKG_AUTH {
     usecase "Đăng ký tài khoản" as UC_REG

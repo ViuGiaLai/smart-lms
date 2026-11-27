@@ -1,4 +1,4 @@
-# Hướng dẫn khởi chạy Smart LMS
+# Hướng dẫn khởi chạy SmartTutor LMS
 
 Hệ thống chạy **3 service riêng**, không dùng Docker:
 
@@ -29,8 +29,20 @@ R2_ENDPOINT=<endpoint S3-compatible>
 R2_BUCKET=<bucket>
 R2_ACCESS_KEY_ID=<access key>
 R2_SECRET_ACCESS_KEY=<secret key>
-R2_PUBLIC_BASE_URL=<base url công khai>
-R2_SIGNED_URL_EXPIRE_SECONDS=3600
+R2_PUBLIC_BASE_URL=<chỉ nhập hostname cũ nếu có URL công khai trong database>
+R2_SIGNED_URL_EXPIRE_SECONDS=900
+
+Bucket R2 phải tắt truy cập công khai, kể cả hostname cũ. Giữ hostname cũ trong
+`R2_PUBLIC_BASE_URL` nếu database còn liên kết cần đọc qua URL có chữ ký.
+Tệp dev lưu trên đĩa cần được chuyển vào R2 trước khi đưa hệ thống lên production.
+
+Nếu chạy backend thủ công, mở thêm một terminal tại thư mục `backend` để xử lý tài liệu đã đưa vào hàng đợi:
+
+```powershell
+.\venv\Scripts\python.exe -m app.media_worker
+```
+
+Với Docker Compose, tiến trình này nằm trong service `media-worker`.
 
 # Hạn mức AI theo người/ngày (đặt 0 để tắt)
 AI_TUTOR_DAILY_LIMIT=80

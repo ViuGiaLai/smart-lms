@@ -1,5 +1,5 @@
 """
-Smart LMS - Groq LLM Client
+SmartTutor LMS - Groq LLM Client
 Dùng làm fallback khi Gemini hết quota (429) hoặc timeout.
 Hỗ trợ cả non-streaming và streaming response.
 """

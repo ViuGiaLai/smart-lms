@@ -4,7 +4,7 @@ import { ResetPasswordForm } from './ResetPasswordForm'
 
 export const metadata = {
   title: 'Đặt lại mật khẩu',
-  description: 'Tạo mật khẩu mới cho tài khoản Smart LMS bằng liên kết dùng một lần.',
+  description: 'Tạo mật khẩu mới cho tài khoản SmartTutor LMS bằng liên kết dùng một lần.',
 }
 
 export default function ResetPasswordPage() {

@@ -418,18 +418,14 @@ async def search_courses(
 
 
 async def _can_view_answer_key(db: AsyncSession, course: Course, user: User | None) -> bool:
-    """Chỉ người quản lý khóa học (giảng viên/admin) hoặc học viên đã ghi danh
-    mới được thấy đáp án đúng của bộ đề. Khách/non-enrolled không được thấy
-    để tránh rò rỉ đáp án qua endpoint công khai."""
+    """Chỉ người quản lý khóa học (giảng viên chủ khóa/admin) mới được thấy đáp
+    án đúng ngay trong API chi tiết khóa học. Học viên phải nộp bài qua endpoint
+    chấm điểm (/api/v1/quizzes/{id}/submit) để tránh lộ đáp án qua DevTools."""
     if user is None:
         return False
     role = _role_value(user)
     if role == UserRole.admin.value or course.instructor_id == user.id:
         return True
-    if role == UserRole.student.value:
-        # Dùng chung định nghĩa "đã ghi danh" (chỉ bảng enrollments) với trang
-        # /courses/enrolled; dữ liệu cũ đã được migration 0007 backfill.
-        return course.id in await enrolled_course_ids(db, user.id)
     return False
 
 
@@ -551,10 +547,17 @@ async def get_course(
         rating_count=rating_stats.get(course.id, (None, 0))[1],
     )
     has_access = await _has_course_access(db, course, current_user)
+    from app.core.config import settings
+    data["demoCheckoutEnabled"] = settings.demo_checkout_enabled
+    data["isEnrolled"] = bool(has_access and _role_value(current_user) == UserRole.student.value)
+    from app.services.object_storage import resolve_media_url
+
     lessons_payload = []
     for lesson in course.lessons:
-        # Bài đầu tiên mở làm bản xem trước (khớp cờ isFree); các bài sau cần ghi danh.
-        unlocked = has_access or lesson.order_index == 1
+        # Chỉ video YouTube ở bài đầu được dùng làm bản xem trước.
+        is_preview = lesson.order_index == 1 and lesson.source_type == "youtube"
+        unlocked = has_access or is_preview
+        resolved_video_url = (await resolve_media_url(lesson.video_url) or "") if unlocked else ""
         lessons_payload.append(
             {
                 "id": str(lesson.id),
@@ -565,12 +568,12 @@ async def get_course(
                 "duration": lesson.duration or 0,
                 "duration_seconds": lesson.duration or 0,
                 "durationText": _duration_label(lesson.duration),
-                "videoUrl": (lesson.video_url or "") if unlocked else "",
-                "video_url": (lesson.video_url or "") if unlocked else "",
-                "transcript": (lesson.transcript or "") if unlocked else "",
-                "resources_url": (lesson.resources_url or "") if unlocked else "",
+                "videoUrl": resolved_video_url,
+                "video_url": resolved_video_url,
+                "transcript": (lesson.transcript or "") if has_access else "",
+                "resources_url": (lesson.resources_url or "") if has_access else "",
                 "order": lesson.order_index,
-                "isFree": lesson.order_index == 1,
+                "isFree": is_preview,
                 "youtubeVideoId": lesson.youtube_video_id if unlocked else None,
                 "subtitleStatus": lesson.subtitle_status or "none",
                 "subtitleLanguage": lesson.subtitle_language,
@@ -596,7 +599,7 @@ async def get_course(
                 for q in quiz.questions
             ],
         }
-        for quiz in (course.quizzes or [])
+        for quiz in (course.quizzes or []) if has_access
     ]
     return {
         "success": True,
@@ -611,6 +614,8 @@ async def enroll_course(
     db: AsyncSession = Depends(get_db),
 ):
     """Enroll into a course, create Enrollment record and initialize progress for first lesson."""
+    if _role_value(current_user) != UserRole.student.value:
+        raise HTTPException(status_code=403, detail="Chỉ học viên có thể ghi danh khóa học.")
     c_res = await db.execute(select(Course).where(Course.id == course_id))
     course = c_res.scalar_one_or_none()
     if not course:
@@ -620,12 +625,26 @@ async def enroll_course(
     if course.status != CourseStatus.published and not _can_manage_course(course, current_user):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
 
+    from app.core.config import settings
     from app.models.lesson import Lesson
     from app.models.progress import Progress
-    from app.models.enrollment import Enrollment
-    from app.services.enrollment_service import ensure_enrollment
+    from sqlalchemy.dialects.postgresql import insert
+    from app.services.enrollment_service import ensure_enrollment, enrolled_course_ids
 
     user_id = current_user.id
+
+    # Khi bật chế độ thương mại thu phí (ENFORCE_COURSE_PAYMENT=True), khóa học có
+    # giá > 0 yêu cầu phải được cấp quyền qua đơn hàng thanh toán trước.
+    if (
+        course.price
+        and float(course.price) > 0
+        and not _can_manage_course(course, current_user)
+        and course_id not in await enrolled_course_ids(db, user_id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Khóa học có thu phí. Vui lòng hoàn tất thanh toán để kích hoạt khóa học.",
+        )
 
     # Tạo enrollment record (idempotent)
     await ensure_enrollment(db, user_id, course_id)
@@ -635,18 +654,12 @@ async def enroll_course(
     )
     first_lesson = first_lesson_res.scalar_one_or_none()
     if first_lesson:
-        p_check = await db.execute(
-            select(Progress).where(Progress.user_id == user_id, Progress.lesson_id == first_lesson.id)
+        await db.execute(
+            insert(Progress)
+            .values(user_id=user_id, lesson_id=first_lesson.id, percent_complete=0.0,
+                    is_completed=False, last_position=0)
+            .on_conflict_do_nothing(index_elements=[Progress.user_id, Progress.lesson_id])
         )
-        if not p_check.scalar_one_or_none():
-            db.add(Progress(
-                user_id=user_id,
-                lesson_id=first_lesson.id,
-                percent_complete=0.0,
-                is_completed=False,
-                last_position=0,
-            ))
-            await db.commit()
 
     return {
         "success": True,
@@ -656,30 +669,25 @@ async def enroll_course(
 
 
 @router.get("/{course_id}/progress")
-async def get_course_progress(course_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+async def get_course_progress(
+    course_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get actual user progress for a course from database for current user."""
-    from app.core.security import decode_token
     from app.models.lesson import Lesson
     from app.models.progress import Progress
+    from app.services.enrollment_service import require_course_access
 
-    auth_header = request.headers.get("authorization")
-    user_id = None
-    if auth_header and auth_header.startswith("Bearer "):
-        try:
-            tok = auth_header.split(" ", 1)[1]
-            sub = decode_token(tok).get("sub")
-            if sub:
-                user_id = int(sub)
-        except Exception:
-            pass
+    await require_course_access(db, current_user, course_id)
 
-    l_stmt = select(Lesson).where(Lesson.course_id == course_id)
+    l_stmt = select(Lesson).where(Lesson.course_id == course_id).order_by(Lesson.order_index, Lesson.id)
     l_res = await db.execute(l_stmt)
     lessons = l_res.scalars().all()
     lesson_ids = [l.id for l in lessons]
 
-    if user_id and lesson_ids:
-        p_stmt = select(Progress).where(Progress.user_id == user_id, Progress.lesson_id.in_(lesson_ids))
+    if lesson_ids:
+        p_stmt = select(Progress).where(Progress.user_id == current_user.id, Progress.lesson_id.in_(lesson_ids))
         p_res = await db.execute(p_stmt)
         progress_records = p_res.scalars().all()
     else:
@@ -719,16 +727,22 @@ async def mark_lesson_complete(
     Yeu cau dang nhap: khong con ghi tien do cho user dau tien/id=1 khi thieu token.
     """
     from app.models.progress import Progress
-    from app.services.enrollment_service import ensure_enrollment
+    from app.services.enrollment_service import require_course_access
     from datetime import datetime, timezone
 
     payload = payload or {}
     user_id = current_user.id
+    if _role_value(current_user) != UserRole.student.value:
+        raise HTTPException(status_code=403, detail="Chỉ học viên có thể lưu tiến độ học tập.")
     watched_seconds = payload.get("watchedSeconds", 0)
+    if type(watched_seconds) is not int or not 0 <= watched_seconds <= 2_147_483_647:
+        raise HTTPException(status_code=422, detail="Thời lượng đã xem không hợp lệ.")
 
-    # Bài học phải thực sự thuộc khóa học trong URL. Trước đây endpoint chỉ dùng
-    # lesson_id nên có thể ghi tiến độ của bài thuộc khóa KHÁC (hoặc id không tồn
-    # tại) với course_id của một khóa đang ghi danh.
+    # Bắt buộc người dùng phải đã ghi danh khóa học (hoặc là giảng viên chủ khóa/admin)
+    # để không cho phép gọi trực tiếp API complete nhằm vượt tường thu phí (paywall bypass).
+    await require_course_access(db, current_user, course_id)
+
+    # Bài học phải thực sự thuộc khóa học trong URL.
     from app.models.lesson import Lesson
 
     lesson_check = await db.execute(
@@ -739,10 +753,6 @@ async def mark_lesson_complete(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bài học không tồn tại trong khóa học này",
         )
-
-    # Hoàn thành bài học cũng là một hình thức ghi danh: giữ enrollments là
-    # nguồn sự thật duy nhất.
-    await ensure_enrollment(db, user_id, course_id)
 
     p_stmt = select(Progress).where(Progress.user_id == user_id, Progress.lesson_id == lesson_id)
     p_res = await db.execute(p_stmt)

@@ -31,6 +31,8 @@ def grade_quiz(
     questions: Iterable[Any],
     answers: dict[Any, Any] | None,
     pass_score: float = 0.6,
+    *,
+    strict_question_ids: bool = False,
 ) -> dict[str, Any]:
     """Chấm bài trắc nghiệm trên máy chủ. Không phụ thuộc cách client đánh số câu."""
     question_list = list(questions)
@@ -40,7 +42,7 @@ def grade_quiz(
 
     for idx, question in enumerate(question_list):
         expected = str(getattr(question, "correct_answer", "") or "").strip().upper()
-        selected = selected_answer_for_question(question, normalized, idx)
+        selected = normalized.get(str(question.id)) if strict_question_ids else selected_answer_for_question(question, normalized, idx)
         is_correct = bool(selected) and selected == expected
         if is_correct:
             correct += 1

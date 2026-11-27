@@ -16,12 +16,12 @@ def _is_production() -> bool:
 
 def _build_message(to_email: str, reset_url: str, expire_minutes: int) -> EmailMessage:
     msg = EmailMessage()
-    msg["Subject"] = "Đặt lại mật khẩu Smart LMS"
+    msg["Subject"] = "Đặt lại mật khẩu SmartTutor LMS"
     msg["From"] = settings.SMTP_FROM
     msg["To"] = to_email
     msg.set_content(
         "Xin chào,\n\n"
-        "Bạn (hoặc ai đó) đã yêu cầu đặt lại mật khẩu cho tài khoản Smart LMS.\n"
+        "Bạn (hoặc ai đó) đã yêu cầu đặt lại mật khẩu cho tài khoản SmartTutor LMS.\n"
         f"Mở liên kết sau để tạo mật khẩu mới (hết hạn sau {expire_minutes} phút):\n\n"
         f"{reset_url}\n\n"
         "Nếu bạn không yêu cầu, hãy bỏ qua email này. Mật khẩu hiện tại vẫn giữ nguyên.\n"
@@ -32,7 +32,7 @@ def _build_message(to_email: str, reset_url: str, expire_minutes: int) -> EmailM
   <body style="margin:0;background:#f8fafc;font-family:Segoe UI,Arial,sans-serif;color:#0f172a">
     <div style="max-width:520px;margin:32px auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:32px">
       <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5">
-        Smart LMS
+        SmartTutor LMS
       </p>
       <h1 style="margin:0 0 12px;font-size:20px">Đặt lại mật khẩu</h1>
       <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569">

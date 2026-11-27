@@ -1,5 +1,5 @@
 """
-Smart LMS - Document Processor: PDF & DOCX Parser
+SmartTutor LMS - Document Processor: PDF & DOCX Parser
 Parse các file PDF, Word và PowerPoint thành plain text để đưa vào pipeline RAG.
 Hỗ trợ: PDF (PyPDF2 + pdfplumber), DOCX (python-docx), PPTX (python-pptx)
 """

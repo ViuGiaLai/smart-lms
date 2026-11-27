@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Award, Sparkles, BookOpen, AlertCircle, RefreshCw } from 'lucide-react';
-import { coursesApi } from '@/lib/api';
+import { ErrorState } from '@/components/ui/empty-state';
 import { trackLearningEvent } from '@/lib/analytics';
 
 interface QuestionOption {
@@ -46,7 +46,12 @@ export default function StudentQuizPage() {
   const [isPassed, setIsPassed] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [correctAnswers, setCorrectAnswers] = useState<Record<number, string>>({});
+  const [explanations, setExplanations] = useState<Record<number, string>>({});
   const [startedAt, setStartedAt] = useState<number>(0);
+  const [attempt, setAttempt] = useState<{ token: string; deadline: number | null } | null>(null);
+  const [clock, setClock] = useState(0);
+  const [starting, setStarting] = useState(false);
+  const [attemptError, setAttemptError] = useState('');
 
   const [resolvedCourseId, setResolvedCourseId] = useState<string>(courseId);
 
@@ -56,6 +61,10 @@ export default function StudentQuizPage() {
     const fetchQuizData = async () => {
       setLoading(true);
       setErrorMessage(null);
+      setAttempt(null);
+      setAttemptError('');
+      setIsSubmitted(false);
+      setAnswers({});
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -120,7 +129,7 @@ export default function StudentQuizPage() {
           setActiveQuiz({
             id: matched.id,
             title: matched.title || `Đề kiểm tra trắc nghiệm #${quizIdParam}`,
-            description: matched.description || 'Được đồng bộ từ cơ sở dữ liệu PostgreSQL.',
+            description: matched.description,
             pass_score: matched.pass_score || 0.6,
             lesson_id: matched.lesson_id ?? null,
             questions: mappedQuestions,
@@ -147,16 +156,45 @@ export default function StudentQuizPage() {
 
   const questions = activeQuiz?.questions || [];
 
+  const remaining = attempt?.deadline == null ? null : Math.max(0, Math.ceil((attempt.deadline - clock) / 1000));
+
   useEffect(() => {
-    if (activeQuiz) setStartedAt(Date.now());
-  }, [activeQuiz]);
+    if (!attempt?.deadline || isSubmitted) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [attempt, isSubmitted]);
+
+  const beginAttempt = async () => {
+    if (!activeQuiz || starting) return;
+    setStarting(true);
+    setAttemptError('');
+    try {
+      const token = localStorage.getItem('accessToken');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/v1/quizzes/${activeQuiz.id}/attempt`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Không thể bắt đầu lượt làm bài.');
+      const now = Date.now();
+      if (attempt?.token !== data.attempt_token) setAnswers({});
+      setClock(now);
+      setStartedAt(now);
+      setAttempt({ token: data.attempt_token, deadline: data.deadline ? Date.parse(data.deadline) : null });
+    } catch (error) {
+      setAttemptError(error instanceof Error ? error.message : 'Không thể bắt đầu lượt làm bài.');
+    } finally {
+      setStarting(false);
+    }
+  };
 
   // Ghi nhận lượt bắt đầu làm đề (mỗi đề một lần trong phiên mở trang).
   const trackedQuizStartRef = useRef<string>('');
   useEffect(() => {
     const course = resolvedCourseId || courseId;
-    if (!activeQuiz?.id || !course) return;
-    const key = `${course}:${activeQuiz.id}`;
+    if (!activeQuiz?.id || !course || !attempt) return;
+    const key = attempt.token;
     if (trackedQuizStartRef.current === key) return;
     trackedQuizStartRef.current = key;
     trackLearningEvent({
@@ -165,16 +203,17 @@ export default function StudentQuizPage() {
       lesson_id: activeQuiz.lesson_id ?? null,
       metadata: { quiz_id: activeQuiz.id },
     });
-  }, [activeQuiz?.id, activeQuiz?.lesson_id, resolvedCourseId, courseId]);
+  }, [activeQuiz?.id, activeQuiz?.lesson_id, resolvedCourseId, courseId, attempt]);
 
   const handleSelect = (questionId: number, optKey: string) => {
-    if (isSubmitted) return;
+    if (isSubmitted || submitting || remaining === 0) return;
     setAnswers((prev) => ({ ...prev, [questionId]: optKey }));
   };
 
   const handleSubmit = async () => {
-    if (!activeQuiz || questions.length === 0) return;
+    if (!activeQuiz || !attempt || submitting || remaining === 0 || questions.length === 0) return;
     setSubmitting(true);
+    setAttemptError('');
 
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
@@ -182,7 +221,7 @@ export default function StudentQuizPage() {
       const timeSpent = startedAt ? Math.max(1, Math.round((Date.now() - startedAt) / 1000)) : 0;
 
       // Nộp bài trực tiếp vào PostgreSQL để backend chấm điểm và lưu QuizSubmission
-      let res = await fetch(`${apiUrl}/api/v1/quizzes/${activeQuiz.id}/submit`, {
+      const res = await fetch(`${apiUrl}/api/v1/quizzes/${activeQuiz.id}/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,26 +229,9 @@ export default function StudentQuizPage() {
         },
         body: JSON.stringify({
           answers,
-          time_spent: timeSpent,
+          attempt_token: attempt.token,
         }),
       });
-
-      if (!res.ok) {
-        const targetCId = resolvedCourseId || courseId;
-        if (targetCId) {
-          res = await fetch(`${apiUrl}/api/v1/courses/${targetCId}/quizzes/${activeQuiz.id}/submit`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({
-              answers,
-              time_spent: timeSpent,
-            }),
-          });
-        }
-      }
 
       if (res.ok) {
         const subData = await res.json();
@@ -225,7 +247,14 @@ export default function StudentQuizPage() {
           }
           return acc;
         }, {});
+        const explainMap = (subData.results || []).reduce((acc: Record<number, string>, result: any) => {
+          if (result.question_id && result.explanation) {
+            acc[result.question_id] = result.explanation;
+          }
+          return acc;
+        }, {});
         setCorrectAnswers(answerMap);
+        setExplanations(explainMap);
         setCalculatedScore(scoreVal);
         setIsPassed(Boolean(subData.passed));
         setIsSubmitted(true);
@@ -246,16 +275,12 @@ export default function StudentQuizPage() {
           });
         }
 
-        // Nếu đạt yêu cầu, cập nhật tiến độ bài học trong cơ sở dữ liệu
-        const targetCId = resolvedCourseId || courseId;
-        if (subData.passed && activeQuiz.lesson_id && targetCId) {
-          coursesApi.markLessonComplete(targetCId, String(activeQuiz.lesson_id), 0).catch(() => {});
-        }
       } else {
-        throw new Error('Không thể nộp bài lên máy chủ. Vui lòng thử lại.');
+        const body = await res.json().catch(() => null);
+        throw new Error(typeof body?.detail === 'string' ? body.detail : 'Không thể nộp bài. Vui lòng thử lại.');
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Không thể nộp bài. Vui lòng thử lại.');
+      setAttemptError(err.message || 'Không thể nộp bài. Vui lòng thử lại.');
     } finally {
       setSubmitting(false);
     }
@@ -284,7 +309,7 @@ export default function StudentQuizPage() {
       <div className="min-h-screen bg-stone-50 font-sans flex flex-col">
         <div className="flex-1 flex flex-col items-center justify-center p-6 gap-3">
           <div className="w-8 h-8 border-3 border-brand-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-semibold text-stone-500">Đang tải đề thi từ cơ sở dữ liệu PostgreSQL...</p>
+          <p className="text-sm font-medium text-stone-600">Đang tải bài kiểm tra…</p>
         </div>
       </div>
     );
@@ -339,19 +364,30 @@ export default function StudentQuizPage() {
         <div className="relative space-y-2 overflow-hidden rounded-lg border border-brand-900 bg-brand-950 p-6 text-brand-50">
           <div className="flex items-center gap-2 text-brand-300 text-xs font-bold uppercase tracking-wider">
             <Sparkles className="w-4 h-4 text-amber-300" />
-            Đề kiểm tra AI Bloom Taxonomy • Đề #{activeQuiz.id ?? quizIdParam}
+            Bài kiểm tra
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-white">
             {activeQuiz.title}
           </h1>
           <p className="text-xs text-brand-200/80 max-w-xl">
-            {activeQuiz.description || 'Bộ câu hỏi được đồng bộ trực tiếp từ cơ sở dữ liệu PostgreSQL.'}
+            {activeQuiz.description}
           </p>
         </div>
 
         {/* Questions List */}
-        {!isSubmitted ? (
+        {attemptError && <ErrorState message={attemptError} />}
+        {!isSubmitted && (!attempt || remaining === 0) ? (
+          <div className="rounded-xl border border-border bg-card p-5">
+            <p className="mb-4 text-sm text-muted-foreground">
+              {remaining === 0 ? 'Lượt làm bài đã hết thời gian.' : `${questions.length} câu hỏi. Thời gian bắt đầu khi bạn mở lượt làm bài.`}
+            </p>
+            <button type="button" onClick={() => void beginAttempt()} disabled={starting} className="rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+              {starting ? 'Đang mở bài…' : remaining === 0 ? 'Bắt đầu lượt mới' : 'Bắt đầu làm bài'}
+            </button>
+          </div>
+        ) : !isSubmitted ? (
           <div className="space-y-4">
+            {remaining !== null && <p className="sticky top-16 z-10 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold tabular-nums" role="timer">Thời gian còn lại {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')}</p>}
             {questions.map((q) => (
               <div
                 key={q.id}
@@ -373,6 +409,7 @@ export default function StudentQuizPage() {
                       <button
                         key={opt.key}
                         onClick={() => handleSelect(q.id, opt.key)}
+                        aria-pressed={isSelected}
                         className={`w-full text-left p-3 rounded-lg border text-xs transition flex items-center gap-3 ${
                           isSelected
                             ? 'bg-brand-50/80 border-brand-600 text-brand-900 font-bold ring-2 ring-brand-500/20'
@@ -485,7 +522,7 @@ export default function StudentQuizPage() {
                       <p className="font-bold text-brand-700 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Giải thích sư phạm:
                       </p>
-                      <p className="leading-relaxed text-stone-600">{q.explanation}</p>
+                      <p className="leading-relaxed text-stone-600">{explanations[q.id] || q.explanation}</p>
                     </div>
                   </div>
                 );

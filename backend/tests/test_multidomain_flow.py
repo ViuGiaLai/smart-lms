@@ -235,7 +235,7 @@ def discovery(client, auth, tracked):
             "topic": f"Toán cao cấp & Giải tích ({SUFFIX})",
             "target_level": "Đại cương",
             "domain_category": "Khoa Khoa học Cơ bản & Đại cương",
-            "target_audience": "Sinh viên năm nhất Trường Đại học Đông Á",
+            "target_audience": "Sinh viên năm nhất Trường ",
         },
         headers=auth["instructor"],
     )

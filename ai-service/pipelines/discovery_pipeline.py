@@ -1,5 +1,5 @@
 """
-Smart LMS - AI Discovery Pipeline
+SmartTutor LMS - AI Discovery Pipeline
 Tự động khám phá học liệu, lĩnh vực, chương trình đào tạo, video YouTube thực tế
 và cấu trúc bài học theo chủ đề được yêu cầu.
 """
@@ -18,7 +18,7 @@ from core.groq_client import groq_generate, has_valid_groq_key
 
 logger = structlog.get_logger(__name__)
 
-DISCOVERY_SYSTEM_PROMPT = """Bạn là Chuyên gia Phát triển Chương trình Đào tạo & AI Discovery của Smart LMS (Trường Đại học Đông Á).
+DISCOVERY_SYSTEM_PROMPT = """Bạn là Chuyên gia Phát triển Chương trình Đào tạo & AI Discovery của SmartTutor LMS (Trường ).
 Nhiệm vụ của bạn là nghiên cứu, khám phá và đề xuất cấu trúc khóa học hoàn chỉnh dựa trên chủ đề, bậc đào tạo đại học và chuyên ngành được yêu cầu.
 
 YÊU CẦU BẮT BUỘC:
@@ -35,7 +35,7 @@ CẤU TRÚC JSON MẪU:
   "level_code": "GENERAL | FOUNDATION | MAJOR | CAPSTONE | CERTIFICATION | POSTGRADUATE",
   "grade_label": "Bậc học (VD: Năm 1 - Đại cương, Năm 2 - Cơ sở ngành, Năm 3 - Chuyên ngành, Đồ án tốt nghiệp, Chuẩn đầu ra)",
   "proficiency_level": "Nền tảng | Chuyên sâu | Nâng cao",
-  "target_audience": "Sinh viên Trường Đại học Đông Á",
+  "target_audience": "Sinh viên Trường ",
   "language": "vi",
   "description": "Mô tả học phần chi tiết theo đề cương chi tiết",
   "summary": "Tóm tắt đề xuất chương trình",
@@ -140,7 +140,7 @@ Hãy sinh từ 3 đến 6 bài học có thứ tự logic và tài liệu tham k
             "level_code": "MAJOR",
             "grade_label": target_level or "Chuyên ngành (Năm 3)",
             "proficiency_level": "Đại học / Chuyên sâu",
-            "target_audience": target_audience or "Sinh viên Trường Đại học Đông Á",
+            "target_audience": target_audience or "Sinh viên Trường ",
             "language": "vi",
             "description": f"Đề cương học phần đào tạo có cấu trúc hoàn chỉnh về {topic}.",
             "summary": f"Đề xuất giáo trình học phần trọng tâm về {topic} cho sinh viên ĐH Đông Á.",

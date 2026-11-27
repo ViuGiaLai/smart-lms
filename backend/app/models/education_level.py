@@ -9,7 +9,7 @@ from app.core.database import Base
 
 class EducationLevel(Base):
     """
-    Bậc học và trình độ đào tạo đại học (Trường Đại học Đông Á):
+    Bậc học và trình độ đào tạo đại học (Trường ):
     - GENERAL (Kiến thức Đại cương: Năm 1 - 2)
     - FOUNDATION (Cơ sở ngành: Năm 2 - 3)
     - MAJOR (Chuyên ngành: Năm 3 - 4)

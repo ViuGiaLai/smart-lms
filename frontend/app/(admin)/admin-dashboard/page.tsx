@@ -123,7 +123,8 @@ export default function AdminDashboardPage() {
   const reportError = (err: unknown, fallback: string) => {
     const detail =
       (err as any)?.response?.data?.detail || (err as any)?.response?.data?.message || '';
-    setActionMessage({ kind: 'error', text: detail || fallback });
+    const messages = Array.isArray(detail?.errors) ? detail.errors.filter((item: unknown) => typeof item === 'string') : [];
+    setActionMessage({ kind: 'error', text: typeof detail === 'string' && detail ? detail : messages.join(' ') || fallback });
   };
 
   const toggleUser = async (id: string) => {
@@ -160,7 +161,7 @@ export default function AdminDashboardPage() {
   };
 
   const heading: Record<Section, [string, string]> = {
-    overview: ['Bảng điều khiển Quản trị viên', 'Tổng quan vận hành hệ thống Smart LMS.'],
+    overview: ['Bảng điều khiển Quản trị viên', 'Tổng quan vận hành hệ thống SmartTutor LMS.'],
     users: ['Quản lý tài khoản & phân quyền', 'Quản lý trạng thái truy cập và vai trò người dùng.'],
     courses: ['Kiểm duyệt khóa học', 'Xuất bản, đưa về bản nháp hoặc lưu trữ từng khóa học.'],
     ai: ['Giám sát AI & dữ liệu', 'Trạng thái được kiểm tra từ backend, PostgreSQL/pgvector và AI Service.'],
@@ -179,7 +180,7 @@ export default function AdminDashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{heading[section][0]}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{heading[section][1]}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm">
             <Link href="/quiz/bank">
               <Layers className="h-4 w-4" />Ngân hàng đề
@@ -803,8 +804,8 @@ function DiscoveryPanel({ onMessage }: { onMessage: (msg: { kind: 'ok' | 'error'
 
   const handleConvertToCourse = async (id: number) => {
     try {
-      const res = await aiDiscoveryApi.convertToCourse(id, { auto_publish: true });
-      onMessage({ kind: 'ok', text: res.data?.message || 'Đã chuyển đổi thành khóa học thực tế trên LMS!' });
+      await aiDiscoveryApi.convertToCourse(id, { auto_publish: false });
+      onMessage({ kind: 'ok', text: 'Đã tạo bản nháp. Mở mục Kiểm duyệt khóa học để kiểm tra nội dung trước khi xuất bản.' });
       loadJobs();
       if (activeJob?.id === id) setActiveJob((p: any) => ({ ...p, status: 'converted' }));
     } catch {

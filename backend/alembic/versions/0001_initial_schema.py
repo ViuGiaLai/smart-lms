@@ -4,7 +4,7 @@ Revision ID: 0001_initial_schema
 Revises:
 Create Date: 2026-10-13
 
-Baseline schema cho backend Smart LMS: users, courses, lessons, quizzes,
+Baseline schema cho backend SmartTutor LMS: users, courses, lessons, quizzes,
 quiz_questions, quiz_submissions, progress.
 
 LƯU Ý:

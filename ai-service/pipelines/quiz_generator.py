@@ -1,5 +1,5 @@
 """
-Smart LMS - Quiz Generator Pipeline
+SmartTutor LMS - Quiz Generator Pipeline
 Sinh câu hỏi trắc nghiệm từ nội dung tài liệu dùng Gemini + Pydantic Structured Output.
 
 Flow:

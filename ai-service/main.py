@@ -1,5 +1,5 @@
 """
-Smart LMS - AI Service Entry Point
+SmartTutor LMS - AI Service Entry Point
 FastAPI application chạy tại port 8001
 Cung cấp các API cho: RAG Chatbot, Quiz Generation, Essay Grading, Summarization
 """
@@ -34,7 +34,7 @@ logger = structlog.get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Lifecycle events: khởi động và dọn dẹp tài nguyên."""
     # Startup
-    logger.info("Starting Smart LMS AI Service...", version=settings.APP_VERSION)
+    logger.info("Starting SmartTutor LMS AI Service...", version=settings.APP_VERSION)
     await init_db()
     logger.info("Database connected successfully")
     yield
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="AI Service cho Smart LMS: RAG Chatbot, Quiz Generator, Essay Grader, Summarizer",
+    description="AI Service cho SmartTutor LMS: RAG Chatbot, Quiz Generator, Essay Grader, Summarizer",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -115,7 +115,7 @@ async def health_check():
 async def root():
     """Root endpoint."""
     return {
-        "message": "Smart LMS AI Service is running",
+        "message": "SmartTutor LMS AI Service is running",
         "docs": "/docs",
         "health": "/health",
     }

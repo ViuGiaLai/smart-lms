@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     )
 
     # ── Application ────
-    APP_NAME: str = "Smart LMS"
+    APP_NAME: str = "SmartTutor LMS"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
@@ -132,10 +132,20 @@ class Settings(BaseSettings):
     AI_GRADING_DAILY_LIMIT: int = 60
     AI_SUMMARIZER_DAILY_LIMIT: int = 50
 
+    # ── Thương mại hóa / Thu phí khóa học ─────
+    # Khi bật True: các khóa học có price > 0 không cho phép học viên tự bấm
+    # enroll miễn phí mà yêu cầu hoàn tất thanh toán (trả HTTP 402).
+    ENFORCE_COURSE_PAYMENT: bool = False
+    ALLOW_DEMO_CHECKOUT: bool = False
+
+    @property
+    def demo_checkout_enabled(self) -> bool:
+        return self.ENVIRONMENT.strip().lower() == "demo" and self.ALLOW_DEMO_CHECKOUT
+
     # ── Lưu trữ học liệu ─────
     # URL tải học liệu có chữ ký (R2) chỉ sống trong khoảng này để tránh lộ
     # vĩnh viễn tài liệu của khóa học trả phí.
-    R2_SIGNED_URL_EXPIRE_SECONDS: int = 3600
+    R2_SIGNED_URL_EXPIRE_SECONDS: int = 900
     # Tác vụ xử lý học liệu chạy nền quá thời gian này được coi là kẹt và
     # chuyển sang failed khi khởi động lại backend.
     MATERIAL_STUCK_MINUTES: int = 45

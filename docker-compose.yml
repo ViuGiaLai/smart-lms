@@ -35,7 +35,7 @@ services:
       dockerfile: Dockerfile
     container_name: smart_lms_backend
     restart: always
-    environment:
+    environment: &backend_environment
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-smart_lms}
       - REDIS_URL=redis://redis:6379/0
       # AI Service chạy nội bộ trong mạng Compose (không publish ra host).
@@ -46,6 +46,13 @@ services:
       # BẢO MẬT: đặt SECRET_KEY trong file .env (>= 32 ký tự ngẫu nhiên) trước khi triển khai thực tế.
       - SECRET_KEY=${SECRET_KEY:-dev_insecure_secret_change_in_production_0123456789}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - ALLOW_DEMO_CHECKOUT=${ALLOW_DEMO_CHECKOUT:-false}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}
+      - R2_ENDPOINT=${R2_ENDPOINT:-}
+      - R2_BUCKET=${R2_BUCKET:-}
+      - R2_PUBLIC_BASE_URL=${R2_PUBLIC_BASE_URL:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -55,6 +62,19 @@ services:
         condition: service_started
       ai-service:
         condition: service_started
+    volumes:
+      - ./backend:/app
+
+  media-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "app.media_worker"]
+    restart: always
+    environment: *backend_environment
+    depends_on:
+      - backend
+      - ai-service
     volumes:
       - ./backend:/app
 

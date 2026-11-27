@@ -38,6 +38,8 @@ type CertificateData = {
   totalQuizzes: number;
   passedQuizzes: number;
   quizPassed: boolean;
+  certificateCode?: string | null;
+  verificationUrl?: string | null;
   issuedAt: string | null;
 };
 
@@ -220,7 +222,7 @@ export default function CertificatePage() {
                     <Award className="h-7 w-7" />
                   </span>
                   <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">
-                    Smart LMS · AI Tutoring Platform
+                    SmartTutor LMS · AI Tutoring Platform
                   </p>
                 </div>
 
@@ -274,10 +276,15 @@ export default function CertificatePage() {
 
                 <div className="flex flex-col items-center gap-1 border-t border-primary/15 pt-5">
                   <p className="text-[11px] font-semibold text-foreground">
-                    Cấp tự động bởi hệ thống Smart LMS
+                    Cấp tự động bởi hệ thống SmartTutor LMS
                   </p>
+                  {data.certificateCode && (
+                    <p className="font-mono text-xs font-bold tracking-wider text-primary">
+                      Mã xác thực chứng chỉ: {data.certificateCode}
+                    </p>
+                  )}
                   <p className="text-[10px] text-muted-foreground">
-                    Mã học viên: {data.studentEmail}
+                    Học viên: {data.studentEmail}
                   </p>
                 </div>
               </div>

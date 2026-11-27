@@ -1,5 +1,5 @@
 """
-Smart LMS - Video/Audio Transcriber với OpenAI Whisper
+SmartTutor LMS - Video/Audio Transcriber với OpenAI Whisper
 Chuyển đổi video/audio thành text có timestamp.
 Hỗ trợ: MP4, MP3, WAV, WEBM, OGG, M4A, AVI, MOV
 """

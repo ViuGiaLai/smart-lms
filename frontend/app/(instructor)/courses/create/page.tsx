@@ -115,7 +115,7 @@ export default function CreateCoursePage() {
   const [level, setLevel] = useState('beginner');
   const [isFree, setIsFree] = useState(true);
   const [price, setPrice] = useState('');
-  const [statusVal, setStatusVal] = useState<'published' | 'draft'>('published');
+  const [statusVal, setStatusVal] = useState<'published' | 'draft'>('draft');
   const [thumbnail, setThumbnail] = useState(PRESET_THUMBNAILS[0].url);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [coverError, setCoverError] = useState('');
@@ -660,7 +660,9 @@ export default function CreateCoursePage() {
         language: language || 'vi',
         price: isFree ? 0 : Number(price) || 0,
         thumbnail: thumbnail.trim(),
-        status: statusVal,
+        // Khóa học luôn được tạo ở trạng thái nháp: backend chỉ cho xuất bản
+        // khi bài học và học liệu đã được lưu/trích xuất xong.
+        status: 'draft' as const,
         outcomes: outcomes.map((item) => item.trim()).filter(Boolean),
         prerequisites: prerequisites.map((item) => item.trim()).filter(Boolean),
       };
@@ -772,10 +774,32 @@ export default function CreateCoursePage() {
         }
       }
 
+      // Không xuất bản khi còn tác vụ nền: lúc đó backend chưa thể xác nhận
+      // RAG/học liệu đã sẵn sàng. Giảng viên có thể xuất bản ở trang quản lý
+      // sau khi các tệp hoàn tất.
+      if (statusVal === 'published' && queuedUploads === 0) {
+        setSuccessMsg('Đang kiểm tra điều kiện xuất bản khóa học...');
+        const publishResponse = await fetch(`${apiUrl}/api/v1/courses/${newCourseId}/publish`, {
+          method: 'PATCH',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!publishResponse.ok) {
+          const publishError = await publishResponse.json().catch(() => null);
+          const details = publishError?.detail?.errors;
+          throw new Error(
+            Array.isArray(details)
+              ? details.join(' ')
+              : publishError?.detail?.message || publishError?.detail || 'Khóa học chưa đủ điều kiện để xuất bản.',
+          );
+        }
+      }
+
       setSuccessMsg(
         queuedUploads > 0
-          ? `Khóa học đã lưu. ${queuedUploads} tệp đang được máy chủ xử lý; vào Quản lý khóa học để theo dõi khi hoàn tất.`
-          : 'Lưu khóa học, toàn bộ bài giảng và các bộ đề trắc nghiệm AI thành công vào PostgreSQL!',
+          ? `Khóa học đang ở bản nháp. ${queuedUploads} tệp đang được máy chủ xử lý; vào Quản lý khóa học để theo dõi và xuất bản khi hoàn tất.`
+          : statusVal === 'published'
+            ? 'Khóa học, bài giảng và các bộ đề đã đạt kiểm tra và được xuất bản!'
+            : 'Lưu khóa học, toàn bộ bài giảng và các bộ đề trắc nghiệm AI thành công vào PostgreSQL!',
       );
       setTimeout(() => {
         router.push(`/courses/${newCourseId}/manage`);
@@ -1247,7 +1271,7 @@ export default function CreateCoursePage() {
                         <p className="text-xs font-bold text-foreground">Trạng thái xuất bản</p>
                         <p className="text-[11px] text-muted-foreground">
                           {statusVal === 'published'
-                            ? 'Học viên có thể thấy khóa học ngay sau khi lưu.'
+                            ? 'Hệ thống sẽ kiểm tra học liệu trước khi công khai khóa học.'
                             : 'Khóa học được lưu nháp, chỉ bạn nhìn thấy.'}
                         </p>
                       </div>
@@ -2095,11 +2119,11 @@ export default function CreateCoursePage() {
               </CardContent>
             </Card>
 
-            {/* Bảo chứng AI Smart LMS */}
+            {/* Bảo chứng AI SmartTutor LMS */}
             <div className="space-y-3 rounded-lg border border-brand-900 bg-brand-950 p-5 text-brand-50">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                <span className="text-xs font-bold">Cơ chế AI Studio Smart LMS</span>
+                <span className="text-xs font-bold">Cơ chế AI Studio SmartTutor LMS</span>
               </div>
               <p className="text-[11px] leading-relaxed text-brand-200/80">
                 Tất cả slide bài giảng và transcript sẽ được tự động phân mảnh và nạp vào pgvector khi lưu. Bộ trắc

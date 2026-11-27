@@ -1,5 +1,5 @@
 """
-Smart LMS - RAG Pipeline (Lesson-bounded AI Tutor)
+SmartTutor LMS - RAG Pipeline (Lesson-bounded AI Tutor)
 
 Flow:
   1. Chuẩn hóa câu hỏi + lịch sử hội thoại (câu hỏi tiếp nối).
@@ -170,7 +170,7 @@ async def call_groq_fallback(
 
 
 class RAGPipeline:
-    """Pipeline RAG chính cho AI Tutor của Smart LMS.
+    """Pipeline RAG chính cho AI Tutor của SmartTutor LMS.
 
     - Lesson-bounded: chỉ tìm trong chunks của đúng bài học.
     - Lọc bằng chứng trước khi gọi LLM: câu ngoài phạm vi không có context.

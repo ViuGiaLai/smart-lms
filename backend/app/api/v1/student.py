@@ -261,6 +261,18 @@ async def get_notifications(
         "success": True,
         "data": notifications,
     }
+def generate_certificate_code(course_id: int, user_id: int) -> str:
+    """Sinh mã chứng chỉ định danh duy nhất có chữ ký HMAC-SHA256 chống giả mạo."""
+    import hashlib
+    import hmac
+    from app.core.config import settings
+
+    secret = (settings.SECRET_KEY or "smart-lms-secret").encode("utf-8")
+    msg = f"cert:v1:{int(course_id)}:{int(user_id)}".encode("utf-8")
+    sig = hmac.new(secret, msg, hashlib.sha256).hexdigest()[:8].upper()
+    return f"SLMS-{int(course_id):04d}-{int(user_id):05d}-{sig}"
+
+
 @router.get("/certificates/{course_id}")
 async def get_certificate(
     course_id: int,
@@ -279,17 +291,21 @@ async def get_certificate(
     lesson_ids = l_res.scalars().all()
     total_lessons = len(lesson_ids)
 
-    # 3. Đếm số bài đã hoàn thành RIÊNG CHO HỌC VIÊN HIỆN TẠI
+    # 3. Đếm số bài đã hoàn thành + thời điểm hoàn thành bài cuối cùng
     completed_count = 0
+    last_lesson_completed_at = None
     if lesson_ids:
         p_res = await db.execute(
-            select(func.count(Progress.id)).where(
+            select(func.count(Progress.id), func.max(Progress.completed_at)).where(
                 Progress.user_id == current_user.id,
                 Progress.lesson_id.in_(lesson_ids),
                 Progress.is_completed == True,
             )
         )
-        completed_count = p_res.scalar() or 0
+        row = p_res.one_or_none()
+        if row:
+            completed_count = int(row[0] or 0)
+            last_lesson_completed_at = row[1]
 
     # 4. Kiểm tra điều kiện bài thi trắc nghiệm (Quiz) từ Ngân hàng đề thi
     from app.models.quiz import Quiz, QuizSubmission
@@ -297,18 +313,29 @@ async def get_certificate(
     quiz_ids = q_res.scalars().all()
     has_quizzes = len(quiz_ids) > 0
     passed_quiz_count = 0
+    last_quiz_passed_at = None
     if has_quizzes:
         sub_res = await db.execute(
-            select(func.count(QuizSubmission.id)).where(
+            select(func.count(QuizSubmission.id), func.max(QuizSubmission.submitted_at)).where(
                 QuizSubmission.user_id == current_user.id,
                 QuizSubmission.quiz_id.in_(quiz_ids),
                 QuizSubmission.passed == True,
             )
         )
-        passed_quiz_count = sub_res.scalar() or 0
+        q_row = sub_res.one_or_none()
+        if q_row:
+            passed_quiz_count = int(q_row[0] or 0)
+            last_quiz_passed_at = q_row[1]
 
     quiz_passed = (not has_quizzes) or (passed_quiz_count > 0)
     is_eligible = total_lessons > 0 and completed_count >= total_lessons and quiz_passed
+
+    issued_dt = None
+    cert_code = None
+    if is_eligible:
+        cert_code = generate_certificate_code(course_id, current_user.id)
+        candidates = [dt for dt in (last_lesson_completed_at, last_quiz_passed_at) if dt is not None]
+        issued_dt = max(candidates) if candidates else datetime.now(timezone.utc)
 
     return {
         "success": True,
@@ -324,8 +351,10 @@ async def get_certificate(
             "totalQuizzes": len(quiz_ids),
             "passedQuizzes": passed_quiz_count,
             "quizPassed": quiz_passed,
+            "certificateCode": cert_code,
+            "verificationUrl": f"/api/v1/public/certificates/verify/{cert_code}" if cert_code else None,
             "certificateUrl": f"/certificates/cert-{course_id}-{current_user.id}.pdf" if is_eligible else None,
-            "issuedAt": datetime.now(timezone.utc).isoformat() if is_eligible else None,
+            "issuedAt": issued_dt.isoformat() if issued_dt else None,
         },
     }
 

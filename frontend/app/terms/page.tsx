@@ -3,13 +3,13 @@ import { ArrowLeft, FileText } from 'lucide-react'
 
 export const metadata = {
   title: 'Điều khoản sử dụng',
-  description: 'Điều khoản sử dụng nền tảng học tập Smart LMS.',
+  description: 'Điều khoản sử dụng nền tảng học tập SmartTutor LMS.',
 }
 
 const TERMS = [
   {
     title: '1. Phạm vi áp dụng',
-    body: 'Điều khoản này áp dụng cho mọi tài khoản truy cập nền tảng Smart LMS, bao gồm Học viên, Giảng viên và Quản trị viên. Khi đăng nhập, bạn đồng ý tuân thủ các nội dung được nêu tại đây.',
+    body: 'Điều khoản này áp dụng cho mọi tài khoản truy cập nền tảng SmartTutor LMS, bao gồm Học viên, Giảng viên và Quản trị viên. Khi đăng nhập, bạn đồng ý tuân thủ các nội dung được nêu tại đây.',
   },
   {
     title: '2. Tài khoản và bảo mật',
@@ -37,9 +37,9 @@ export default function TermsPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-4 py-12">
-        <Link href="/" className="mb-10 inline-flex items-baseline gap-2.5" aria-label="Trang chủ Smart LMS">
-          <span className="font-serif text-xl font-semibold tracking-tight text-foreground">Smart LMS</span>
-          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Đại học Đông Á</span>
+        <Link href="/" className="mb-10 inline-flex items-baseline gap-2.5" aria-label="Trang chủ SmartTutor LMS">
+          <span className="font-serif text-xl font-semibold tracking-tight text-foreground">SmartTutor LMS</span>
+          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground"></span>
         </Link>
 
         <div className="bg-white rounded-lg border border-border bg-card p-8">
@@ -50,7 +50,7 @@ export default function TermsPage() {
             <h1 className="text-[26px] leading-tight text-foreground">Điều khoản sử dụng</h1>
           </div>
           <p className="text-xs text-stone-500 mb-8">
-            Cập nhật lần cuối: 13/10/2026 • Nền tảng học tập trực tuyến Smart LMS
+            Cập nhật lần cuối: 13/10/2026 • Nền tảng học tập trực tuyến SmartTutor LMS
           </p>
 
           <div className="space-y-6">

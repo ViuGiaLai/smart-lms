@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { DashboardSidebar } from './DashboardSidebar';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/auth-context';
 
 interface DashboardLayoutProps {
@@ -69,12 +68,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="flex min-h-screen bg-background font-sans text-foreground">
       {/* ── Left Sidebar ── */}
-      <DashboardSidebar
+      <Suspense fallback={null}><DashboardSidebar
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed(!collapsed)}
-      />
+      /></Suspense>
 
       {/* ── Main Content Area ── */}
       <div
@@ -87,9 +86,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="flex items-center gap-3 min-w-0">
             {/* Mobile Hamburger Button */}
             <button
-              onClick={() => setMobileSidebarOpen(true)}
+              onClick={() => {
+                setCollapsed(false);
+                setMobileSidebarOpen(true);
+              }}
               className="rounded-md p-2 text-muted-foreground transition hover:bg-secondary hover:text-foreground lg:hidden"
               title="Mở menu quản lý"
+              aria-label="Mở menu điều hướng"
+              aria-expanded={mobileSidebarOpen}
+              aria-controls="workspace-navigation"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -129,7 +134,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     className="text-primary hover:text-primary"
                     title="Mở trình phát bài giảng của khóa học này để kiểm tra"
                   >
-                    <Link href={`/courses/${manageId}/learn?preview=true`} target="_blank">
+                    <Link href={`/courses/${manageId}/learn?preview=true`} target="_blank" aria-label="Xem trước bài giảng">
                       <Eye className="h-3.5 w-3.5 text-primary" />
                       <span className="hidden sm:inline">Xem trước bài giảng</span>
                     </Link>
@@ -142,7 +147,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             {/* Nút Tạo khóa học (ẩn khi đang ở chính trang /courses/create) */}
             {isInstructor && pathname !== '/courses/create' && (
               <Button asChild variant="default" size="sm">
-                <Link href="/courses/create" className="gap-1.5">
+                <Link href="/courses/create" className="gap-1.5" aria-label="Tạo khóa học">
                   <PlusCircle className="h-3.5 w-3.5" />
                   <span className="hidden md:inline">Tạo khóa học</span>
                 </Link>

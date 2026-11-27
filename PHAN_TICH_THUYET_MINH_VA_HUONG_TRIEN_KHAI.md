@@ -35,7 +35,7 @@ Hướng đúng nhất: **thu hẹp còn 1 khóa pilot**, làm sạch dữ liệ
 | 3 | **AI Quiz Generator** | Bóc tách tài liệu, sinh câu hỏi 4 phương án + đáp án + lời giải, "rút ngắn 80% thời gian soạn đề" |
 | 4 | **Đo lường khoa học** | Context Precision, Hit Rate, latency streaming |
 | 5 | **3 phân hệ** | Học viên – Giảng viên – Quản trị viên, JWT/RBAC |
-| 6 | **Thử nghiệm thực tế** | Giảng viên và sinh viên Đại học Đông Á tham gia thử nghiệm |
+| 6 | **Thử nghiệm thực tế** | Giảng viên và sinh viên  tham gia thử nghiệm |
 
 Ngoài ra thuyết minh nêu công nghệ: PostgreSQL + pgvector, HNSW, LangChain, Docker, Vercel/Render, Ant Design, `text-embedding-004`/`text-embedding-3-small`.
 

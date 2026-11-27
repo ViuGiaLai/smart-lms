@@ -1,6 +1,6 @@
 {
   "version": "2.0.0",
-  "note": "Học liệu và tài liệu tham khảo chính quy – Trường Đại học Đông Á",
+  "note": "Học liệu và tài liệu tham khảo chính quy – Trường ",
   "courses": [
     {
       "id": 201,
@@ -8,7 +8,7 @@
       "category_slug": "toan-cao-cap",
       "level_code": "GENERAL",
       "grade_label": "Năm 1 – Đại cương",
-      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "target_audience": "Sinh viên Trường ",
       "description": "Ma trận, định thức, hệ phương trình tuyến tính, không gian vector và trị riêng vector riêng.",
       "lessons": [
         {

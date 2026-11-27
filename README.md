@@ -1,4 +1,4 @@
-# Smart LMS — Hệ thống Quản lý Đào tạo Trực tuyến với Trợ lý Gia sư AI
+# SmartTutor LMS — Hệ thống Quản lý Đào tạo Trực tuyến với Trợ lý Gia sư AI
 
 Nền tảng học tập trực tuyến tích hợp **Gia sư AI theo ngữ cảnh bài học** (Lesson-bounded RAG), **sinh đề trắc nghiệm** và **chấm tự luận theo rubric** dựa trên tài liệu của đúng bài giảng.
 

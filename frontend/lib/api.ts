@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import { clearAuthCookie, setAuthCookie } from './auth-cookie'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -126,6 +127,7 @@ api.interceptors.response.use(
         if (typeof window !== 'undefined') {
           localStorage.removeItem('accessToken')
           localStorage.removeItem('refreshToken')
+          clearAuthCookie()
           if (window.location.pathname !== '/login') {
             window.location.href = '/login'
           }
@@ -141,6 +143,7 @@ api.interceptors.response.use(
         const resData = response.data.data || response.data
         const accessToken = resData.accessToken || resData.access_token
         localStorage.setItem('accessToken', accessToken)
+        setAuthCookie(accessToken)
         api.defaults.headers.common.Authorization = `Bearer ${accessToken}`
         processQueue(null, accessToken)
 
@@ -150,6 +153,7 @@ api.interceptors.response.use(
         processQueue(refreshError as Error, null)
         localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
+        clearAuthCookie()
         if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
           window.location.href = '/login'
         }

@@ -25,7 +25,9 @@ import {
   ChevronRight,
   Layers,
 } from 'lucide-react';
-import { coursesApi, youtubeApi } from '@/lib/api';
+import { categoriesApi, coursesApi, educationLevelsApi, youtubeApi } from '@/lib/api';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { ErrorState } from '@/components/ui/empty-state';
 import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
 
 interface LessonItem {
@@ -52,45 +54,28 @@ interface LessonMaterial {
   size_bytes?: number | null;
   status?: 'queued' | 'processing' | 'ready' | 'failed';
   error_message?: string | null;
+  can_retry?: boolean;
 }
 
-const COURSE_LEVELS = [
-  { value: 'beginner', label: 'Cơ bản' },
-  { value: 'intermediate', label: 'Trung cấp' },
-  { value: 'advanced', label: 'Nâng cao' },
-];
+interface CatalogOption {
+  id: number;
+  name: string;
+  children?: CatalogOption[];
+}
 
-const categorySuggestions = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => courseCategoryText(item?.name ?? item))
-    .filter(Boolean);
-};
+function flattenCategories(items: CatalogOption[], parent = ''): CatalogOption[] {
+  return items.flatMap((item) => {
+    const name = parent ? `${parent} / ${item.name}` : item.name;
+    return [{ id: item.id, name }, ...flattenCategories(item.children ?? [], name)];
+  });
+}
 
-function courseCategoryText(category: unknown): string {
-  if (typeof category === 'string') return category;
-  if (category && typeof category === 'object') {
-    const value = category as Record<string, unknown>;
-    for (const key of ['name', 'title', 'label', 'display_name']) {
-      if (typeof value[key] === 'string') return value[key] as string;
-    }
+function courseError(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string') return detail;
+  if (detail && typeof detail === 'object' && 'errors' in detail && Array.isArray(detail.errors)) {
+    return detail.errors.filter((error): error is string => typeof error === 'string').join(' ') || fallback;
   }
-  return '';
-}
-
-function courseLevelValue(level: unknown): string {
-  const raw = typeof level === 'string'
-    ? level
-    : level && typeof level === 'object'
-      ? String((level as Record<string, unknown>).code || (level as Record<string, unknown>).value || (level as Record<string, unknown>).name || '')
-      : '';
-  const normalized = raw.trim().toLowerCase();
-  const aliases: Record<string, string> = {
-    'cơ bản': 'beginner', basic: 'beginner', beginner: 'beginner',
-    'trung cấp': 'intermediate', intermediate: 'intermediate',
-    'nâng cao': 'advanced', advanced: 'advanced',
-  };
-  return aliases[normalized] || raw;
+  return fallback;
 }
 
 type DocumentUploadState = 'idle' | 'uploading' | 'processing' | 'ready' | 'error';
@@ -115,8 +100,13 @@ export default function CourseManagePage() {
   const courseId = (params?.id as string) || '1';
 
   const [courseTitle, setCourseTitle] = useState('Đang tải thông tin khóa học...');
-  const [courseDraft, setCourseDraft] = useState({ title: '', description: '', category: '', level: '' });
-  const [courseCategories, setCourseCategories] = useState<string[]>([]);
+  const [courseDraft, setCourseDraft] = useState({ title: '', description: '', categoryId: '', levelId: '' });
+  const [courseCategories, setCourseCategories] = useState<CatalogOption[]>([]);
+  const [educationLevels, setEducationLevels] = useState<CatalogOption[]>([]);
+  const [catalogError, setCatalogError] = useState(false);
+  const [publishError, setPublishError] = useState('');
+  const [editError, setEditError] = useState('');
+  const [materialError, setMaterialError] = useState('');
   const [showCourseEdit, setShowCourseEdit] = useState(false);
   const [isSavingCourse, setIsSavingCourse] = useState(false);
   const [lessons, setLessons] = useState<LessonItem[]>([]);
@@ -156,12 +146,16 @@ export default function CourseManagePage() {
   // Fetch course details from backend if available and verify ownership
   useEffect(() => {
     let isMounted = true;
-    void coursesApi.getCategories()
-      .then((response) => {
-        if (isMounted) setCourseCategories(categorySuggestions(response.data?.data));
+    if (!isAuthorized) return;
+    void Promise.all([categoriesApi.getTree(), educationLevelsApi.getAll()])
+      .then(([categories, levels]) => {
+        if (!isMounted) return;
+        setCourseCategories(flattenCategories(categories.data?.data?.tree ?? []));
+        setEducationLevels(levels.data?.data ?? []);
+        setCatalogError(false);
       })
       .catch(() => {
-        if (isMounted) setCourseCategories([]);
+        if (isMounted) setCatalogError(true);
       });
     const fetchCourse = async () => {
       try {
@@ -179,8 +173,8 @@ export default function CourseManagePage() {
           setCourseDraft({
             title: c.title || '',
             description: c.description || '',
-            category: courseCategoryText(c.categoryName ?? c.category),
-            level: courseLevelValue(c.level),
+            categoryId: c.categoryId == null ? '' : String(c.categoryId),
+            levelId: c.educationLevelId == null ? '' : String(c.educationLevelId),
           });
           const mappedLessons = (c.lessons || []).map((lesson: any) => ({
             ...lesson,
@@ -212,7 +206,7 @@ export default function CourseManagePage() {
     return () => {
       isMounted = false;
     };
-  }, [courseId, router]);
+  }, [courseId, isAuthorized, router]);
 
   // Tệp lớn chạy nền vẫn được theo dõi sau khi rời màn tạo khóa học.
   useEffect(() => {
@@ -496,6 +490,7 @@ export default function CourseManagePage() {
   };
 
   const handlePublishCourse = async () => {
+    setPublishError('');
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -505,12 +500,31 @@ export default function CourseManagePage() {
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(data?.detail || 'Không thể xuất bản khóa học');
+        throw new Error(courseError(data?.detail, 'Không thể xuất bản khóa học.'));
       }
       setCourseStatus('published');
       setSuccessMessage('Khóa học đã được xuất bản.');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Không thể xuất bản khóa học');
+      setPublishError(error instanceof Error ? error.message : 'Không thể xuất bản khóa học.');
+    }
+  };
+
+  const retryMaterial = async (lessonId: LessonItem['id'], materialId: number) => {
+    setMaterialError('');
+    try {
+      const token = localStorage.getItem('accessToken');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}/lessons/${lessonId}/documents/${materialId}/retry`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const material = await response.json();
+      if (!response.ok) throw new Error(courseError(material?.detail, 'Không thể thử xử lý lại học liệu.'));
+      setLessons((items) => items.map((lesson) => lesson.id === lessonId
+        ? { ...lesson, materials: lesson.materials?.map((item) => item.id === materialId ? material : item) }
+        : lesson));
+    } catch (error) {
+      setMaterialError(error instanceof Error ? error.message : 'Không thể thử xử lý lại học liệu.');
     }
   };
 
@@ -518,31 +532,40 @@ export default function CourseManagePage() {
     event.preventDefault();
     if (!courseDraft.title.trim() || isSavingCourse) return;
     setIsSavingCourse(true);
+    setEditError('');
     try {
       const token = localStorage.getItem('accessToken');
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ title: courseDraft.title.trim(), description: courseDraft.description.trim() || null, category: courseDraft.category.trim() || null, level: courseDraft.level.trim() || null }) });
+      const catalog = {
+        ...(courseCategories.some((item) => String(item.id) === courseDraft.categoryId) && { category_id: Number(courseDraft.categoryId) }),
+        ...(educationLevels.some((item) => String(item.id) === courseDraft.levelId) && { education_level_id: Number(courseDraft.levelId) }),
+      };
+      const response = await fetch(`${apiUrl}/api/v1/courses/${courseId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ title: courseDraft.title.trim(), description: courseDraft.description.trim() || null, ...catalog }),
+      });
       const updated = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(updated?.detail || 'Không thể cập nhật khóa học');
-      const savedCategory = courseCategoryText(updated?.categoryName ?? updated?.category ?? courseDraft.category);
-      const savedLevel = courseLevelValue(updated?.level ?? courseDraft.level);
+      if (!response.ok) throw new Error(courseError(updated?.detail, 'Không thể cập nhật khóa học.'));
       setCourseTitle(updated.title || courseDraft.title.trim());
       setCourseDraft((draft) => ({
         ...draft,
         title: updated.title || draft.title,
         description: updated.description ?? draft.description,
-        category: savedCategory,
-        level: savedLevel,
+        categoryId: updated.category_id == null ? '' : String(updated.category_id),
+        levelId: updated.education_level_id == null ? '' : String(updated.education_level_id),
       }));
       setShowCourseEdit(false);
       setSuccessMessage('Đã cập nhật thông tin khóa học.');
-    } catch (error) { alert(error instanceof Error ? error.message : 'Không thể cập nhật khóa học'); }
+    } catch (error) { setEditError(error instanceof Error ? error.message : 'Không thể cập nhật khóa học.'); }
     finally { setIsSavingCourse(false); }
   };
 
   const saveLessonEdit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!editingLesson || !editingLesson.title.trim() || isSavingLesson) return;
+    const originalVideo = lessons.find((lesson) => String(lesson.id) === String(editingLesson.id))?.video_url;
+    const changedVideo = (editingLesson.video_url || '').trim() !== (originalVideo || '').trim();
     setIsSavingLesson(true);
     try {
       const token = localStorage.getItem('accessToken');
@@ -552,7 +575,7 @@ export default function CourseManagePage() {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           title: editingLesson.title.trim(), description: editingLesson.description?.trim() || null,
-          video_url: editingLesson.video_url?.trim() || null, duration: Number(editingLesson.duration || 0),
+          ...(changedVideo && { video_url: editingLesson.video_url?.trim() || null }), duration: Number(editingLesson.duration || 0),
           transcript: editingLesson.transcript?.trim() || null, resources_url: editingLesson.resources_url?.trim() || null,
         }),
       });
@@ -690,36 +713,42 @@ export default function CourseManagePage() {
           )}
         </div>
 
-        {showCourseEdit && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-foreground/60 p-3 sm:p-4">
-            <form onSubmit={saveCourseEdit} className="my-auto w-full max-w-xl space-y-4 rounded-lg border border-border bg-card p-4 shadow-2xl sm:p-6">
-              <div><p className="text-xs font-bold uppercase text-primary">Quản lý khóa học</p><h2 className="mt-1 text-lg font-semibold text-foreground">Sửa thông tin khóa học</h2><p className="mt-1 text-xs text-muted-foreground">Chỉ giảng viên phụ trách và Quản trị viên có quyền lưu.</p></div>
+        <Dialog open={showCourseEdit} onOpenChange={(open) => { setShowCourseEdit(open); if (open) setEditError(''); }}>
+          <DialogContent aria-describedby={undefined}>
+            <DialogTitle>Sửa thông tin khóa học</DialogTitle>
+            <form onSubmit={saveCourseEdit} className="space-y-4">
+              {editError && <ErrorState message={editError} />}
+              {catalogError && <ErrorState message="Chưa tải được danh mục và cấp học. Bạn vẫn có thể sửa tên và mô tả." />}
               <label className="block text-xs font-bold text-foreground">Tên khóa học<input required value={courseDraft.title} onChange={(e) => setCourseDraft({ ...courseDraft, title: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
               <label className="block text-xs font-bold text-foreground">Mô tả<textarea value={courseDraft.description} onChange={(e) => setCourseDraft({ ...courseDraft, description: e.target.value })} className="mt-1 min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-xs font-bold text-foreground">Lĩnh vực
-                  <input
-                    list="course-category-options"
-                    value={courseDraft.category}
-                    onChange={(e) => setCourseDraft({ ...courseDraft, category: e.target.value })}
-                    placeholder="Ví dụ: Công nghệ thông tin"
+                  <select
+                    value={courseDraft.categoryId}
+                    onChange={(e) => setCourseDraft({ ...courseDraft, categoryId: e.target.value })}
+                    disabled={!courseCategories.length}
                     className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
-                  <datalist id="course-category-options">
-                    {courseCategories.map((category) => <option key={category} value={category} />)}
-                  </datalist>
+                  >
+                    <option value="" disabled>Chọn lĩnh vực</option>
+                    {courseDraft.categoryId && !courseCategories.some((item) => String(item.id) === courseDraft.categoryId) && <option value={courseDraft.categoryId}>Danh mục hiện tại</option>}
+                    {courseCategories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
                 </label>
                 <label className="block text-xs font-bold text-foreground">Cấp độ
-                  <select value={courseDraft.level} onChange={(e) => setCourseDraft({ ...courseDraft, level: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                    <option value="">Chưa xác định</option>
-                    {COURSE_LEVELS.map((level) => <option key={level.value} value={level.value}>{level.label}</option>)}
+                  <select value={courseDraft.levelId} disabled={!educationLevels.length} onChange={(e) => setCourseDraft({ ...courseDraft, levelId: e.target.value })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                    <option value="" disabled>Chọn cấp học</option>
+                    {courseDraft.levelId && !educationLevels.some((item) => String(item.id) === courseDraft.levelId) && <option value={courseDraft.levelId}>Cấp học hiện tại</option>}
+                    {educationLevels.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </select>
                 </label>
               </div>
               <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end"><button type="button" onClick={() => setShowCourseEdit(false)} className="w-full rounded-md border border-border px-4 py-2.5 text-xs font-bold text-foreground sm:w-auto">Hủy</button><button type="submit" disabled={isSavingCourse} className="inline-flex w-full items-center justify-center gap-1 rounded-md bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-60 sm:w-auto"><Save className="w-3.5 h-3.5" />{isSavingCourse ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
             </form>
-          </div>
-        )}
+          </DialogContent>
+        </Dialog>
+
+        {publishError && <ErrorState message={publishError} />}
+        {materialError && <ErrorState message={materialError} />}
 
         {/* Success Alert */}
         {successMessage && (
@@ -1097,8 +1126,9 @@ export default function CourseManagePage() {
                             <span className="max-w-[180px] truncate" title={material.title}>{material.title}</span>
                             {material.status === 'queued' || material.status === 'processing' ? <span className="animate-pulse whitespace-nowrap text-primary">Đang xử lý…</span> : null}
                             {material.status === 'failed' ? <span className="max-w-[120px] truncate whitespace-nowrap text-destructive" title={material.error_message || ''}>Lỗi xử lý</span> : null}
+                            {material.can_retry && <button type="button" onClick={() => void retryMaterial(lesson.id, material.id)} className="rounded px-2 py-1 font-semibold text-primary hover:bg-muted">Thử lại</button>}
                             {material.status === 'ready' ? <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-600" /> : null}
-                            <button type="button" onClick={() => void deleteMaterial(lesson.id, material.id).catch((error) => alert(error.message))} className="ml-1 text-muted-foreground hover:text-destructive" title="Xóa tệp này"><Trash2 className="h-3 w-3" /></button>
+                            <button type="button" onClick={() => void deleteMaterial(lesson.id, material.id).catch((error) => setMaterialError(error.message))} className="ml-1 rounded p-1.5 text-muted-foreground hover:text-destructive" title="Xóa tệp này" aria-label={`Xóa ${material.title}`}><Trash2 className="h-3 w-3" /></button>
                           </span>
                         ))}
                       </div>

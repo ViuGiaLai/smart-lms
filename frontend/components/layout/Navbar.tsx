@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
@@ -25,17 +24,14 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
-        <Link href="/" className="group flex items-baseline gap-3" aria-label="Trang chủ Smart LMS">
-          <span className="font-serif text-[22px] font-semibold leading-none tracking-tight text-foreground">
-            Smart LMS
-          </span>
-          <span className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground sm:inline">
-            Đại học Đông Á
+      <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:px-8">
+        <Link href="/" className="group flex items-baseline gap-3" aria-label="Trang chủ SmartTutor LMS">
+          <span className="font-serif text-base font-semibold leading-tight tracking-tight text-foreground sm:text-[22px]">
+            SmartTutor LMS
           </span>
         </Link>
 
-        <nav className="flex items-center gap-1 sm:gap-2">
+        <nav aria-label="Điều hướng công khai" className="flex shrink-0 items-center gap-1 sm:gap-2">
           <Link
             href="/courses"
             className="hidden rounded-md px-3 py-2 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground sm:inline"
@@ -57,7 +53,7 @@ export function Navbar() {
                 href={workspaceHref}
                 className="rounded-md bg-primary px-3.5 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                Vào lớp học
+                {role === 'student' ? 'Vào học' : role === 'instructor' ? 'Khu giảng viên' : 'Khu quản trị'}
               </Link>
               <button
                 onClick={handleLogout}
@@ -80,7 +76,7 @@ export function Navbar() {
                 href="/register"
                 className="rounded-md bg-primary px-3.5 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
-                Tạo tài khoản
+                Đăng ký
               </Link>
             </div>
           )}

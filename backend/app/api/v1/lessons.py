@@ -18,6 +18,7 @@ from app.models.user import User
 from app.schemas.course import LessonCreate, LessonUpdate, LessonResponse
 from app.services.ai_quota import enforce_ai_quota
 from app.services.enrollment_service import require_course_access
+from app.services.object_storage import resolve_media_url
 
 router = APIRouter(prefix="/courses/{course_id}/lessons")
 
@@ -49,18 +50,24 @@ async def _get_lesson_or_404(lesson_id: int, course_id: int, db: AsyncSession) -
     return lesson
 
 
+async def _lesson_response(lesson: Lesson) -> LessonResponse:
+    return LessonResponse.model_validate(lesson).model_copy(
+        update={"video_url": await resolve_media_url(lesson.video_url)}
+    )
+
+
 @router.get("", response_model=list[LessonResponse])
 async def list_lessons(
     course_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
-) -> list[Lesson]:
+) -> list[LessonResponse]:
     """List all lessons for a course ordered by order_index."""
     await require_course_access(db, current_user, course_id)
     result = await db.execute(
         select(Lesson).where(Lesson.course_id == course_id).order_by(Lesson.order_index)
     )
-    return list(result.scalars().all())
+    return [await _lesson_response(lesson) for lesson in result.scalars()]
 
 
 @router.get("/{lesson_id}", response_model=LessonResponse)
@@ -69,9 +76,9 @@ async def get_lesson(
     lesson_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
-) -> Lesson:
+) -> LessonResponse:
     await require_course_access(db, current_user, course_id)
-    return await _get_lesson_or_404(lesson_id, course_id, db)
+    return await _lesson_response(await _get_lesson_or_404(lesson_id, course_id, db))
 
 
 @router.post("", response_model=LessonResponse, status_code=status.HTTP_201_CREATED)
@@ -103,7 +110,7 @@ async def update_lesson(
     payload: LessonUpdate,
     current_user: User = Depends(require_instructor),
     db: AsyncSession = Depends(get_db),
-) -> Lesson:
+) -> LessonResponse:
     course = await _get_course_or_404(course_id, db)
     role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     if role_str != "admin" and course.instructor_id != current_user.id:
@@ -134,7 +141,7 @@ async def update_lesson(
     await db.refresh(lesson)
     await db.commit()
     await invalidate_course_caches()
-    return lesson
+    return await _lesson_response(lesson)
 
 
 @router.delete("/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -179,23 +186,24 @@ async def summarize_lesson(
 
     # 2. Lấy chunks tài liệu từ pgvector
     try:
-        chunks_res = await db.execute(
-            text(
-                "SELECT content FROM document_chunks "
-                "WHERE lesson_id = :lesson_id "
-                "ORDER BY id ASC LIMIT 25"
-            ),
-            {"lesson_id": lesson_id},
-        )
-        chunk_texts = [r[0] for r in chunks_res.fetchall() if r[0]]
+        async with db.begin_nested():
+            chunks_res = await db.execute(
+                text(
+                    "SELECT content FROM document_chunks "
+                    "WHERE lesson_id = :lesson_id "
+                    "ORDER BY id ASC LIMIT 25"
+                ),
+                {"lesson_id": lesson_id},
+            )
+            chunk_texts = [r[0] for r in chunks_res.fetchall() if r[0]]
         if chunk_texts:
             parts.append("Tài liệu bài học:\n" + "\n\n".join(chunk_texts))
     except Exception:
         # Bảng chưa có hoặc truy vấn lỗi thì bỏ qua phần chunk
         pass
 
-    if not parts and lesson.content and len(lesson.content.strip()) > 20:
-        parts.append(f"Nội dung bài học:\n{lesson.content.strip()}")
+    if not parts and (description := (lesson.description or "").strip()):
+        parts.append(f"Nội dung bài học:\n{description}")
 
     full_text = "\n\n".join(parts).strip()
     if not full_text:

@@ -117,6 +117,8 @@ export default function RegisterPage() {
       eyebrow="Tạo tài khoản"
       title="Bắt đầu hành trình học tập"
       subtitle="Miễn phí, không cần thẻ tín dụng. Tài khoản mới bắt đầu với quyền Học viên."
+      asideTitle="Một tài khoản, một lộ trình học rõ ràng."
+      asideDescription="Tạo tài khoản để lưu tiến độ, làm bài luyện tập và nhận hỗ trợ theo từng bài học."
       footer={
         <p className="text-center text-xs text-stone-600">
           Đã có tài khoản?{' '}
@@ -137,6 +139,9 @@ export default function RegisterPage() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <p className="-mb-0.5 text-xs leading-relaxed text-muted-foreground">
+          Chỉ mất khoảng một phút. Bạn có thể cập nhật thông tin tài khoản sau khi đăng ký.
+        </p>
         {/* Vai trò do hệ thống cấp — không cho tự chọn để tránh tự nâng quyền */}
         <div className="flex items-start gap-2.5 rounded-lg border border-brand-100 bg-brand-50/70 px-3.5 py-3">
           <GraduationCap className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
@@ -158,12 +163,13 @@ export default function RegisterPage() {
               type="text"
               autoComplete="name"
               aria-invalid={Boolean(errors.fullName)}
+              aria-describedby={errors.fullName ? 'full-name-error' : undefined}
               {...register('fullName')}
               className={inputClass}
               placeholder="Nguyễn Văn A"
             />
           </div>
-          {errors.fullName && <p className="mt-1.5 text-xs text-rose-600">{errors.fullName.message}</p>}
+          {errors.fullName && <p id="full-name-error" role="alert" className="mt-1.5 text-xs text-rose-600">{errors.fullName.message}</p>}
         </div>
 
         {/* Email */}
@@ -178,12 +184,13 @@ export default function RegisterPage() {
               type="email"
               autoComplete="email"
               aria-invalid={Boolean(errors.email)}
+              aria-describedby={errors.email ? 'register-email-error' : undefined}
               {...register('email')}
               className={inputClass}
               placeholder="vidu@domain.com"
             />
           </div>
-          {errors.email && <p className="mt-1.5 text-xs text-rose-600">{errors.email.message}</p>}
+          {errors.email && <p id="register-email-error" role="alert" className="mt-1.5 text-xs text-rose-600">{errors.email.message}</p>}
         </div>
 
         {/* Password */}
@@ -198,6 +205,7 @@ export default function RegisterPage() {
               type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
               aria-invalid={Boolean(errors.password)}
+              aria-describedby="password-rules"
               {...register('password')}
               className={`${inputClass} pr-12`}
               placeholder="Tối thiểu 8 ký tự, có chữ hoa & số"
@@ -211,6 +219,9 @@ export default function RegisterPage() {
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          <p id="password-rules" className="mt-1.5 text-[11px] leading-relaxed text-stone-500">
+            Dùng ít nhất 8 ký tự, gồm một chữ hoa và một chữ số.
+          </p>
           {password && (
             <div className="mt-2">
               <div className="flex gap-1">
@@ -228,7 +239,7 @@ export default function RegisterPage() {
               </p>
             </div>
           )}
-          {errors.password && <p className="mt-1.5 text-xs text-rose-600">{errors.password.message}</p>}
+          {errors.password && <p role="alert" className="mt-1.5 text-xs text-rose-600">{errors.password.message}</p>}
         </div>
 
         {/* Xác nhận mật khẩu */}
@@ -243,6 +254,7 @@ export default function RegisterPage() {
               type={showConfirmPassword ? 'text' : 'password'}
               autoComplete="new-password"
               aria-invalid={Boolean(errors.confirmPassword)}
+              aria-describedby={errors.confirmPassword ? 'confirm-password-error' : undefined}
               {...register('confirmPassword')}
               className={`${inputClass} pr-12`}
               placeholder="Nhập lại mật khẩu vừa đặt"
@@ -257,7 +269,7 @@ export default function RegisterPage() {
             </button>
           </div>
           {errors.confirmPassword && (
-            <p className="mt-1.5 text-xs text-rose-600">{errors.confirmPassword.message}</p>
+            <p id="confirm-password-error" role="alert" className="mt-1.5 text-xs text-rose-600">{errors.confirmPassword.message}</p>
           )}
         </div>
 

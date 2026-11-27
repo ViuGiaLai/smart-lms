@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Giáo trình học phần chuẩn Trường Đại học Đông Á (UDA)",
+  "note": "Giáo trình học phần chuẩn Trường  (UDA)",
   "courses": [
     {
       "slug": "giao-tiep-va-thuyet-trinh",
@@ -9,7 +9,7 @@
       "level_code": "GENERAL",
       "grade_label": "Tự học",
       "proficiency_level": "Cơ bản",
-      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "target_audience": "Sinh viên Trường ",
       "level": "beginner",
       "description": "Kỹ năng nói và trình bày có cấu trúc: lắng nghe thật, sắp xếp ý theo kim tự tháp, thiết kế slide phục vụ người nghe và xử lý câu hỏi khó.",
       "outcomes": [
@@ -61,7 +61,7 @@
       "level_code": "FOUNDATION",
       "grade_label": "Năm 1",
       "proficiency_level": "Cơ bản",
-      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "target_audience": "Sinh viên Trường ",
       "level": "beginner",
       "description": "Nền tảng CNTT ở bậc đại học: máy tính biểu diễn dữ liệu thế nào, hệ điều hành và mạng làm gì, và phần mềm được xây theo lớp ra sao.",
       "outcomes": [
@@ -113,7 +113,7 @@
       "level_code": "FOUNDATION",
       "grade_label": "Năm 2",
       "proficiency_level": "Trung cấp",
-      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "target_audience": "Sinh viên Trường ",
       "level": "intermediate",
       "description": "Tư duy kỹ thuật: cân bằng lực, chọn vật liệu theo ứng suất, và đọc bản vẽ kỹ thuật để biến ý tưởng thành thứ chế tạo được.",
       "outcomes": [
@@ -166,7 +166,7 @@
       "level_code": "GENERAL",
       "grade_label": "Tự học",
       "proficiency_level": "Cơ bản",
-      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "target_audience": "Sinh viên Trường ",
       "level": "beginner",
       "description": "Biến kiến thức khoa học thành thứ dùng được: đặt câu hỏi thực tế, thí nghiệm an toàn tại nhà, đọc số liệu và viết báo cáo trung thực.",
       "outcomes": [
@@ -218,7 +218,7 @@
       "level_code": "CERTIFICATION",
       "grade_label": "Chứng chỉ nghề",
       "proficiency_level": "Cơ bản",
-      "target_audience": "Sinh viên Trường Đại học Đông Á",
+      "target_audience": "Sinh viên Trường ",
       "level": "beginner",
       "description": "Từ ý tưởng đến mô hình kinh doanh có số: xác định khách hàng, kiểm chứng nhu cầu với chi phí thấp, tính điểm hoà vốn và quản lí dòng tiền.",
       "outcomes": [

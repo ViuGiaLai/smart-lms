@@ -1,5 +1,5 @@
 """
-Smart LMS - Module Đánh giá và Thực nghiệm RAG (RAG Evaluation & Benchmarking)
+SmartTutor LMS - Module Đánh giá và Thực nghiệm RAG (RAG Evaluation & Benchmarking)
 Phục vụ đo lường định lượng các chỉ số khoa học theo Thuyết minh đề tài:
 1. Hit Rate @ K (Tỷ lệ tìm thấy đoạn thông tin gốc trong Top-K kết quả)
 2. Context Precision (Tỷ lệ chunk truy xuất thực sự liên quan trong Top-K)
@@ -93,7 +93,7 @@ async def run_evaluation(top_k: int = 4) -> Dict[str, float]:
     details: List[Dict[str, object]] = []
 
     print("=" * 60)
-    print("BẮT ĐẦU ĐÁNH GIÁ ĐỊNH LƯỢNG MÔ HÌNH RAG (SMART LMS)")
+    print("BẮT ĐẦU ĐÁNH GIÁ ĐỊNH LƯỢNG MÔ HÌNH RAG (SmartTutor LMS)")
     print(f"Tham số: Top-K = {top_k} | Số câu hỏi kiểm thử = {len(TEST_BENCHMARK)}")
     print("=" * 60)
 
@@ -207,7 +207,7 @@ def render_markdown(result: Dict[str, object]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Đánh giá định lượng RAG của Smart LMS")
+    parser = argparse.ArgumentParser(description="Đánh giá định lượng RAG của SmartTutor LMS")
     parser.add_argument("--top-k", type=int, default=4, help="Số chunk truy xuất cho mỗi câu hỏi (mặc định 4)")
     parser.add_argument("--out", type=str, default=None, help="Ghi báo cáo Markdown vào file")
     args = parser.parse_args()

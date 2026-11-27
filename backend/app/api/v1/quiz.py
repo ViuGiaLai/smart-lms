@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import get_current_active_user, require_instructor
 from app.models.course import Course
 from app.models.lesson import Lesson
-from app.models.quiz import Quiz, QuizQuestion, QuizSubmission
-from app.models.user import User
+from app.models.quiz import Quiz, QuizQuestion, QuizSession, QuizSubmission
+from app.models.user import User, UserRole
 from app.schemas.quiz import (
     QuizCreate,
     QuizUpdate,
@@ -80,19 +84,8 @@ def _submission_payload(
     answers: dict[str, str],
 ) -> dict:
     results = []
-    for index, question in enumerate(quiz.questions):
-        selected = next(
-            (
-                answers[key]
-                for key in (
-                    str(question.id),
-                    str(question.order_index),
-                    str(index + 1),
-                )
-                if key in answers
-            ),
-            None,
-        )
+    for question in quiz.questions:
+        selected = answers.get(str(question.id))
         results.append(
             {
                 "question_id": question.id,
@@ -213,30 +206,12 @@ async def submit_quiz(
     payload: SubmitQuizRequest,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
-) -> QuizSubmission:
+) -> dict:
     """Submit answers for a quiz and calculate the score."""
     await require_course_access(db, current_user, course_id)
     quiz = await _get_quiz_or_404(quiz_id, course_id, db)
 
-    if not quiz.questions:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quiz has no questions")
-
-    score_data = grade_quiz(quiz.questions, payload.answers, quiz.pass_score)
-    score = score_data["score"]
-    passed = score_data["passed"]
-
-    submission = QuizSubmission(
-        quiz_id=quiz_id,
-        user_id=current_user.id,
-        answers={str(k): v for k, v in payload.answers.items()},
-        score=score,
-        passed=passed,
-        time_spent=payload.time_spent,
-    )
-    db.add(submission)
-    await db.flush()
-    await db.refresh(submission)
-    return _submission_payload(submission, quiz, payload.answers)
+    return await _submit_attempt(db, current_user, quiz, payload)
 
 
 @router.get("/{quiz_id}/submissions", response_model=list[QuizSubmissionResponse])
@@ -284,7 +259,7 @@ async def submit_quiz_standalone(
     payload: SubmitQuizRequest,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
-) -> QuizSubmission:
+) -> dict:
     result = await db.execute(
         select(Quiz)
         .options(selectinload(Quiz.questions))
@@ -294,24 +269,74 @@ async def submit_quiz_standalone(
     if not quiz:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found")
     await require_course_access(db, current_user, quiz.course_id)
+    return await _submit_attempt(db, current_user, quiz, payload)
+
+
+@standalone_router.post("/{quiz_id}/attempt")
+async def start_quiz_attempt(
+    quiz_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_student(current_user)
+    quiz = await db.get(Quiz, quiz_id)
+    if quiz is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bài kiểm tra.")
+    await require_course_access(db, current_user, quiz.course_id)
+
+    now = datetime.now(timezone.utc)
+    deadline = now + timedelta(seconds=quiz.time_limit) if quiz.time_limit and quiz.time_limit > 0 else None
+    await db.execute(
+        insert(QuizSession)
+        .values(quiz_id=quiz.id, user_id=current_user.id, token=uuid4().hex, started_at=now, deadline=deadline)
+        .on_conflict_do_nothing(index_elements=[QuizSession.quiz_id, QuizSession.user_id])
+    )
+    attempt = await db.get(QuizSession, (quiz.id, current_user.id), with_for_update=True)
+    if attempt.submission_id is not None or (attempt.deadline is not None and attempt.deadline <= now):
+        attempt.token = uuid4().hex
+        attempt.started_at = now
+        attempt.deadline = deadline
+        attempt.submission_id = None
+    return {"attempt_token": attempt.token, "deadline": attempt.deadline}
+
+
+def _require_student(user: User) -> None:
+    if user.role != UserRole.student:
+        raise HTTPException(status_code=403, detail="Chỉ học viên có thể làm bài kiểm tra.")
+
+
+async def _submit_attempt(db: AsyncSession, user: User, quiz: Quiz, payload: SubmitQuizRequest) -> dict:
+    _require_student(user)
 
     if not quiz.questions:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quiz has no questions")
+        raise HTTPException(status_code=400, detail="Bài kiểm tra chưa có câu hỏi.")
 
-    score_data = grade_quiz(quiz.questions, payload.answers, quiz.pass_score)
-    score = score_data["score"]
-    passed = score_data["passed"]
+    attempt = await db.get(QuizSession, (quiz.id, user.id), with_for_update=True)
+    if attempt is None or attempt.token != payload.attempt_token:
+        raise HTTPException(status_code=409, detail="Lượt làm bài không còn hiệu lực. Hãy mở lại bài kiểm tra.")
+    if attempt.submission_id is not None:
+        existing = await db.get(QuizSubmission, attempt.submission_id)
+        return _submission_payload(existing, quiz, existing.answers)
+    now = datetime.now(timezone.utc)
+    if attempt.deadline is not None and now >= attempt.deadline:
+        raise HTTPException(status_code=409, detail="Đã hết thời gian làm bài.")
+
+    valid_answers = {str(question.id) for question in quiz.questions}
+    if not payload.answers.keys() <= valid_answers:
+        raise HTTPException(status_code=422, detail="Bài nộp chứa câu hỏi không thuộc đề kiểm tra.")
+    score_data = grade_quiz(quiz.questions, payload.answers, quiz.pass_score, strict_question_ids=True)
 
     submission = QuizSubmission(
-        quiz_id=quiz_id,
-        user_id=current_user.id,
-        answers={str(k): v for k, v in payload.answers.items()},
-        score=score,
-        passed=passed,
-        time_spent=payload.time_spent,
+        quiz_id=quiz.id,
+        user_id=user.id,
+        answers=payload.answers,
+        score=score_data["score"],
+        passed=score_data["passed"],
+        time_spent=max(0, int((now - attempt.started_at).total_seconds())),
     )
     db.add(submission)
     await db.flush()
+    attempt.submission_id = submission.id
     await db.refresh(submission)
     return _submission_payload(submission, quiz, payload.answers)
 

@@ -31,7 +31,7 @@ import {
 import VideoPlayer from '@/components/course/VideoPlayer';
 import ProgressBar from '@/components/course/ProgressBar';
 import ChatBox from '@/components/ai-tutor/ChatBox';
-import { coursesApi } from '@/lib/api';
+import { coursesApi, quizApi } from '@/lib/api';
 import { trackLearningEvent } from '@/lib/analytics';
 
 interface LessonItem {
@@ -125,7 +125,7 @@ export default function LearnPage() {
   const [progress, setProgress] = useState(0);
   const [lessonProgress, setLessonProgress] = useState(0);
   const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'materials' | 'quiz' | 'chat' | 'summary'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'materials' | 'quiz' | 'summary'>('overview');
   const [summaryData, setSummaryData] = useState<
     Record<
       string,
@@ -146,6 +146,10 @@ export default function LearnPage() {
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [inTabAnswers, setInTabAnswers] = useState<Record<number, string>>({});
   const [inTabSubmitted, setInTabSubmitted] = useState(false);
+  const [inTabSubmitting, setInTabSubmitting] = useState(false);
+  const [inTabResults, setInTabResults] = useState<
+    Record<number, { correct_answer: string; is_correct: boolean; explanation: string }>
+  >({});
   const [courseQuizzes, setCourseQuizzes] = useState<any[]>([]);
   const [lessonMaterials, setLessonMaterials] = useState<LessonMaterialItem[]>([]);
   const [materialsLoading, setMaterialsLoading] = useState(false);
@@ -179,15 +183,12 @@ export default function LearnPage() {
 
   useEffect(() => {
     const tab = searchParams?.get('tab');
-    if (tab === 'overview' || tab === 'materials' || tab === 'quiz' || tab === 'chat') {
+    if (tab === 'overview' || tab === 'materials' || tab === 'quiz') {
       setActiveTab(tab);
-      return;
     }
-    if (wantsAIChat) {
-      // Chỉ giữ MỘT khung chat được mount để câu hỏi chỉ được gửi một lần.
-      setActiveTab('chat');
-      setIsChatOpen(false);
-      setMobileChatOpen(false);
+    if (wantsAIChat || tab === 'chat') {
+      if (window.matchMedia('(min-width: 1024px)').matches) setIsChatOpen(true);
+      else setMobileChatOpen(true);
     }
   }, [searchParams, wantsAIChat]);
 
@@ -205,7 +206,6 @@ export default function LearnPage() {
       const isMobile = window.innerWidth < 1024;
       if (isMobile) {
         setIsSidebarOpen(false);
-        setIsChatOpen(false);
       }
     }
   }, []);
@@ -438,6 +438,7 @@ export default function LearnPage() {
     setActiveLessonId(String(lessonId));
     setInTabAnswers({});
     setInTabSubmitted(false);
+    setInTabResults({});
     setLessonProgress(0);
     lastProgressSyncRef.current = 0;
     setCompleteState('idle');
@@ -626,6 +627,8 @@ export default function LearnPage() {
                 : 'bg-stone-800 border-stone-700 text-stone-300 hover:text-white'
             }`}
             title="Bật/tắt Trợ lý Gia sư AI"
+            aria-label="Gia sư AI"
+            aria-controls="lesson-ai-tutor"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             <span className="hidden sm:inline font-semibold">Gia sư AI</span>
@@ -992,20 +995,6 @@ export default function LearnPage() {
                     <Sparkles className="w-3 h-3 text-amber-300" />
                     Tóm tắt &amp; Flashcards
                   </button>
-                  {/* Tab Chatbot trực tiếp trên Mobile */}
-                  <button
-                    role="tab"
-                    aria-selected={activeTab === 'chat'}
-                    onClick={() => setActiveTab('chat')}
-                    className={`lg:hidden px-3 py-1.5 rounded-lg font-semibold transition shrink-0 flex items-center gap-1 ${
-                      activeTab === 'chat'
-                        ? 'bg-brand-600 text-white shadow-sm'
-                        : 'text-brand-400 hover:text-brand-200'
-                    }`}
-                  >
-                    <Sparkles className="w-3 h-3 text-amber-300" />
-                    AI Tutor
-                  </button>
                 </div>
               </div>
 
@@ -1246,9 +1235,39 @@ export default function LearnPage() {
                   const allAnswered =
                     quizQuestionsList.length > 0 && answeredCount >= quizQuestionsList.length;
                   const correctCount = quizQuestionsList.reduce((acc: number, q: any, idx: number) => {
-                    const answer = q.correct_answer ?? q.correct ?? 'A';
-                    return acc + (inTabAnswers[idx + 1] === answer ? 1 : 0);
+                    const num = idx + 1;
+                    if (inTabResults[num]) {
+                      return acc + (inTabResults[num].is_correct ? 1 : 0);
+                    }
+                    const answer = q.correct_answer ?? q.correct ?? '';
+                    return acc + (answer && inTabAnswers[num] === answer ? 1 : 0);
                   }, 0);
+
+                  const handleSubmitInTabQuiz = async () => {
+                    if (!activeQuizItem?.id || inTabSubmitting) return;
+                    setInTabSubmitting(true);
+                    try {
+                      const res = await quizApi.submit(activeQuizItem.id, inTabAnswers, 0);
+                      const subData = res.data?.data ?? res.data ?? {};
+                      const mapped: Record<
+                        number,
+                        { correct_answer: string; is_correct: boolean; explanation: string }
+                      > = {};
+                      (subData.results || []).forEach((item: any, idx: number) => {
+                        mapped[idx + 1] = {
+                          correct_answer: item.correct_answer || '',
+                          is_correct: Boolean(item.is_correct),
+                          explanation: item.explanation || 'Chưa có giải thích cho câu hỏi này.',
+                        };
+                      });
+                      setInTabResults(mapped);
+                      setInTabSubmitted(true);
+                    } catch {
+                      setInTabSubmitted(true);
+                    } finally {
+                      setInTabSubmitting(false);
+                    }
+                  };
 
                   // Đề của bài này chưa có (hoặc chỉ có đề của bài khác) → không mượn đề sai bài.
                   if (!activeQuizItem || quizQuestionsList.length === 0) {
@@ -1333,10 +1352,12 @@ export default function LearnPage() {
                             k: typeof opt === 'object' ? (opt.key || String.fromCharCode(65 + optIdx)) : String.fromCharCode(65 + optIdx),
                             text: typeof opt === 'object' ? (opt.text || String(opt)) : String(opt),
                           }));
-                          const correct = q.correct_answer || q.correct || 'A';
-                          const explain = q.explanation || 'Chưa có giải thích cho câu hỏi này.';
+                          const serverResult = inTabResults[num];
+                          const correct = serverResult?.correct_answer || q.correct_answer || q.correct || '—';
+                          const explain =
+                            serverResult?.explanation || q.explanation || 'Chưa có giải thích cho câu hỏi này.';
                           const selectedKey = inTabAnswers[num];
-                          const isCorrect = selectedKey === correct;
+                          const isCorrect = serverResult ? serverResult.is_correct : selectedKey === correct;
 
                           return (
                             <div
@@ -1413,11 +1434,11 @@ export default function LearnPage() {
                           {!inTabSubmitted ? (
                             <button
                               type="button"
-                              onClick={() => setInTabSubmitted(true)}
-                              disabled={!allAnswered}
+                              onClick={() => void handleSubmitInTabQuiz()}
+                              disabled={!allAnswered || inTabSubmitting}
                               className="px-6 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-md shadow-brand-950 transition disabled:opacity-40 disabled:cursor-not-allowed"
                             >
-                              Kiểm tra kết quả & Lời giải AI
+                              {inTabSubmitting ? 'Đang chấm điểm...' : 'Kiểm tra kết quả & Lời giải AI'}
                             </button>
                           ) : (
                             <>
@@ -1436,6 +1457,7 @@ export default function LearnPage() {
                                 onClick={() => {
                                   setInTabSubmitted(false);
                                   setInTabAnswers({});
+                                  setInTabResults({});
                                 }}
                                 className="px-5 py-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold transition"
                               >
@@ -1684,71 +1706,42 @@ export default function LearnPage() {
                   );
                 })()}
 
-                {activeTab === 'chat' && (
-                  <div className="h-[480px] rounded-lg overflow-hidden border border-stone-800 bg-white">
-                    <ChatBox
-                      key={`chat-tab-${currentLesson.id}`}
-                      lessonId={String(currentLesson.id)}
-                      courseId={resolvedCourseId || courseId}
-                      lessonTitle={currentLesson.title}
-                      onSeek={(seconds) => setSeekRequest({ seconds, token: Date.now() })}
-                      initialPrompt={askedQuestion || undefined}
-                    />
-                  </div>
-                )}
               </div>
             </div>
           </div>
         </main>
 
-        {/* ── Cột 3: Trợ lý Gia sư AI Desktop (Docked Panel) ── */}
-        {isChatOpen && (
-          <aside className="hidden lg:flex w-80 xl:w-96 shrink-0 h-full border-l border-stone-800 bg-white flex-col z-20 shadow-2xl transition-all duration-300">
+        <aside
+          id="lesson-ai-tutor"
+          aria-label="Gia sư AI"
+          className={`fixed inset-x-0 bottom-0 z-50 h-[100dvh] min-h-0 w-full shrink-0 flex-col bg-white lg:static lg:z-20 lg:h-full lg:w-80 lg:border-l lg:border-stone-800 xl:w-96 ${mobileChatOpen ? 'flex' : 'hidden'} ${isChatOpen ? 'lg:flex' : 'lg:hidden'}`}
+        >
+          <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-2 text-foreground">
+            <span className="text-sm font-semibold">Gia sư AI</span>
+            <button
+              type="button"
+              title="Đóng gia sư AI"
+              aria-label="Đóng gia sư AI"
+              onClick={() => {
+                if (window.matchMedia('(min-width: 1024px)').matches) setIsChatOpen(false);
+                else setMobileChatOpen(false);
+              }}
+              className="rounded-md p-2 hover:bg-muted"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
             <ChatBox
-              key={`chat-docked-${currentLesson.id}`}
+              key={currentLesson.id}
               lessonId={String(currentLesson.id)}
               courseId={resolvedCourseId || courseId}
               lessonTitle={currentLesson.title}
               onSeek={(seconds) => setSeekRequest({ seconds, token: Date.now() })}
+              initialPrompt={askedQuestion || undefined}
             />
-          </aside>
-        )}
-
-        {/* ── Mobile AI Tutor Drawer ── */}
-        {mobileChatOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden flex justify-end">
-            {/* Backdrop */}
-            <div
-              className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity"
-              onClick={() => setMobileChatOpen(false)}
-            />
-            {/* Drawer Panel */}
-            <div className="relative w-full sm:w-[420px] bg-white flex flex-col z-10 shadow-2xl h-full animate-in slide-in-from-right duration-200">
-              <div className="p-3 bg-stone-900 text-white flex items-center justify-between border-b border-stone-800">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span className="text-xs font-bold">Gia sư Ảo AI 24/7 (Lesson RAG)</span>
-                </div>
-                <button
-                  onClick={() => setMobileChatOpen(false)}
-                  aria-label="Đóng khung trò chuyện AI"
-                  className="text-stone-400 hover:text-white p-1 rounded-lg hover:bg-stone-800 transition"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <ChatBox
-                  key={`chat-drawer-${currentLesson.id}`}
-                  lessonId={String(currentLesson.id)}
-                  courseId={resolvedCourseId || courseId}
-                  lessonTitle={currentLesson.title}
-                  onSeek={(seconds) => setSeekRequest({ seconds, token: Date.now() })}
-                />
-              </div>
-            </div>
           </div>
-        )}
+        </aside>
       </div>
     </div>
   );

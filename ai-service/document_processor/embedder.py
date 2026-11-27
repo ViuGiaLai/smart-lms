@@ -1,5 +1,5 @@
 """
-Smart LMS - Embedder
+SmartTutor LMS - Embedder
 Tạo vector embeddings cho text chunks.
 Chính: Google models/gemini-embedding-001 (768 chiều)
 Dự phòng: OpenAI text-embedding-3-small (1536 chiều) hoặc SentenceTransformers
@@ -121,7 +121,7 @@ class GeminiEmbedder:
         if not key or "your_google_api_key" in key.lower() or key == "demo_google_api_key":
             raise RuntimeError(
                 "GOOGLE_API_KEY chưa được cấu hình hợp lệ cho AI Service nên không thể tạo embedding thật từ Gemini. "
-                "Smart LMS không sinh embedding giả (vector băm) vì sẽ làm sai lệch kết quả tìm kiếm ngữ nghĩa."
+                "SmartTutor LMS không sinh embedding giả (vector băm) vì sẽ làm sai lệch kết quả tìm kiếm ngữ nghĩa."
             )
 
     def _embed_sync(self, text: str, task_type: str) -> List[float]:

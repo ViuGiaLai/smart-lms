@@ -332,15 +332,12 @@ async def change_course_status(
     course_id: int,
     new_status: CourseStatus = Query(...),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
 ):
     """Xuất bản, đưa về nháp hoặc lưu trữ một khóa học. Chỉ Admin."""
-    result = await db.execute(select(Course).where(Course.id == course_id))
-    course = result.scalar_one_or_none()
-    if not course:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Khóa học không tồn tại")
+    from app.services.course_service import CourseService
 
-    course.status = new_status
+    course = await CourseService.change_status(db, course_id, new_status, current_user)
     await db.commit()
     await db.refresh(course)
     await invalidate_course_caches()

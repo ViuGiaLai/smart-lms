@@ -298,7 +298,7 @@ QUIZ_DATA = [
                 "order_index": 1,
             },
             {
-                "question_text": "Tại sao cần áp dụng kỹ thuật Lesson-Bounded RAG trong hệ thống Smart LMS?",
+                "question_text": "Tại sao cần áp dụng kỹ thuật Lesson-Bounded RAG trong hệ thống SmartTutor LMS?",
                 "options": [
                     {"key": "A", "text": "Để giới hạn phạm vi truy vấn chỉ trong tài liệu của bài học hiện tại, triệt tiêu ảo giác (Anti-Hallucination)"},
                     {"key": "B", "text": "Để giảm độ dài của video"},
@@ -461,7 +461,7 @@ async def sync_rag_chunks_into_ai_service() -> None:
 
 
 async def sync_all_data():
-    print("=== BẮT ĐẦU KHỞI TẠO VÀ ĐỒNG BỘ CƠ SỞ DỮ LIỆU SMART LMS ===")
+    print("=== BẮT ĐẦU KHỞI TẠO VÀ ĐỒNG BỘ CƠ SỞ DỮ LIỆU SmartTutor LMS ===")
     
     # 0. Kích hoạt extension & tạo toàn bộ bảng nếu Database mới hoàn toàn
     async with engine.begin() as conn:

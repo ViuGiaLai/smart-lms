@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Giáo trình học phần chuẩn Trường Đại học Đông Á (UDA)",
+  "note": "Giáo trình học phần chuẩn Trường  (UDA)",
   "courses": [
     {
       "slug": "tieng-anh-a2-ngu-phap-nen-tang",
@@ -132,7 +132,7 @@
       "category_slug": "toan-cao-cap",
       "level_code": "GENERAL",
       "grade_label": "Năm 1 – Đại cương",
-      "target_audience": "Sinh viên năm 1 Trường Đại học Đông Á",
+      "target_audience": "Sinh viên năm 1 Trường ",
       "description": "Giới hạn, đạo hàm, vi phân và tích phân một biến số thực.",
       "lessons": [
         {

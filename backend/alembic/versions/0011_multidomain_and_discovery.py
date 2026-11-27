@@ -38,7 +38,11 @@ def upgrade() -> None:
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
         );
+    """)
+    op.execute("""
         CREATE INDEX IF NOT EXISTS ix_learning_categories_parent_id ON learning_categories(parent_id);
+    """)
+    op.execute("""
         CREATE INDEX IF NOT EXISTS ix_learning_categories_slug ON learning_categories(slug);
     """)
 
@@ -54,18 +58,34 @@ def upgrade() -> None:
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
         );
+    """)
+    op.execute("""
         CREATE INDEX IF NOT EXISTS ix_education_levels_code ON education_levels(code);
     """)
 
     # 3. Courses metadata
     op.execute("""
         ALTER TABLE courses ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES learning_categories(id) ON DELETE SET NULL;
+    """)
+    op.execute("""
         ALTER TABLE courses ADD COLUMN IF NOT EXISTS education_level_id INTEGER REFERENCES education_levels(id) ON DELETE SET NULL;
+    """)
+    op.execute("""
         ALTER TABLE courses ADD COLUMN IF NOT EXISTS grade_label VARCHAR(100);
+    """)
+    op.execute("""
         ALTER TABLE courses ADD COLUMN IF NOT EXISTS proficiency_level VARCHAR(50);
+    """)
+    op.execute("""
         ALTER TABLE courses ADD COLUMN IF NOT EXISTS target_audience VARCHAR(255);
+    """)
+    op.execute("""
         ALTER TABLE courses ADD COLUMN IF NOT EXISTS language VARCHAR(20) DEFAULT 'vi';
+    """)
+    op.execute("""
         CREATE INDEX IF NOT EXISTS ix_courses_category_id ON courses(category_id);
+    """)
+    op.execute("""
         CREATE INDEX IF NOT EXISTS ix_courses_education_level_id ON courses(education_level_id);
     """)
 
@@ -76,7 +96,8 @@ def upgrade() -> None:
         EXCEPTION
             WHEN duplicate_object THEN null;
         END $$;
-
+    """)
+    op.execute("""
         CREATE TABLE IF NOT EXISTS discovery_jobs (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -89,8 +110,11 @@ def upgrade() -> None:
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
         );
+    """)
+    op.execute("""
         CREATE INDEX IF NOT EXISTS ix_discovery_jobs_user_id ON discovery_jobs(user_id);
-
+    """)
+    op.execute("""
         CREATE TABLE IF NOT EXISTS discovery_items (
             id SERIAL PRIMARY KEY,
             job_id INTEGER NOT NULL REFERENCES discovery_jobs(id) ON DELETE CASCADE,
@@ -104,6 +128,8 @@ def upgrade() -> None:
             status discoverystatus DEFAULT 'pending' NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
         );
+    """)
+    op.execute("""
         CREATE INDEX IF NOT EXISTS ix_discovery_items_job_id ON discovery_items(job_id);
     """)
 
@@ -122,7 +148,11 @@ def upgrade() -> None:
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
             CONSTRAINT uq_user_course_topic_mastery UNIQUE (user_id, course_id, topic_name)
         );
+    """)
+    op.execute("""
         CREATE INDEX IF NOT EXISTS ix_student_topic_mastery_user_id ON student_topic_mastery(user_id);
+    """)
+    op.execute("""
         CREATE INDEX IF NOT EXISTS ix_student_topic_mastery_course_id ON student_topic_mastery(course_id);
     """)
 

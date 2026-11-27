@@ -3,7 +3,7 @@ import { ArrowLeft, ShieldCheck } from 'lucide-react'
 
 export const metadata = {
   title: 'Chính sách bảo mật',
-  description: 'Chính sách bảo mật và xử lý dữ liệu của nền tảng Smart LMS.',
+  description: 'Chính sách bảo mật và xử lý dữ liệu của nền tảng SmartTutor LMS.',
 }
 
 const POLICIES = [
@@ -37,9 +37,9 @@ export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-4 py-12">
-        <Link href="/" className="mb-10 inline-flex items-baseline gap-2.5" aria-label="Trang chủ Smart LMS">
-          <span className="font-serif text-xl font-semibold tracking-tight text-foreground">Smart LMS</span>
-          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Đại học Đông Á</span>
+        <Link href="/" className="mb-10 inline-flex items-baseline gap-2.5" aria-label="Trang chủ SmartTutor LMS">
+          <span className="font-serif text-xl font-semibold tracking-tight text-foreground">SmartTutor LMS</span>
+          <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground"></span>
         </Link>
 
         <div className="bg-white rounded-lg border border-border bg-card p-8">
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
             <h1 className="text-[26px] leading-tight text-foreground">Chính sách bảo mật</h1>
           </div>
           <p className="text-xs text-stone-500 mb-8">
-            Cập nhật lần cuối: 13/10/2026 • Nền tảng học tập trực tuyến Smart LMS
+            Cập nhật lần cuối: 13/10/2026 • Nền tảng học tập trực tuyến SmartTutor LMS
           </p>
 
           <div className="space-y-6">

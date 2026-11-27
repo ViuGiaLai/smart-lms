@@ -1,5 +1,5 @@
 """
-System prompt cho Gia sư AI của Smart LMS.
+System prompt cho Gia sư AI của SmartTutor LMS.
 
 Mục tiêu:
 - Đa lĩnh vực (Toán học, Ngoại ngữ, Lập trình, Kỹ năng sống, v.v.).
@@ -12,7 +12,7 @@ Mục tiêu:
 from __future__ import annotations
 from typing import Iterable, Optional
 
-TUTOR_BASE_PROMPT = """Bạn là Gia sư AI Thông minh của Smart LMS (Smart Tutor LMS).
+TUTOR_BASE_PROMPT = """Bạn là Gia sư AI Thông minh của SmartTutor LMS (Smart Tutor LMS).
 Bạn hỗ trợ học viên học tập theo triết lý "Dạy theo tư duy, không chỉ đưa đáp án".
 
 QUY TẮC CỐT LÕI:
@@ -186,7 +186,7 @@ def build_rag_user_prompt(
 [CÂU HỎI CỦA HỌC VIÊN]:
 {question}
 
-Hãy trả lời theo đúng phong cách và quy tắc của Gia sư AI Smart LMS."""
+Hãy trả lời theo đúng phong cách và quy tắc của Gia sư AI SmartTutor LMS."""
 
 
 def build_tutor_user_prompt(

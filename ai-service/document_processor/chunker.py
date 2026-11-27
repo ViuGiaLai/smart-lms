@@ -1,5 +1,5 @@
 """
-Smart LMS - Text Chunker
+SmartTutor LMS - Text Chunker
 Chia text thành các chunks tối ưu cho RAG pipeline.
 Chiến lược: Recursive Character Splitting với semantic boundary detection.
 """

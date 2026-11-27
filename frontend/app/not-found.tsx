@@ -50,7 +50,7 @@ export default function NotFound() {
         </div>
 
         <p className="mt-12 text-[11px] text-stone-400">
-          Smart LMS · Nền tảng học tập thông minh tích hợp Trợ lý AI
+          SmartTutor LMS · Nền tảng học tập thông minh tích hợp Trợ lý AI
         </p>
       </div>
     </div>

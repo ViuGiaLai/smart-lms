@@ -90,3 +90,16 @@ class QuizSubmission(Base):
 
     quiz: Mapped["Quiz"] = relationship("Quiz", back_populates="submissions")
     user: Mapped["User"] = relationship("User", back_populates="quiz_submissions")  # noqa: F821
+
+
+class QuizSession(Base):
+    """Current server-timed attempt for a student and quiz."""
+
+    __tablename__ = "quiz_sessions"
+
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    token: Mapped[str] = mapped_column(String(32), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    submission_id: Mapped[int | None] = mapped_column(ForeignKey("quiz_submissions.id", ondelete="SET NULL"))

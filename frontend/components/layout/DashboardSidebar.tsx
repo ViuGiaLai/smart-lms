@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   BookOpen,
@@ -74,14 +74,13 @@ export function DashboardSidebar({
   const { user, logout } = useAuth();
   const currentUser = user as AuthUser | null;
   const [currentHash, setCurrentHash] = useState('');
-  const [currentSearch, setCurrentSearch] = useState('');
+  const searchParams = useSearchParams();
 
   // Keep navigation highlighting in sync with the URL hash (e.g. #courses).
   // Dùng useAuth thay vì tự gọi /auth/profile mỗi lần sidebar mount — bớt 1 request.
   useEffect(() => {
     const sync = () => {
       setCurrentHash(window.location.hash);
-      setCurrentSearch(window.location.search.replace(/^\?/, ''));
     };
     sync();
     window.addEventListener('hashchange', sync);
@@ -157,16 +156,14 @@ export function DashboardSidebar({
           title: 'HỆ THỐNG & NGƯỜI DÙNG',
           items: [
             {
-              label: 'Quản lý Tài khoản (RBAC)',
+              label: 'Người dùng và phân quyền',
               href: '/admin-dashboard?tab=users',
               icon: Users,
-              badge: 'Bảo mật',
             },
             {
               label: 'Danh mục & Trình độ',
               href: '/admin-dashboard?tab=categories',
               icon: Layers,
-              badge: 'Động',
             },
             {
               label: 'Kiểm duyệt Khóa học',
@@ -174,7 +171,7 @@ export function DashboardSidebar({
               icon: BookOpen,
             },
             {
-              label: 'AI Discovery (Khám phá)',
+              label: 'Khám phá học liệu AI',
               href: '/admin-dashboard?tab=discovery',
               icon: Wand2,
               badge: 'AI',
@@ -184,7 +181,6 @@ export function DashboardSidebar({
               label: 'Nhập học liệu YouTube',
               href: '/youtube-import',
               icon: Youtube,
-              badge: 'Mới',
             },
           ],
         },
@@ -195,7 +191,6 @@ export function DashboardSidebar({
               label: 'Giám sát AI & dữ liệu',
               href: '/admin-dashboard?tab=ai',
               icon: Activity,
-              badge: 'pgvector',
               isAI: true,
             },
             {
@@ -239,7 +234,7 @@ export function DashboardSidebar({
         {
           title: 'ĐIỀU HƯỚNG',
           items: [
-            { label: 'Về trang chủ Smart LMS', href: '/', icon: Home },
+            { label: 'Về trang chủ SmartTutor LMS', href: '/', icon: Home },
           ],
         },
       ];
@@ -332,7 +327,7 @@ export function DashboardSidebar({
         title: 'LIÊN KẾT',
         items: [
           {
-            label: 'Về trang chủ Smart LMS',
+            label: 'Về trang chủ SmartTutor LMS',
             href: '/',
             icon: Home,
           },
@@ -353,8 +348,8 @@ export function DashboardSidebar({
     const isActive = hrefHash
       ? isExactPath && currentHash === `#${hrefHash}`
       : hasQuery
-        ? isExactPath && currentSearch === hrefQuery
-        : (isExactPath || isChildPage) && !currentSearch && !currentHash;
+        ? isExactPath && Array.from(new URLSearchParams(hrefQuery)).every(([key, value]) => searchParams.get(key) === value)
+        : (isExactPath || isChildPage) && !searchParams.has('tab') && !searchParams.has('mode') && !currentHash;
 
     const navButton = (
       <Button
@@ -368,7 +363,7 @@ export function DashboardSidebar({
           collapsed && 'justify-center px-0',
         )}
       >
-        <Link href={item.href}>
+        <Link href={item.href} onClick={onMobileClose} aria-label={collapsed ? item.label : undefined} aria-current={isActive ? 'page' : undefined}>
           {isActive && !collapsed && (
             <span
               aria-hidden
@@ -432,10 +427,12 @@ export function DashboardSidebar({
 
       {/* Sidebar Container */}
       <aside
+        id="workspace-navigation"
+        aria-label="Điều hướng theo vai trò"
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-brand-900 bg-brand-950 text-brand-50 transition-all duration-300 ease-in-out',
           collapsed ? 'w-20' : 'w-64',
-          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+          mobileOpen ? 'visible translate-x-0' : 'invisible -translate-x-full lg:visible lg:translate-x-0',
         )}
       >
         {/* Header: Logo & Role badge */}
@@ -443,7 +440,7 @@ export function DashboardSidebar({
           <Link href="/" className="flex min-w-0 items-baseline gap-2 overflow-hidden">
             {!collapsed && (
               <span className="font-serif text-[21px] font-semibold leading-none tracking-tight text-brand-50">
-                Smart LMS
+                SmartTutor LMS
               </span>
             )}
             {collapsed && (
@@ -469,6 +466,7 @@ export function DashboardSidebar({
             onClick={onToggleCollapse}
             className="hidden rounded-md text-brand-200/70 hover:bg-brand-900 hover:text-brand-50 lg:inline-flex"
             title={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
+            aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
@@ -561,6 +559,7 @@ export function DashboardSidebar({
               collapsed && 'justify-center px-0',
             )}
             title="Đăng xuất khỏi hệ thống"
+            aria-label="Đăng xuất"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             {!collapsed && <span>Đăng xuất</span>}

@@ -1,4 +1,4 @@
-// TypeScript types and interfaces for Smart LMS
+// TypeScript types and interfaces for SmartTutor LMS
 
 // ===== User & Auth =====
 export interface User {

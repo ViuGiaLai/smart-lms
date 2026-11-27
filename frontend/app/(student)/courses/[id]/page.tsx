@@ -718,7 +718,7 @@ export default function CourseDetailPage() {
                 <span>Bảo chứng Học thuật & NCKH</span>
               </div>
               <p className="text-[11px] text-brand-700/90 leading-relaxed">
-                Đề tài NCKH Smart LMS • Trường Đại học Đông Á. Dữ liệu bài giảng được kiểm duyệt sư phạm trước khi nạp vào pgvector.
+                Đề tài NCKH SmartTutor LMS. Dữ liệu bài giảng được kiểm duyệt sư phạm trước khi nạp vào pgvector.
               </p>
             </div>
           </div>

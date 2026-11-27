@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.models.course import Course, CourseStatus
 from app.models.category import LearningCategory
 from app.models.education_level import EducationLevel
+from app.models.lesson import Lesson
 from app.models.user import User
 from app.schemas.course import CourseCreate, CourseUpdate
 
@@ -34,7 +35,7 @@ class CourseService:
         result = await db.execute(
             select(Course)
             .options(
-                selectinload(Course.lessons),
+                selectinload(Course.lessons).selectinload(Lesson.materials),
                 selectinload(Course.learning_category),
                 selectinload(Course.education_level_rel),
             )
@@ -120,6 +121,19 @@ class CourseService:
     async def create(db: AsyncSession, payload: CourseCreate, instructor_id: int) -> Course:
         data = payload.model_dump()
         requested_slug = data.pop("slug", None)
+        # Một khóa học mới chưa thể thỏa điều kiện xuất bản vì bài học/học liệu
+        # được tạo sau khi bản ghi course đã có id. Ép luồng tạo qua bản nháp để
+        # không làm lộ khóa học dang dở cho học viên.
+        requested_status = data.get("status", CourseStatus.draft)
+        if requested_status == CourseStatus.published or requested_status == CourseStatus.published.value:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "Khóa học mới phải được tạo ở dạng bản nháp trước khi xuất bản.",
+                    "errors": ["Hãy lưu khóa học, hoàn thiện bài học và học liệu, sau đó xuất bản."],
+                },
+            )
+        data["status"] = CourseStatus.draft
         await CourseService._validate_catalog(
             db, data.get("category_id"), data.get("education_level_id")
         )
@@ -128,6 +142,53 @@ class CourseService:
         db.add(course)
         await db.flush()
         return await CourseService._get_or_404(db, course.id)
+
+    @staticmethod
+    def _publication_errors(course: Course) -> list[str]:
+        """Các điều kiện nghiệp vụ còn thiếu trước khi công khai khóa học."""
+        errors: list[str] = []
+        if not (course.title or "").strip():
+            errors.append("Khóa học cần có tên.")
+        if not (course.description or "").strip():
+            errors.append("Khóa học cần có mô tả.")
+        if course.category_id is None:
+            errors.append("Hãy chọn danh mục cho khóa học.")
+        if course.education_level_id is None:
+            errors.append("Hãy chọn cấp học/trình độ cho khóa học.")
+
+        lessons = list(course.lessons or [])
+        if not lessons:
+            errors.append("Khóa học cần ít nhất một bài học.")
+
+        for position, lesson in enumerate(lessons, start=1):
+            label = (lesson.title or "").strip() or f"Bài học {position}"
+            materials = list(getattr(lesson, "materials", None) or [])
+            has_content = bool(
+                (lesson.description or "").strip()
+                or (lesson.video_url or "").strip()
+                or (lesson.resources_url or "").strip()
+                or (lesson.transcript or "").strip()
+                or materials
+            )
+            if not has_content:
+                errors.append(f'"{label}" chưa có nội dung, video hoặc tài liệu.')
+                continue
+            unfinished = [m for m in materials if getattr(m, "status", "ready") != "ready"]
+            if unfinished:
+                errors.append(f'"{label}" còn học liệu đang xử lý hoặc bị lỗi.')
+        return errors
+
+    @staticmethod
+    def _ensure_publishable(course: Course) -> None:
+        errors = CourseService._publication_errors(course)
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "Khóa học chưa đủ điều kiện để xuất bản.",
+                    "errors": errors,
+                },
+            )
 
     @staticmethod
     async def update(
@@ -145,6 +206,11 @@ class CourseService:
             )
         for field, value in data.items():
             setattr(course, field, value)
+        # Chỉ chạy checklist khi request đang chuyển sang published. Khóa học
+        # cũ đã public vẫn phải sửa được metadata để có thể đưa về chuẩn dần.
+        if data.get("status") == CourseStatus.published or data.get("status") == CourseStatus.published.value:
+            CourseService._ensure_publishable(course)
+            await CourseService._validate_catalog(db, course.category_id, course.education_level_id)
         if requested_slug is not None:
             course.slug = await CourseService._unique_slug(
                 db, requested_slug or payload.title or course.title, exclude_id=course.id
@@ -166,6 +232,9 @@ class CourseService:
     ) -> Course:
         course = await CourseService._get_or_404(db, course_id)
         CourseService._check_ownership(course, user)
+        if new_status == CourseStatus.published:
+            CourseService._ensure_publishable(course)
+            await CourseService._validate_catalog(db, course.category_id, course.education_level_id)
         course.status = new_status
         await db.flush()
         return await CourseService._get_or_404(db, course_id)

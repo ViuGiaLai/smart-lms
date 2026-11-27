@@ -11,6 +11,7 @@ from sqlalchemy import func, select, func, desc
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.cache import invalidate_course_caches
 from app.core.database import get_db
 from app.core.security import get_current_active_user, require_instructor
 from app.models.user import User, UserRole
@@ -19,6 +20,7 @@ from app.models.lesson import Lesson
 from app.models.category import LearningCategory
 from app.models.education_level import EducationLevel
 from app.models.discovery import DiscoveryJob, DiscoveryItem, DiscoveryStatus
+from app.services.course_service import CourseService
 from app.schemas.discovery import (
     DiscoveryJobCreate,
     DiscoveryJobResponse,
@@ -456,8 +458,6 @@ async def convert_discovery_to_course(
         l_res = await db.execute(select(EducationLevel.id).where(EducationLevel.code == bp.get("level_code")))
         lvl_id = l_res.scalar_one_or_none()
 
-    course_status = CourseStatus.published if req.auto_publish else CourseStatus.draft
-
     new_course = Course(
         title=title,
         slug=unique_slug,
@@ -465,7 +465,7 @@ async def convert_discovery_to_course(
         instructor_id=current_user.id,
         price=req.price or 0.0,
         thumbnail=bp.get("thumbnail") or "https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/nextjs-ui.jpg",
-        status=course_status,
+        status=CourseStatus.draft,
         category=bp.get("category_name") or bp.get("domain") or job.domain_category or "Đa lĩnh vực",
         level=bp.get("level_label", "intermediate"),
         category_id=cat_id,
@@ -506,9 +506,14 @@ async def convert_discovery_to_course(
         db.add(lesson)
         order += 1
 
+    if req.auto_publish:
+        await db.flush()
+        await CourseService.change_status(db, new_course.id, CourseStatus.published, current_user)
     job.status = DiscoveryStatus.converted
     await db.commit()
     await db.refresh(new_course)
+    if req.auto_publish:
+        await invalidate_course_caches()
 
     return {
         "success": True,
@@ -543,7 +548,7 @@ def _generate_domain_curriculum_blueprint(
             "level_code": "GENERAL",
             "grade_label": target_level or "Năm 1 – Đại cương",
             "proficiency_level": "Đại học / Đại cương",
-            "target_audience": target_audience or "Sinh viên năm nhất Trường Đại học Đông Á",
+            "target_audience": target_audience or "Sinh viên năm nhất Trường ",
             "language": "vi",
             "thumbnail": "https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/math-algebra.jpg",
             "description": f"Chương trình đào tạo Toán cao cấp & Giải tích đại học về {topic}. Nắm vững nền tảng giải tích, đạo hàm, tích phân và ứng dụng mô hình hóa trong công nghệ & kinh tế.",
@@ -598,7 +603,7 @@ def _generate_domain_curriculum_blueprint(
                 },
             ],
             "references": [
-                {"title": "Giáo trình Toán cao cấp – Trường Đại học Đông Á", "provider": "Đại học Đông Á", "url": "https://donga.edu.vn", "type": "pdf"},
+                {"title": "Giáo trình Toán cao cấp – Trường ", "provider": "", "url": "https://donga.edu.vn", "type": "pdf"},
                 {"title": "Calculus: Early Transcendentals (James Stewart)", "provider": "Cengage Learning", "url": "https://openstax.org", "type": "pdf"},
             ],
         }
@@ -612,7 +617,7 @@ def _generate_domain_curriculum_blueprint(
             "level_code": "CERTIFICATION",
             "grade_label": target_level or "Chuẩn đầu ra B1 / B2",
             "proficiency_level": "B1 / Intermediate",
-            "target_audience": target_audience or "Sinh viên Trường Đại học Đông Á",
+            "target_audience": target_audience or "Sinh viên Trường ",
             "language": "en-vi",
             "thumbnail": "https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/english-communication.jpg",
             "description": f"Chương trình nâng cao năng lực phản xạ tiếng Anh, ngữ pháp ứng dụng và từ vựng chuyên sâu về chủ đề {topic}.",
@@ -671,7 +676,7 @@ def _generate_domain_curriculum_blueprint(
             "level_code": "UNIVERSITY",
             "grade_label": target_level or "Đại học / Chuyên nghiệp",
             "proficiency_level": "Thực hành ứng dụng",
-            "target_audience": target_audience or "Sinh viên Trường Đại học Đông Á",
+            "target_audience": target_audience or "Sinh viên Trường ",
             "language": "vi",
             "thumbnail": "https://res.cloudinary.com/dqe5syxc0/image/upload/f_auto,q_auto,w_1200/smart-lms/courses/fastapi-db.jpg",
             "description": f"Chương trình học tập có cấu trúc hoàn chỉnh về {topic}, từ nền tảng lý thuyết đến triển khai thực chiến.",

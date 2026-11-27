@@ -1,5 +1,5 @@
 """
-Smart LMS - Essay Grader Pipeline
+SmartTutor LMS - Essay Grader Pipeline
 Chấm bài tự luận theo Rubric sử dụng Gemini.
 
 Flow:

@@ -4,10 +4,16 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useSyncExternalStore,
   ReactNode,
 } from 'react'
+import {
+  clearAuthCookie,
+  setAuthCookie,
+  syncAuthCookieFromStorage,
+} from './auth-cookie'
 
 export interface AuthUser {
   id: string
@@ -83,14 +89,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('accessToken', accessToken)
       localStorage.setItem('refreshToken', refreshToken)
       localStorage.setItem('currentUser', JSON.stringify(userData))
-      // Ghi cookie để Next.js middleware có thể đọc và bảo vệ route ở server-side
-      document.cookie = `accessToken=${accessToken}; path=/; max-age=${
-        60 * 60 * 24 * 7
-      }; SameSite=Lax`
+      // Ghi cookie để Next.js middleware đọc được ở server-side.
+      setAuthCookie(accessToken)
       window.dispatchEvent(new Event(AUTH_CHANGE_EVENT))
     },
     []
   )
+
+  // Phiên tạo trước khi có middleware chỉ nằm trong localStorage. Đồng bộ lại
+  // cookie ngay sau khi tải trang để người dùng không bị đẩy về /login.
+  useEffect(() => {
+    syncAuthCookieFromStorage()
+  }, [])
 
   const logout = useCallback(async () => {
     // Thu hồi token phía server trước khi xóa phiên cục bộ, để token cũ
@@ -104,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('currentUser')
-    document.cookie = 'accessToken=; path=/; max-age=0'
+    clearAuthCookie()
     window.dispatchEvent(new Event(AUTH_CHANGE_EVENT))
   }, [])
 

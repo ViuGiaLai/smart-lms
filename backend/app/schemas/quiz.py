@@ -102,6 +102,7 @@ class QuizStudentResponse(QuizBase):
 class SubmitQuizRequest(BaseModel):
     answers: dict[str, str] = Field(default_factory=dict)  # {question_id: selected_key}
     time_spent: int | None = None
+    attempt_token: str | None = Field(None, max_length=32)
 
 
 class QuizQuestionResult(BaseModel):

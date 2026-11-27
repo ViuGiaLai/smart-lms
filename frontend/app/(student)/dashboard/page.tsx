@@ -140,7 +140,7 @@ export default function StudentDashboardPage() {
                   Xin chào, {userName}
                 </h1>
                 <Badge variant="info" className="hidden text-[11px] sm:inline-block">
-                  Học viên Smart LMS
+                  Học viên SmartTutor LMS
                 </Badge>
               </div>
               <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground sm:text-xs">

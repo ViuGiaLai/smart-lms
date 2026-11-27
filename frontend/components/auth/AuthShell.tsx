@@ -15,6 +15,9 @@ interface AuthShellProps {
   /** Nội dung dưới thẻ (ví dụ liên kết đăng ký/đăng nhập). */
   footer?: React.ReactNode
   className?: string
+  /** Nội dung riêng của phần giới thiệu desktop cho từng luồng xác thực. */
+  asideTitle?: string
+  asideDescription?: string
 }
 
 const NOTES = [
@@ -44,24 +47,25 @@ export function AuthShell({
   backLabel = 'Quay lại',
   footer,
   className,
+  asideTitle = 'Giáo trình số, trợ lý học tập và phòng luyện thi trong một chỗ.',
+  asideDescription = 'Tiếp tục bài đang học, xem lại kết quả và hỏi trợ lý về đúng đoạn tài liệu bạn đang đọc.',
 }: AuthShellProps) {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-muted/30">
       <div className="mx-auto grid min-h-screen w-full max-w-6xl lg:grid-cols-[1fr_minmax(0,27rem)]">
         {/* Cột giới thiệu — nền mực, chữ giấy, chỉ hiển thị trên desktop. */}
-        <section className="hidden flex-col justify-between border-r border-border bg-brand-950 px-12 py-14 text-brand-50 lg:flex">
+        <section className="relative hidden flex-col justify-between overflow-hidden border-r border-border bg-brand-950 px-12 py-14 text-brand-50 lg:flex">
+          <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-brand-700/40" />
+          <div className="pointer-events-none absolute -bottom-32 left-20 h-80 w-80 rounded-full bg-brand-800/20 blur-3xl" />
           <div>
-            <Link href="/" className="inline-flex items-baseline gap-3" aria-label="Trang chủ Smart LMS">
-              <span className="font-serif text-2xl font-semibold tracking-tight">Smart LMS</span>
-              <span className="text-[10px] uppercase tracking-[0.2em] text-brand-300">Đại học Đông Á</span>
+            <Link href="/" className="inline-flex items-baseline gap-3" aria-label="Trang chủ SmartTutor LMS">
+              <span className="font-serif text-2xl font-semibold tracking-tight">SmartTutor LMS</span>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-brand-300"></span>
             </Link>
 
-            <h2 className="mt-20 max-w-sm font-serif text-[34px] leading-[1.2]">
-              Giáo trình số, trợ lý học tập và phòng luyện thi trong một chỗ.
-            </h2>
+            <h2 className="relative mt-20 max-w-sm font-serif text-[34px] leading-[1.2]">{asideTitle}</h2>
             <p className="mt-4 max-w-sm text-[13px] leading-relaxed text-brand-200/80">
-              Đăng nhập để tiếp tục bài đang học, xem lại kết quả và hỏi trợ lý về đúng đoạn tài liệu
-              bạn đang đọc.
+              {asideDescription}
             </p>
           </div>
 
@@ -82,29 +86,24 @@ export function AuthShell({
             })}
           </dl>
 
-          <p className="mt-16 text-[11px] leading-relaxed text-brand-300/60">
-            Đề tài NCKH 2026 · Khoa Công nghệ Thông tin
-            <br />
-            Nguyễn Thanh Phước · Phan Thanh Huy · Rmah Viu
-          </p>
         </section>
 
         {/* Cột biểu mẫu */}
-        <section className="flex flex-col justify-center px-5 py-10 sm:px-10">
+        <section className="flex min-w-0 flex-col items-center justify-center bg-background px-4 py-8 sm:px-10 sm:py-10">
           <Link
             href="/"
             className="mb-8 flex items-baseline gap-2 lg:hidden"
-            aria-label="Trang chủ Smart LMS"
+            aria-label="Trang chủ SmartTutor LMS"
           >
             <span className="font-serif text-xl font-semibold tracking-tight text-foreground">
-              Smart LMS
+              SmartTutor LMS
             </span>
             <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
               Đông Á
             </span>
           </Link>
 
-          <div className={cn('w-full', className)}>
+          <div className={cn('w-full max-w-md', className)}>
             {backHref && (
               <Link
                 href={backHref}
@@ -127,7 +126,7 @@ export function AuthShell({
           </div>
 
           <p className="mt-10 text-[11px] text-muted-foreground">
-            © {new Date().getFullYear()} Smart LMS · Trường Đại học Đông Á
+            © {new Date().getFullYear()} SmartTutor LMS
           </p>
         </section>
       </div>

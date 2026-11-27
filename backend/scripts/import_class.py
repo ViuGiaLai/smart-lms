@@ -161,7 +161,7 @@ async def run(csv_path: Path, course_id: int, apply: bool, password_length: int,
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
-    parser = argparse.ArgumentParser(description="Nhập lớp học từ CSV vào Smart LMS")
+    parser = argparse.ArgumentParser(description="Nhập lớp học từ CSV vào SmartTutor LMS")
     parser.add_argument("--csv", required=True, type=Path, help="Tệp CSV (email, full_name[, password])")
     parser.add_argument("--course-id", required=True, type=int, help="ID khóa học cần ghi danh")
     parser.add_argument("--apply", action="store_true", help="Thực sự ghi vào cơ sở dữ liệu")

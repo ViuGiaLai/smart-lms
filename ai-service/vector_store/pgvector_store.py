@@ -1,5 +1,5 @@
 """
-Smart LMS - pgvector Store
+SmartTutor LMS - pgvector Store
 Lưu trữ và tìm kiếm vector embeddings trong PostgreSQL sử dụng pgvector.
 Dùng HNSW index để tìm kiếm approximate nearest neighbor nhanh hơn IVFFlat.
 """

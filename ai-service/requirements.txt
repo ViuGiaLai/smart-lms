@@ -1,4 +1,4 @@
-# ===== Smart LMS - AI Service Dependencies =====
+# ===== SmartTutor LMS - AI Service Dependencies =====
 
 # Web Framework
 fastapi==0.115.0

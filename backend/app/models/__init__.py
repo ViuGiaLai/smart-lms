@@ -16,6 +16,7 @@ from app.models.ai_usage import AiUsageLog
 from app.models.review import CourseReview
 from app.models.learning_event import LearningEvent
 from app.models.ai_feedback import AiMessageFeedback
+from app.models.checkout import DemoOrder, DemoPayment
 
 __all__ = [
     "User",
@@ -41,4 +42,6 @@ __all__ = [
     "CourseReview",
     "LearningEvent",
     "AiMessageFeedback",
+    "DemoOrder",
+    "DemoPayment",
 ]

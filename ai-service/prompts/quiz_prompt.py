@@ -1,11 +1,11 @@
 """
-Prompts cho AI Quiz Generator (Smart LMS)
+Prompts cho AI Quiz Generator (SmartTutor LMS)
 Sinh ngân hàng câu hỏi trắc nghiệm chất lượng cao từ tài liệu học tập.
 """
 
 from typing import Optional
 
-QUIZ_SYSTEM_PROMPT = """Bạn là chuyên gia sư phạm và khảo thí tự động thuộc hệ thống Smart LMS.
+QUIZ_SYSTEM_PROMPT = """Bạn là chuyên gia sư phạm và khảo thí tự động thuộc hệ thống SmartTutor LMS.
 Nhiệm vụ của bạn là đọc hiểu tài liệu học tập (slide, giáo trình, transcript) và xây dựng bộ câu hỏi trắc nghiệm khách quan 4 lựa chọn (A, B, C, D).
 
 YÊU CẦU CHẤT LƯỢNG ĐỀ THI:

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
@@ -22,6 +22,7 @@ import { authApi } from '@/lib/api'
 import axios from 'axios'
 import { AuthShell } from '@/components/auth/AuthShell'
 import { useAuth } from '@/lib/auth-context'
+import { syncAuthCookieFromStorage } from '@/lib/auth-cookie'
 
 const loginSchema = z.object({
   email: z.string().email('Địa chỉ email không hợp lệ'),
@@ -60,6 +61,27 @@ export default function LoginPage() {
     if (!raw.startsWith('/') || raw.startsWith('//')) return null
     return raw
   }
+
+  // Phiên cũ chỉ có localStorage (tạo trước khi có middleware) bị đẩy về đây.
+  // Đồng bộ cookie rồi quay lại đúng trang bị chặn thay vì bắt đăng nhập lại.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !localStorage.getItem('accessToken')) return
+    syncAuthCookieFromStorage()
+    const nextPath = resolveNextPath()
+    let role: string | undefined
+    try {
+      role = JSON.parse(localStorage.getItem('currentUser') || '{}')?.role
+    } catch {
+      role = undefined
+    }
+    const fallback =
+      role === 'admin'
+        ? '/admin-dashboard'
+        : role === 'instructor'
+        ? '/instructor-dashboard'
+        : '/dashboard'
+    router.replace(nextPath || fallback)
+  }, [router])
 
   // Đăng nhập nhanh an toàn qua Demo API phía server (không lộ password)
   const handleQuickDemoLogin = async (role: 'student' | 'instructor' | 'admin') => {
@@ -146,6 +168,8 @@ export default function LoginPage() {
       eyebrow="Đăng nhập"
       title="Chào mừng trở lại!"
       subtitle="Tiếp tục lộ trình học tập và trò chuyện cùng Gia sư AI của bạn."
+      asideTitle="Học đúng mạch, tiếp tục đúng chỗ."
+      asideDescription="Mở lại bài đang học, xem tiến độ và luyện tập theo lộ trình của riêng bạn."
       footer={
         <p className="text-center text-xs text-stone-600">
           Chưa có tài khoản?{' '}
@@ -209,6 +233,9 @@ export default function LoginPage() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <p className="-mb-0.5 text-xs leading-relaxed text-muted-foreground">
+          Dùng email đã đăng ký với hệ thống. Tài khoản của bạn sẽ được đưa về đúng không gian học tập.
+        </p>
         <div>
           <label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-stone-700">
             Địa chỉ Email
@@ -228,7 +255,7 @@ export default function LoginPage() {
             />
           </div>
           {errors.email && (
-            <p id="email-error" className="mt-1.5 text-xs text-rose-600">
+            <p id="email-error" role="alert" className="mt-1.5 text-xs text-rose-600">
               {errors.email.message}
             </p>
           )}
@@ -268,7 +295,7 @@ export default function LoginPage() {
             </button>
           </div>
           {errors.password && (
-            <p id="password-error" className="mt-1.5 text-xs text-rose-600">
+            <p id="password-error" role="alert" className="mt-1.5 text-xs text-rose-600">
               {errors.password.message}
             </p>
           )}

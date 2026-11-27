@@ -7,6 +7,20 @@ from fastapi import HTTPException, Request, status
 from app.core.config import settings
 
 
+def _extract_client_ip(request: Request) -> str:
+    """Lấy IP thực của người dùng kể cả khi đặt sau Reverse Proxy / Cloudflare."""
+    for header in ("cf-connecting-ip", "x-real-ip"):
+        val = (request.headers.get(header) or "").strip()
+        if val:
+            return val
+    xff = (request.headers.get("x-forwarded-for") or "").strip()
+    if xff:
+        first_ip = xff.split(",")[0].strip()
+        if first_ip:
+            return first_ip
+    return request.client.host if request.client else "unknown"
+
+
 class SlidingWindowRateLimiter:
     """Gioi han so request theo IP trong cua so truot, luu trong bo nho tien trinh.
 
@@ -29,7 +43,7 @@ class SlidingWindowRateLimiter:
         if not settings.RATE_LIMIT_ENABLED or limit <= 0:
             return
 
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = _extract_client_ip(request)
         now = time.monotonic()
         window_start = now - self._window
 

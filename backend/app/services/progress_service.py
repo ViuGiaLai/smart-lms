@@ -8,8 +8,9 @@ from sqlalchemy import select, func
 
 from app.models.lesson import Lesson
 from app.models.progress import Progress
+from app.models.user import User, UserRole
 from app.schemas.progress import ProgressUpdate, CourseSummary
-from app.services.enrollment_service import ensure_enrollment
+from app.services.enrollment_service import require_course_access
 
 
 class ProgressService:
@@ -29,9 +30,15 @@ class ProgressService:
         if not lesson:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
-        # Ghi tiến độ cũng có nghĩa học viên đã ghi danh khóa học: bảo đảm
-        # `enrollments` là nguồn sự thật duy nhất, không suy ra từ `progress`.
-        await ensure_enrollment(db, user_id, lesson.course_id)
+        user = await db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        if user.role != UserRole.student:
+            raise HTTPException(status_code=403, detail="Chỉ học viên có thể lưu tiến độ học tập.")
+
+        # Bắt buộc học viên phải đã ghi danh khóa học (hoặc là chủ khóa/admin) trước
+        # khi lưu tiến độ bài học, tránh lỗ hổng tự ghi danh qua API progress.
+        await require_course_access(db, user, lesson.course_id)
 
         result = await db.execute(
             select(Progress).where(

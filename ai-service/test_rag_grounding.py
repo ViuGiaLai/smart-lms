@@ -1,5 +1,5 @@
 """
-Smart LMS - Kiểm thử tính trung thực dữ liệu của AI Tutor (RAG Grounding Test)
+SmartTutor LMS - Kiểm thử tính trung thực dữ liệu của AI Tutor (RAG Grounding Test)
 
 Mục đích: bảo đảm pipeline RAG KHÔNG bao giờ bịa câu trả lời, không bịa trích dẫn
 và không trả về độ tương đồng giả khi học liệu không có nội dung liên quan.
@@ -35,7 +35,7 @@ FAKE_CITATION_MARKERS = [
     "Trích dẫn học liệu: [Slide",
     "Giáo trình và bài giảng tích hợp Bài học",
     "Học liệu chuẩn Bài giảng",
-    "Smart LMS Knowledge Base",
+    "SmartTutor LMS Knowledge Base",
 ]
 
 RELEVANT_QUESTION = "PostgreSQL hỗ trợ tìm kiếm vector nhanh bằng loại chỉ mục nào?"

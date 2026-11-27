@@ -4,79 +4,90 @@ import type { NextRequest } from 'next/server';
 /**
  * Next.js Middleware — bảo vệ route ở cấp server-side.
  *
- * Các route công khai (không cần login):
- *   /, /login, /register, /courses, /courses/[id] (trang catalog),
- *   /terms, /privacy, /forgot-password, /reset-password
+ * Nguyên tắc: mặc định chặn (deny by default). Chỉ những route được liệt kê
+ * trong PUBLIC_ROUTES mới cho khách truy cập, mọi route còn lại đều cần phiên
+ * đăng nhập. Cách này tránh lọt route mới thêm sau này (ví dụ /courses/create
+ * hay /courses/[id]/manage trước đây không được bảo vệ).
  *
- * Các route yêu cầu đăng nhập:
- *   /courses/[id]/learn, /dashboard/*, /instructor/*, /admin/*,
- *   /my-courses, /progress, /results, /certificates/*, /quiz/*
+ * Middleware chỉ đọc cookie `accessToken`; cookie được đồng bộ từ localStorage
+ * trong lib/auth-cookie.ts.
  */
 
-const PUBLIC_EXACT_ROUTES = [
+const PUBLIC_EXACT_ROUTES = new Set([
   '/',
   '/login',
   '/register',
-  '/courses',
   '/terms',
   '/privacy',
   '/forgot-password',
   '/reset-password',
+]);
+
+const ADMIN_ROUTES = ['/admin-dashboard', '/youtube-import'];
+const INSTRUCTOR_ROUTES = [
+  '/instructor',
+  '/instructor-dashboard',
+  '/quiz/bank',
+  '/quiz/generate',
 ];
 
-const PROTECTED_PREFIXES = [
-  '/dashboard',
-  '/instructor',
-  '/admin',
-  '/quiz',
-  '/my-courses',
-  '/progress',
-  '/results',
-  '/certificates',
-];
+function homeByRole(role: string | null): string {
+  if (role === 'admin') return '/admin-dashboard';
+  if (role === 'instructor') return '/instructor-dashboard';
+  return '/dashboard';
+}
+
+/** Đọc vai trò từ JWT để chặn UI sớm. Quyền thật vẫn do backend kiểm tra. */
+function readRole(token: string | undefined): string | null {
+  if (!token) return null;
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(payload)).role ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const token = request.cookies.get('accessToken')?.value;
 
-  // Bỏ qua API routes, static assets — để backend/xhr tự xử lý auth
-  if (
-    path.startsWith('/api/') ||
-    path.startsWith('/_next/') ||
-    path === '/favicon.ico'
-  ) {
-    return NextResponse.next();
-  }
+  // Trang catalog khóa học công khai: /courses và /courses/<id-hoặc-slug>.
+  // /courses/create là trang giảng viên nên không nằm trong nhóm này.
+  const isCourseCatalog =
+    path === '/courses' ||
+    (/^\/courses\/[^/]+$/.test(path) && path !== '/courses/create');
 
-  // Phân loại route
-  const isLearnRoute = /^\/courses\/\d+\/learn/.test(path);
-  const isCourseCatalogRoute = /^\/courses\/\d+$/.test(path);
-  const isCourseListRoute = path === '/courses';
+  const isPublicRoute = PUBLIC_EXACT_ROUTES.has(path) || isCourseCatalog;
 
-  const isProtectedRoute =
-    isLearnRoute ||
-    PROTECTED_PREFIXES.some((prefix) => path.startsWith(prefix));
-
-  const isPublicRoute =
-    PUBLIC_EXACT_ROUTES.includes(path) ||
-    isCourseCatalogRoute ||
-    isCourseListRoute;
-
-  // Nếu đã đăng nhập mà vào /login hoặc /register → chuyển về dashboard
-  if (token && (path === '/login' || path === '/register')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
-  // Nếu chưa đăng nhập mà vào route yêu cầu đăng nhập → chuyển về /login
-  if (isProtectedRoute && !token) {
+  if (!isPublicRoute && !token) {
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('next', path);
+    loginUrl.searchParams.set('next', `${path}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Chặn UI theo vai trò (admin được dùng mọi nơi). Backend vẫn là lớp bảo vệ
+  // cuối cùng cho dữ liệu và API.
+  const role = readRole(token);
+  if (role && role !== 'admin') {
+    const needsAdmin = ADMIN_ROUTES.some((r) => path.startsWith(r));
+    const needsInstructor =
+      INSTRUCTOR_ROUTES.some((r) => path.startsWith(r)) ||
+      path === '/courses/create' ||
+      /^\/courses\/[^/]+\/manage/.test(path);
+
+    if (
+      (needsAdmin && role !== 'admin') ||
+      (needsInstructor && role !== 'instructor')
+    ) {
+      return NextResponse.redirect(new URL(homeByRole(role), request.url));
+    }
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  // Bỏ qua API, tài nguyên Next.js và mọi tệp tĩnh (có dấu chấm ở cuối đường dẫn).
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.[^/]+$).*)'],
 };

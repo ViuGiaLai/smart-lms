@@ -1,5 +1,5 @@
 """
-Smart LMS - Summarizer Pipeline
+SmartTutor LMS - Summarizer Pipeline
 Tóm tắt bài giảng thành bullet points và flashcards.
 
 Output:

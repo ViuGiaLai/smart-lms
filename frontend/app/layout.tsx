@@ -23,26 +23,26 @@ const serif = Lora({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXTAUTH_URL || 'http://localhost:3000'),
   title: {
-    default: 'Smart LMS · Nền tảng học tập số Đại học Đông Á',
-    template: '%s | Smart LMS',
+    default: 'SmartTutor LMS · Nền tảng học tập số ',
+    template: '%s | SmartTutor LMS',
   },
   description:
     'Giáo trình số, bài luyện trắc nghiệm và trợ lý học tập giới hạn theo từng bài giảng — câu trả lời kèm trích dẫn để người học kiểm chứng.',
-  keywords: ['LMS', 'e-learning', 'học trực tuyến', 'khóa học online', 'giáo dục số', 'Đại học Đông Á'],
-  authors: [{ name: 'Nhóm Phát triển Smart LMS' }],
+  keywords: ['LMS', 'e-learning', 'học trực tuyến', 'khóa học online', 'giáo dục số', ''],
+  authors: [{ name: 'Nhóm Phát triển SmartTutor LMS' }],
   openGraph: {
     type: 'website',
     locale: 'vi_VN',
     url: 'https://smartlms.example.com',
-    siteName: 'Smart LMS',
-    title: 'Smart LMS · Nền tảng học tập số Đại học Đông Á',
+    siteName: 'SmartTutor LMS',
+    title: 'SmartTutor LMS · Nền tảng học tập số ',
     description: 'Giáo trình số, bài luyện trắc nghiệm và trợ lý học tập theo từng bài giảng.',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'Smart LMS',
+        alt: 'SmartTutor LMS',
       },
     ],
   },

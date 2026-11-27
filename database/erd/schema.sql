@@ -1,5 +1,5 @@
 -- ============================================================
--- Smart LMS – Reference SQL Schema (PostgreSQL)
+-- SmartTutor LMS – Reference SQL Schema (PostgreSQL)
 -- Generated: 2026-11-10  |  Source: backend/app/models/*.py
 --
 -- ⚠️  CHỈ ĐỂ ĐỐI CHIẾU — KHÔNG THỰC THI FILE NÀY.

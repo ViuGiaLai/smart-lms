@@ -1,5 +1,5 @@
 """
-Smart LMS - AI Service Configuration
+SmartTutor LMS - AI Service Configuration
 Đọc settings từ biến môi trường (.env) bằng Pydantic Settings.
 """
 
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     """Tất cả cấu hình của AI Service."""
 
     # ---- App ----
-    APP_NAME: str = "Smart LMS AI Service"
+    APP_NAME: str = "SmartTutor LMS AI Service"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"

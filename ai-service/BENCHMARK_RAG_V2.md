@@ -1,4 +1,4 @@
-# Đánh giá RAG v2 — Smart LMS
+# Đánh giá RAG v2 — SmartTutor LMS
 
 - **Ngày chạy**: 2026-11-05
 - **Bộ dữ liệu**: `eval_dataset_pilot.csv` (8 câu: 5 trong phạm vi, 3 ngoài phạm vi)

@@ -36,6 +36,7 @@ from app.api.v1 import (
     reviews,
     events,
     analytics,
+    checkout,
 )
 
 
@@ -60,6 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     SET status = 'failed',
                         error_message = 'Tác vụ xử lý bị gián đoạn khi máy chủ khởi động lại. Vui lòng tải lại tệp.'
                     WHERE status IN ('queued', 'processing')
+                      AND file_url = ''
                       AND created_at < now() - make_interval(mins => :mins)
                     """
                 ),
@@ -87,9 +89,10 @@ app = FastAPI(
 
 # Tệp video/tài liệu giảng viên tải lên trong môi trường cục bộ. Production có
 # thể thay mount này bằng S3/CDN nhưng URL học liệu vẫn giữ cùng định dạng.
-media_root = Path(settings.MEDIA_ROOT).resolve()
-media_root.mkdir(parents=True, exist_ok=True)
-app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
+if settings.ENVIRONMENT.strip().lower() not in {"production", "prod"}:
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    media_root.mkdir(parents=True, exist_ok=True)
+    app.mount("/media", StaticFiles(directory=str(media_root)), name="media")
 
 # ── CORS ───────
 app.add_middleware(
@@ -141,6 +144,7 @@ app.include_router(reviews.router,          prefix=prefix, tags=["Course Reviews
 app.include_router(events.router,           prefix=prefix, tags=["Learning Events"])
 app.include_router(events.feedback_router,  prefix=prefix)
 app.include_router(analytics.router,        prefix=prefix, tags=["Analytics"])
+app.include_router(checkout.router, prefix=prefix)
 
 
 @app.get("/", include_in_schema=False)

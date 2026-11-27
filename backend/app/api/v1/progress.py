@@ -11,6 +11,7 @@ from app.models.progress import Progress
 from app.models.user import User
 from app.schemas.progress import ProgressUpdate, ProgressResponse, CourseSummary
 from app.services.progress_service import ProgressService
+from app.services.enrollment_service import require_course_access
 
 router = APIRouter(prefix="/progress")
 
@@ -51,6 +52,7 @@ async def get_course_progress(
     db: AsyncSession = Depends(get_db),
 ) -> CourseSummary:
     """Return overall progress summary for a course."""
+    await require_course_access(db, current_user, course_id)
     return await ProgressService.course_summary(db, current_user.id, course_id)
 
 
